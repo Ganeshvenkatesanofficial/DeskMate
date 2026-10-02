@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# Local data
+.qdrant_data/
+
+# IDEs
+.vscode/
+.idea/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Google OAuth Credentials & Tokens
+credentials.json
+token_*.json
+
+# SQLite Agent Databases
+*.db
