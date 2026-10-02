@@ -1,0 +1,87 @@
+name: Build DeskMate Multi-Platform Releases
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          
+      - name: Build Python Backend EXE
+        run: |
+          cd terminal-ai-agent
+          python -m venv .venv
+          .venv\Scripts\activate
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --clean filelens_backend.spec
+          New-Item -ItemType Directory -Path "..\deskmate_app\assets\backend" -Force
+          Copy-Item -Path "dist\filelens_backend.exe" -Destination "..\deskmate_app\assets\backend\filelens_backend.exe" -Force
+
+      - name: Build Flutter Windows Release
+        run: |
+          cd deskmate_app
+          flutter pub get
+          flutter build windows --release
+
+      - name: Upload Windows Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskMate-Windows-Release
+          path: deskmate_app/build/windows/x64/runner/Release/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build Python Backend macOS Binary
+        run: |
+          cd terminal-ai-agent
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --clean filelens_backend.spec
+          mkdir -p ../deskmate_app/assets/backend
+          cp dist/filelens_backend ../deskmate_app/assets/backend/filelens_backend
+          chmod +x ../deskmate_app/assets/backend/filelens_backend
+
+      - name: Build Flutter macOS Release
+        run: |
+          cd deskmate_app
+          flutter pub get
+          flutter build macos --release
+
+      - name: Compress macOS App Bundle
+        run: |
+          cd deskmate_app/build/macos/Build/Products/Release/
+          zip -r DeskMate-macOS.zip DeskMate.app
+
+      - name: Upload macOS Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskMate-macOS-Release
+          path: deskmate_app/build/macos/Build/Products/Release/DeskMate-macOS.zip
