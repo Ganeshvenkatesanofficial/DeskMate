@@ -121,13 +121,12 @@ jobs:
           flutter pub get
           flutter build macos --release
 
-      - name: Compress macOS App Bundle
-        working-directory: deskmate_app/build/macos/Build/Products/Release
+      - name: Create macOS DMG Installer
         run: |
-          ditto -c -k --sequesterRsrc --keepParent DeskMate.app DeskMate-macOS.zip
+          hdiutil create -volname "DeskMate" -srcfolder deskmate_app/build/macos/Build/Products/Release/DeskMate.app -ov -format UDZO deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
 
-      - name: Upload macOS Release Artifact
+      - name: Upload macOS DMG Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DeskMate-macOS-Release
-          path: deskmate_app/build/macos/Build/Products/Release/DeskMate-macOS.zip
+          name: DeskMate-macOS-DMG
+          path: deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
