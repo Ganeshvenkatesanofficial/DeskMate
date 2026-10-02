@@ -20,6 +20,10 @@ token_*.json
 deskmate_app/build/
 deskmate_app/.dart_tool/
 
+# Node / Frontend
+node_modules/
+dist/
+
 # PyInstaller
 terminal-ai-agent/build/
 terminal-ai-agent/dist/

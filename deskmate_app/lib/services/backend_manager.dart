@@ -20,8 +20,8 @@ class BackendManager {
 
   /// Launch the backend executable silently in the background
   static Future<void> start() async {
-    if (!Platform.isWindows) {
-      print('Automated local background process spawning is only supported on Windows.');
+    if (!Platform.isWindows && !Platform.isMacOS) {
+      print('Automated local background process spawning is only supported on Windows and macOS.');
       return;
     }
 
@@ -31,19 +31,49 @@ class BackendManager {
     }
 
     try {
-      // Find the path to the bundled executable relative to the Flutter application executable
       final appDir = p.dirname(Platform.resolvedExecutable);
-      
-      // Path structure in Flutter Windows builds:
-      // AppExeDirectory/data/flutter_assets/assets/backend/filelens_backend.exe
-      final exePath = p.join(
-        appDir,
-        'data',
-        'flutter_assets',
-        'assets',
-        'backend',
-        'filelens_backend.exe',
-      );
+      String exePath;
+
+      if (Platform.isWindows) {
+        // Path structure in Flutter Windows builds:
+        // AppExeDirectory/data/flutter_assets/assets/backend/filelens_backend.exe
+        exePath = p.join(
+          appDir,
+          'data',
+          'flutter_assets',
+          'assets',
+          'backend',
+          'filelens_backend.exe',
+        );
+      } else if (Platform.isMacOS) {
+        // Path structure in Flutter macOS .app bundles:
+        // DeskMate.app/Contents/MacOS/.. -> Frameworks/App.framework/Resources/flutter_assets/assets/backend/filelens_backend
+        exePath = p.join(
+          appDir,
+          '..',
+          'Frameworks',
+          'App.framework',
+          'Resources',
+          'flutter_assets',
+          'assets',
+          'backend',
+          'filelens_backend',
+        );
+        if (!await File(exePath).exists()) {
+          // Alternative fallback path for mac release assets
+          exePath = p.join(
+            appDir,
+            '..',
+            'Resources',
+            'flutter_assets',
+            'assets',
+            'backend',
+            'filelens_backend',
+          );
+        }
+      } else {
+        return;
+      }
 
       print('Starting backend from: $exePath');
 
@@ -54,7 +84,12 @@ class BackendManager {
         return;
       }
 
-      // Spawn process silently without a shell window (runInShell: false is critical here)
+      // Ensure execution permissions on Unix/macOS
+      if (Platform.isMacOS) {
+        await Process.run('chmod', ['+x', exePath]);
+      }
+
+      // Spawn process silently without a shell window
       _process = await Process.start(
         exePath,
         [],
@@ -79,7 +114,7 @@ class BackendManager {
 
   /// Stop the backend subprocess
   static void stop() {
-    if (!Platform.isWindows) return;
+    if (!Platform.isWindows && !Platform.isMacOS) return;
     if (_process != null) {
       _process!.kill();
       _process = null;
