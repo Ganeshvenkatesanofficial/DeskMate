@@ -27,7 +27,7 @@ jobs:
           python -m venv .venv
           .venv\Scripts\activate
           pip install -r requirements.txt pyinstaller
-          pyinstaller --clean filelens_backend.spec
+          pyinstaller --clean --onefile --name filelens_backend backend.py
           New-Item -ItemType Directory -Path "..\deskmate_app\assets\backend" -Force
           Copy-Item -Path "dist\filelens_backend.exe" -Destination "..\deskmate_app\assets\backend\filelens_backend.exe" -Force
 
@@ -64,7 +64,7 @@ jobs:
           python3 -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt pyinstaller
-          pyinstaller --clean filelens_backend.spec
+          pyinstaller --clean --onefile --name filelens_backend backend.py
           mkdir -p ../deskmate_app/assets/backend
           cp dist/filelens_backend ../deskmate_app/assets/backend/filelens_backend
           chmod +x ../deskmate_app/assets/backend/filelens_backend
