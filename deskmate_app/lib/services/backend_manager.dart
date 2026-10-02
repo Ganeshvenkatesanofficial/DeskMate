@@ -86,7 +86,11 @@ class BackendManager {
 
       // Ensure execution permissions on Unix/macOS
       if (Platform.isMacOS) {
-        await Process.run('chmod', ['+x', exePath]);
+        try {
+          await Process.run('/bin/chmod', ['+x', exePath]);
+        } catch (_) {
+          await Process.run('chmod', ['+x', exePath]);
+        }
       }
 
       // Spawn process silently without a shell window

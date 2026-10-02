@@ -359,34 +359,32 @@ class _SidebarState extends State<Sidebar> {
               ),
             ],
           ),
-          if (isOnline) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
-                  size: 16,
-                  color: provider.isUsingGemini 
-                      ? Colors.deepPurple 
-                      : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    provider.isUsingGemini 
-                        ? 'Gemini (Flash) Active' 
-                        : (provider.isLocalLlmOnline ? 'Local LLM Active' : 'Local LLM Offline'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: provider.isUsingGemini 
-                          ? Colors.deepPurple 
-                          : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
-                    ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
+                size: 16,
+                color: provider.isUsingGemini 
+                    ? Colors.deepPurple 
+                    : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  provider.isUsingGemini 
+                      ? 'Gemini (Flash) Active' 
+                      : (provider.isLocalLlmOnline ? 'Local LLM Active' : 'Local LLM Offline'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: provider.isUsingGemini 
+                        ? Colors.deepPurple 
+                        : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );

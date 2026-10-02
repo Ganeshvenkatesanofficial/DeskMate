@@ -17,27 +17,26 @@ class NullReader:
     def readline(self, *args, **kwargs):
         return ""
 
-if sys.platform == "win32":
-    is_frozen = getattr(sys, 'frozen', False)
-    if is_frozen or sys.stdout is None or sys.stderr is None:
+is_frozen = getattr(sys, 'frozen', False)
+if is_frozen or sys.stdout is None or sys.stderr is None:
+    try:
+        log_dir = os.path.dirname(sys.executable) if is_frozen else os.path.dirname(os.path.abspath(__file__))
+        log_path = os.path.join(log_dir, "deskmate_backend.log")
+        # Open with write mode to start fresh
+        sys.stdout = open(log_path, 'w', encoding='utf-8', buffering=1)
+        sys.stderr = sys.stdout
+    except Exception:
         try:
-            log_dir = os.path.dirname(sys.executable) if is_frozen else os.path.dirname(os.path.abspath(__file__))
-            log_path = os.path.join(log_dir, "deskmate_backend.log")
-            # Open with write mode to start fresh, or append mode. Let's use write mode to prevent the log from growing indefinitely.
-            sys.stdout = open(log_path, 'w', encoding='utf-8', buffering=1)
-            sys.stderr = sys.stdout
+            sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+            sys.stderr = open(os.devnull, 'w', encoding='utf-8')
         except Exception:
-            try:
-                sys.stdout = open(os.devnull, 'w', encoding='utf-8')
-                sys.stderr = open(os.devnull, 'w', encoding='utf-8')
-            except Exception:
-                sys.stdout = NullWriter()
-                sys.stderr = NullWriter()
-    if is_frozen or sys.stdin is None:
-        try:
-            sys.stdin = open(os.devnull, 'r', encoding='utf-8')
-        except Exception:
-            sys.stdin = NullReader()
+            sys.stdout = NullWriter()
+            sys.stderr = NullWriter()
+if is_frozen or sys.stdin is None:
+    try:
+        sys.stdin = open(os.devnull, 'r', encoding='utf-8')
+    except Exception:
+        sys.stdin = NullReader()
 
 from typing import Optional
 from uuid import uuid4
