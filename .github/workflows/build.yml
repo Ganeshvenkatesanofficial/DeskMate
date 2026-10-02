@@ -124,7 +124,7 @@ jobs:
       - name: Compress macOS App Bundle
         working-directory: deskmate_app/build/macos/Build/Products/Release
         run: |
-          zip -r DeskMate-macOS.zip DeskMate.app
+          ditto -c -k --sequesterRsrc --keepParent DeskMate.app DeskMate-macOS.zip
 
       - name: Upload macOS Release Artifact
         uses: actions/upload-artifact@v4
