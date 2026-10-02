@@ -47,7 +47,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: isDesktop
           ? null
           : AppBar(
-              title: const Text('FileLens'),
+              title: const Text('DeskMate'),
               actions: [
                 IconButton(
                   onPressed: () => provider.resetChat(),

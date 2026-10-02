@@ -1,5 +1,5 @@
 """
-personal_agent.py — FileLens Personal AI Agent (Local Ollama)
+personal_agent.py — DeskMate Personal AI Agent (Local Ollama)
 ==================================================================
 Uses the local Ollama model (gemma:2b) — no API key required.
 """

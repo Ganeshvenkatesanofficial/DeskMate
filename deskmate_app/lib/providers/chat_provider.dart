@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
 
-enum AgentMode { fileLens, personal }
+enum AgentMode { deskMate, personal }
 
 class ChatProvider extends ChangeNotifier {
   List<ChatMessage> _fileMessages = [];
@@ -17,7 +17,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
-  AgentMode _mode = AgentMode.fileLens;
+  AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Timer? _healthTimer;
 

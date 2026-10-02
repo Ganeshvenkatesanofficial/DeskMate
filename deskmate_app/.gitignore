@@ -44,5 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Large compiled assets
-/assets/backend/filelens_backend.exe
+
+# Backend binaries are built by CI - placeholder files are committed to satisfy Flutter asset resolution
+# The real compiled binaries are written by the CI PyInstaller step after checkout

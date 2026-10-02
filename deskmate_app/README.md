@@ -1,4 +1,4 @@
-# filelens_app
+# DeskMate
 
 A new Flutter project.
 

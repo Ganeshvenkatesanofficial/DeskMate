@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || 'http://localhost:8000'
-const STORAGE_API_KEY = 'filelens_gemini_api_key'
-const STORAGE_CONVERSATION_ID = 'filelens_conversation_id'
+const STORAGE_API_KEY = 'deskmate_gemini_api_key'
+const STORAGE_CONVERSATION_ID = 'deskmate_conversation_id'
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2)
 

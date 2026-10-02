@@ -36,18 +36,18 @@ class BackendManager {
 
       if (Platform.isWindows) {
         // Path structure in Flutter Windows builds:
-        // AppExeDirectory/data/flutter_assets/assets/backend/filelens_backend.exe
+        // AppExeDirectory/data/flutter_assets/assets/backend/deskmate_backend.exe
         exePath = p.join(
           appDir,
           'data',
           'flutter_assets',
           'assets',
           'backend',
-          'filelens_backend.exe',
+          'deskmate_backend.exe',
         );
       } else if (Platform.isMacOS) {
         // Path structure in Flutter macOS .app bundles:
-        // DeskMate.app/Contents/MacOS/.. -> Frameworks/App.framework/Resources/flutter_assets/assets/backend/filelens_backend
+        // DeskMate.app/Contents/MacOS/.. -> Frameworks/App.framework/Resources/flutter_assets/assets/backend/deskmate_backend
         exePath = p.join(
           appDir,
           '..',
@@ -57,7 +57,7 @@ class BackendManager {
           'flutter_assets',
           'assets',
           'backend',
-          'filelens_backend',
+          'deskmate_backend',
         );
         if (!await File(exePath).exists()) {
           // Alternative fallback path for mac release assets
@@ -68,7 +68,7 @@ class BackendManager {
             'flutter_assets',
             'assets',
             'backend',
-            'filelens_backend',
+            'deskmate_backend',
           );
         }
       } else {

@@ -35,7 +35,7 @@ graph TD
 
         FileTools --> |File I/O| Disk["Local Filesystem"]
         FileTools --> |Qdrant + FastEmbed| QdrantDB["Semantic RAG Search"]
-        PTools --> |SQLite| SQLStore["filelens_agent.db"]
+        PTools --> |SQLite| SQLStore["deskmate_agent.db"]
         PTools --> |FAISS + MiniLM| FAISS["Vector Semantic Memory"]
         PTools --> |Google OAuth| Google["Gmail / Calendar / Drive / Tasks"]
         PTools --> |Web APIs| Web["DuckDuckGo / wttr.in / GitHub"]
@@ -100,7 +100,7 @@ ChatProvider (Dart) sends HTTP POST
 ## Standalone Run (For Clients & Reviewers)
 
 1. **Extract** the application `.zip` folder.
-2. **Double-click `filelens_app.exe`** — the backend launches silently in the background.
+2. **Double-click `DeskMate.exe`** — the backend launches silently in the background.
 3. Paste your **Gemini API Key** in the sidebar and click **Load Key**.
 4. Toggle between **File Explorer** and **Personal Agent** modes.
 5. Start chatting! (e.g. *"Show me the structure of D:\"* or *"What's the weather in Chennai?"*).
@@ -120,8 +120,8 @@ ChatProvider (Dart) sends HTTP POST
 
 ### Step 1: Clone the repository
 ```bash
-git clone https://github.com/Ganeshvenkatesanofficial/FileLens.git
-cd FileLens
+git clone https://github.com/Ganeshvenkatesanofficial/DeskMate.git
+cd DeskMate
 ```
 
 ### Step 2: Start the Python Backend
@@ -183,14 +183,14 @@ The health endpoint will report `"local_llm": "online"` and the agent will use O
 ```bash
 cd terminal-ai-agent
 pip install pyinstaller
-pyinstaller --clean filelens_backend.spec
-# Output: dist/filelens_backend.exe
+pyinstaller --clean deskmate_backend.spec
+# Output: dist/deskmate_backend.exe
 ```
 
 ### 2. Copy EXE to Flutter Assets
 ```powershell
 New-Item -ItemType Directory -Path "..\deskmate_app\assets\backend" -Force
-Copy-Item -Path "dist\filelens_backend.exe" -Destination "..\deskmate_app\assets\backend\filelens_backend.exe" -Force
+Copy-Item -Path "dist\deskmate_backend.exe" -Destination "..\deskmate_app\assets\backend\deskmate_backend.exe" -Force
 ```
 
 ### 3. Build Flutter Release
@@ -233,7 +233,7 @@ sentence-transformers>=3.0.0
 ## Project Structure
 
 ```
-FileLens/
+DeskMate/
 ├── README.md
 ├── .gitignore
 ├── terminal-ai-agent/          # Python backend
@@ -246,8 +246,8 @@ FileLens/
 │   ├── local_llm.py            # Ollama wrapper (phi3)
 │   ├── main.py                 # CLI entry point
 │   ├── requirements.txt
-│   └── filelens_backend.spec   # PyInstaller spec
-└── filelens_app/               # Flutter frontend
+│   └── deskmate_backend.spec   # PyInstaller spec
+└── deskmate_app/               # Flutter frontend
     ├── lib/
     │   ├── providers/
     │   │   └── chat_provider.dart

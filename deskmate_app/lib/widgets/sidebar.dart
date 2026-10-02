@@ -149,13 +149,13 @@ class _SidebarState extends State<Sidebar> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => provider.switchMode(AgentMode.fileLens),
+              onTap: () => provider.switchMode(AgentMode.deskMate),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.fileLens ? Colors.white : Colors.transparent,
+                  color: provider.mode == AgentMode.deskMate ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
-                  boxShadow: provider.mode == AgentMode.fileLens
+                  boxShadow: provider.mode == AgentMode.deskMate
                       ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
                       : null,
                 ),
@@ -166,7 +166,7 @@ class _SidebarState extends State<Sidebar> {
                       Icon(
                         Icons.folder_open_rounded,
                         size: 16,
-                        color: provider.mode == AgentMode.fileLens ? theme.colorScheme.primary : Colors.grey[600],
+                        color: provider.mode == AgentMode.deskMate ? theme.colorScheme.primary : Colors.grey[600],
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -174,7 +174,7 @@ class _SidebarState extends State<Sidebar> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: provider.mode == AgentMode.fileLens ? Colors.black : Colors.grey[600],
+                          color: provider.mode == AgentMode.deskMate ? Colors.black : Colors.grey[600],
                         ),
                       ),
                     ],

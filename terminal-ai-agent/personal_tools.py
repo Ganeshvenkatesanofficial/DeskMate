@@ -1,5 +1,5 @@
 """
-personal_tools.py — FileLens Personal Agent Tools
+personal_tools.py — DeskMate Personal Agent Tools
 ===================================================
 100% FREE / OPEN-SOURCE — no paid APIs.
 All tools use class-based definitions (PyInstaller-safe, no @tool decorator).
@@ -43,7 +43,7 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
             creds_data = {
                 "installed": {
                     "client_id": client_id,
-                    "project_id": "filelens-personal-agent",
+                    "project_id": "deskmate-personal-agent",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
@@ -120,7 +120,7 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
 # ─── local SQLite store for Tasks & Notes ────────────────────────────────────
 
 _BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
-_DEFAULT_DB = str(_BASE_DIR / "filelens_agent.db")
+_DEFAULT_DB = str(_BASE_DIR / "deskmate_agent.db")
 _DB_PATH = os.getenv("LOCAL_AGENT_DB", _DEFAULT_DB)
 
 
@@ -756,7 +756,7 @@ class RunSQLQueryTool(Tool):
                 return "Error: only SELECT queries are permitted for safety."
             
             from sqlalchemy import create_engine, text
-            url = db_url or os.getenv("DATABASE_URL", "sqlite:///filelens_data.db")
+            url = db_url or os.getenv("DATABASE_URL", "sqlite:///deskmate_data.db")
             if url.startswith("sqlite:///"):
                 db_name = url.split("sqlite:///")[-1]
                 if not os.path.isabs(db_name):
@@ -809,7 +809,7 @@ class SearchGithubIssuesTool(Tool):
         
         try:
             req = urllib.request.Request(url)
-            req.add_header("User-Agent", "FileLens-AI-Agent")
+            req.add_header("User-Agent", "DeskMate-AI-Agent")
             req.add_header("Accept", "application/vnd.github+json")
             
             token = os.getenv("GITHUB_TOKEN")
@@ -845,7 +845,7 @@ class CreateGithubIssueTool(Tool):
     name = "create_github_issue"
     description = "Create a new issue in a GitHub repository. Requires a GITHUB_TOKEN configured in the .env file."
     inputs = {
-        "repository": {"type": "string", "description": "Repository in 'owner/repo' format, e.g. 'Ganeshvenkatesanofficial/FileLens'"},
+        "repository": {"type": "string", "description": "Repository in 'owner/repo' format, e.g. 'Ganeshvenkatesanofficial/DeskMate'"},
         "title": {"type": "string", "description": "Title of the issue"},
         "body": {"type": "string", "description": "Detailed description or body of the issue", "nullable": True},
     }
@@ -869,7 +869,7 @@ class CreateGithubIssueTool(Tool):
         try:
             data_bytes = json.dumps(payload).encode('utf-8')
             req = urllib.request.Request(url, data=data_bytes, method="POST")
-            req.add_header("User-Agent", "FileLens-AI-Agent")
+            req.add_header("User-Agent", "DeskMate-AI-Agent")
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("Authorization", f"Bearer {token}")
             req.add_header("Content-Type", "application/json")

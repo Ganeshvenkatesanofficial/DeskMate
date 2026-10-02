@@ -22,7 +22,7 @@ if sys.platform == "win32":
     if is_frozen or sys.stdout is None or sys.stderr is None:
         try:
             log_dir = os.path.dirname(sys.executable) if is_frozen else os.path.dirname(os.path.abspath(__file__))
-            log_path = os.path.join(log_dir, "filelens_backend.log")
+            log_path = os.path.join(log_dir, "deskmate_backend.log")
             # Open with write mode to start fresh, or append mode. Let's use write mode to prevent the log from growing indefinitely.
             sys.stdout = open(log_path, 'w', encoding='utf-8', buffering=1)
             sys.stderr = sys.stdout

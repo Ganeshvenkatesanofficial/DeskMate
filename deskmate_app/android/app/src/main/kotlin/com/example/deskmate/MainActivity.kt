@@ -1,4 +1,4 @@
-package com.example.filelens_app
+package com.example.deskmate
 
 import io.flutter.embedding.android.FlutterActivity
 
