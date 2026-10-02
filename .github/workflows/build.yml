@@ -2,9 +2,9 @@ name: Build DeskMate Multi-Platform Releases
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, test ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, test ]
   workflow_dispatch:
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
     name: Build Windows Executable Release
     needs: flake8-lint
     runs-on: windows-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +83,7 @@ jobs:
     name: Build macOS App Bundle Release
     needs: flake8-lint
     runs-on: macos-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
