@@ -431,6 +431,9 @@ class _SidebarState extends State<Sidebar> {
    }
 
    Widget _buildBackendUrlInput(ChatProvider provider, ThemeData theme) {
+     if (!_backendUrlFocusNode.hasFocus && _backendUrlController.text != provider.backendUrl) {
+       _backendUrlController.text = provider.backendUrl;
+     }
      return ConstrainedBox(
        constraints: const BoxConstraints(maxWidth: 400),
        child: Column(

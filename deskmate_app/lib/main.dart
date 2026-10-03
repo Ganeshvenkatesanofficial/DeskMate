@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/chat_provider.dart';
 import 'screens/chat_screen.dart';
@@ -28,26 +29,25 @@ class DeskMateApp extends StatefulWidget {
   State<DeskMateApp> createState() => _DeskMateAppState();
 }
 
-class _DeskMateAppState extends State<DeskMateApp> with WidgetsBindingObserver {
+class _DeskMateAppState extends State<DeskMateApp> {
+  late final AppLifecycleListener _lifecycleListener;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+    _lifecycleListener = AppLifecycleListener(
+      onExitRequested: () async {
+        await BackendManager.stop();
+        return AppExitResponse.exit;
+      },
+    );
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    BackendManager.stop(); // Stop the backend when Flutter widget is disposed
+    _lifecycleListener.dispose();
+    BackendManager.stop();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      // Force shutdown backend when app is closed / detached on desktop
-      BackendManager.stop();
-    }
   }
 
   @override

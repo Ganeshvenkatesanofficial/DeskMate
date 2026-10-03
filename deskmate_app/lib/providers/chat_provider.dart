@@ -55,7 +55,12 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
     _personalConversationId = prefs.getString('deskmate_personal_conversation_id') ?? '';
-    _backendUrl = prefs.getString('deskmate_backend_url') ?? 'http://127.0.0.1:8080';
+    final savedUrl = prefs.getString('deskmate_backend_url');
+    if (savedUrl == null || savedUrl.isEmpty || savedUrl.contains('8080')) {
+      _backendUrl = BackendManager.backendUrl;
+    } else {
+      _backendUrl = savedUrl;
+    }
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
     // Gemini key not persisted; asked each session.
     _apiService = ApiService(baseUrl: _backendUrl);
@@ -102,6 +107,10 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
+    if (_backendUrl.isEmpty || _backendUrl.contains('8080')) {
+      _backendUrl = BackendManager.backendUrl;
+      _apiService = ApiService(baseUrl: _backendUrl);
+    }
     notifyListeners();
     const int maxAttempts = 30;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
