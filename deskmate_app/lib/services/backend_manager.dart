@@ -46,30 +46,22 @@ class BackendManager {
           'deskmate_backend.exe',
         );
       } else if (Platform.isMacOS) {
-        // Path structure in Flutter macOS .app bundles:
-        // DeskMate.app/Contents/MacOS/.. -> Frameworks/App.framework/Resources/flutter_assets/assets/backend/deskmate_backend
-        exePath = p.join(
-          appDir,
-          '..',
-          'Frameworks',
-          'App.framework',
-          'Resources',
-          'flutter_assets',
-          'assets',
-          'backend',
-          'deskmate_backend',
-        );
-        if (!await File(exePath).exists()) {
-          // Alternative fallback path for mac release assets
-          exePath = p.join(
-            appDir,
-            '..',
-            'Resources',
-            'flutter_assets',
-            'assets',
-            'backend',
-            'deskmate_backend',
-          );
+        final candidatePaths = [
+          p.join(appDir, '..', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Versions', 'A', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+        ];
+        
+        exePath = '';
+        for (final candidate in candidatePaths) {
+          if (await File(candidate).exists()) {
+            exePath = candidate;
+            break;
+          }
+        }
+        if (exePath.isEmpty) {
+          exePath = candidatePaths.first;
         }
       } else {
         return;
