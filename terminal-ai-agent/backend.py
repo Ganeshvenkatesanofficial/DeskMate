@@ -1,21 +1,46 @@
 from __future__ import annotations
 
-import sys
+import argparse
+from contextlib import asynccontextmanager
+import json
+import logging
 import os
+import socket
+import sys
+import threading
+import time
+from typing import Any, Optional
+from uuid import uuid4
+
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, HTTPException
+# pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel, Field
+
+from agent import _build_chat_prompt, flush_traces, run_agent
+from personal_agent import get_personal_agent
+
 
 class NullWriter:
     def write(self, text):
         pass
+
     def flush(self):
         pass
+
     def isatty(self):
         return False
+
 
 class NullReader:
     def read(self, *args, **kwargs):
         return ""
+
     def readline(self, *args, **kwargs):
         return ""
+
 
 is_frozen = getattr(sys, 'frozen', False)
 if is_frozen or sys.stdout is None or sys.stderr is None:
@@ -32,11 +57,13 @@ if is_frozen or sys.stdout is None or sys.stderr is None:
         except Exception:
             sys.stdout = NullWriter()
             sys.stderr = NullWriter()
+
 if is_frozen or sys.stdin is None:
     try:
         sys.stdin = open(os.devnull, 'r', encoding='utf-8')
-import threading
-import time
+    except Exception:
+        sys.stdin = NullReader()
+
 
 def _parent_process_watchdog():
     """Background thread that monitors parent application process and terminates if parent closes."""
@@ -62,12 +89,10 @@ def _parent_process_watchdog():
                 # Parent process died -> terminate backend immediately
                 os._exit(0)
 
+
 if is_frozen:
     _watchdog_thread = threading.Thread(target=_parent_process_watchdog, daemon=True)
     _watchdog_thread.start()
-
-from typing import Optional
-from uuid import uuid4
 
 
 # pyrefly: ignore [missing-import]
