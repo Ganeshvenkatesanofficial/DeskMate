@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
+import '../services/backend_manager.dart';
 
 enum AgentMode { deskMate, personal }
 
