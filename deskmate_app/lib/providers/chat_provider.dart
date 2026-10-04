@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
+import '../services/backend_manager.dart';
 
 enum AgentMode { deskMate, personal }
 
@@ -17,6 +18,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
+  ThemeMode _themeMode = ThemeMode.system;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Timer? _healthTimer;
@@ -33,6 +35,7 @@ class ChatProvider extends ChangeNotifier {
   bool get isLocalLlmOnline => _isLocalLlmOnline;
   bool get isConnecting => _isConnecting;
   AgentMode get mode => _mode;
+  ThemeMode get themeMode => _themeMode;
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
@@ -55,10 +58,27 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
     _personalConversationId = prefs.getString('deskmate_personal_conversation_id') ?? '';
-    _backendUrl = prefs.getString('deskmate_backend_url') ?? 'http://127.0.0.1:8080';
+    final savedUrl = prefs.getString('deskmate_backend_url');
+    if (savedUrl == null || savedUrl.isEmpty || savedUrl.contains('8080')) {
+      _backendUrl = BackendManager.backendUrl;
+    } else {
+      _backendUrl = savedUrl;
+    }
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
+    final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
+    if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
+      _themeMode = ThemeMode.values[themeIndex];
+    }
     // Gemini key not persisted; asked each session.
     _apiService = ApiService(baseUrl: _backendUrl);
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode newMode) async {
+    if (_themeMode == newMode) return;
+    _themeMode = newMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('deskmate_theme_mode', _themeMode.index);
     notifyListeners();
   }
 
@@ -102,6 +122,10 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
+    if (_backendUrl.isEmpty || _backendUrl.contains('8080')) {
+      _backendUrl = BackendManager.backendUrl;
+      _apiService = ApiService(baseUrl: _backendUrl);
+    }
     notifyListeners();
     const int maxAttempts = 30;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {

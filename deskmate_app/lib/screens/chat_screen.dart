@@ -43,7 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: isDesktop
           ? null
           : AppBar(
@@ -61,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
           if (isDesktop) const Sidebar(),
           Expanded(
             child: Container(
-              color: Colors.white,
+              color: theme.scaffoldBackgroundColor,
               child: Column(
                 children: [
                   Expanded(

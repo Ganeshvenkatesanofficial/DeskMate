@@ -1,46 +1,98 @@
 from __future__ import annotations
 
-import sys
+import argparse
+from contextlib import asynccontextmanager
+import json
+import logging
 import os
+import socket
+import sys
+import threading
+import time
+from typing import Any, Optional
+from uuid import uuid4
+
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, HTTPException
+# pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel, Field
+
+from agent import _build_chat_prompt, flush_traces, run_agent
+from personal_agent import get_personal_agent
+
 
 class NullWriter:
     def write(self, text):
         pass
+
     def flush(self):
         pass
+
     def isatty(self):
         return False
+
 
 class NullReader:
     def read(self, *args, **kwargs):
         return ""
+
     def readline(self, *args, **kwargs):
         return ""
 
-if sys.platform == "win32":
-    is_frozen = getattr(sys, 'frozen', False)
-    if is_frozen or sys.stdout is None or sys.stderr is None:
-        try:
-            log_dir = os.path.dirname(sys.executable) if is_frozen else os.path.dirname(os.path.abspath(__file__))
-            log_path = os.path.join(log_dir, "deskmate_backend.log")
-            # Open with write mode to start fresh, or append mode. Let's use write mode to prevent the log from growing indefinitely.
-            sys.stdout = open(log_path, 'w', encoding='utf-8', buffering=1)
-            sys.stderr = sys.stdout
-        except Exception:
-            try:
-                sys.stdout = open(os.devnull, 'w', encoding='utf-8')
-                sys.stderr = open(os.devnull, 'w', encoding='utf-8')
-            except Exception:
-                sys.stdout = NullWriter()
-                sys.stderr = NullWriter()
-    if is_frozen or sys.stdin is None:
-        try:
-            sys.stdin = open(os.devnull, 'r', encoding='utf-8')
-        except Exception:
-            sys.stdin = NullReader()
 
-from typing import Optional
-from uuid import uuid4
+is_frozen = getattr(sys, 'frozen', False)
+if is_frozen or sys.stdout is None or sys.stderr is None:
+    try:
+        log_dir = os.path.dirname(sys.executable) if is_frozen else os.path.dirname(os.path.abspath(__file__))
+        log_path = os.path.join(log_dir, "deskmate_backend.log")
+        # Open with write mode to start fresh
+        sys.stdout = open(log_path, 'w', encoding='utf-8', buffering=1)
+        sys.stderr = sys.stdout
+    except Exception:
+        try:
+            sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+            sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+        except Exception:
+            sys.stdout = NullWriter()
+            sys.stderr = NullWriter()
+
+if is_frozen or sys.stdin is None:
+    try:
+        sys.stdin = open(os.devnull, 'r', encoding='utf-8')
+    except Exception:
+        sys.stdin = NullReader()
+
+
+def _parent_process_watchdog():
+    """Background thread that monitors parent application process and terminates if parent closes."""
+    parent_pid = os.getppid()
+    if parent_pid <= 1:
+        return
+    while True:
+        time.sleep(2)
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(0x0010, False, parent_pid)
+                if not handle:
+                    os._exit(0)
+                kernel32.CloseHandle(handle)
+            except Exception:
+                pass
+        else:
+            try:
+                os.kill(parent_pid, 0)
+            except OSError:
+                # Parent process died -> terminate backend immediately
+                os._exit(0)
+
+
+if is_frozen:
+    _watchdog_thread = threading.Thread(target=_parent_process_watchdog, daemon=True)
+    _watchdog_thread.start()
 
 
 # pyrefly: ignore [missing-import]
@@ -272,13 +324,24 @@ def personal_chat(payload: ChatRequest) -> ChatResponse:
 if __name__ == "__main__":
     import uvicorn
     import sys
-    
-    # Check if running in a PyInstaller bundle
+    import argparse
+    import socket
+
+    parser = argparse.ArgumentParser(description="DeskMate Backend Server")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind backend server")
+    args, _ = parser.parse_known_args()
+
+    def find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('127.0.0.1', 0))
+            return s.getsockname()[1]
+
+    port = args.port if args.port else find_free_port()
+    logger.info(f"Starting DeskMate backend on http://127.0.0.1:{port}")
+    print(f"DESKMATE_BACKEND_PORT={port}", flush=True)
+
     is_frozen = getattr(sys, 'frozen', False)
-    
     if is_frozen:
-        # Disable hot-reload and pass direct app reference in bundled environment
-        uvicorn.run(app, host="127.0.0.1", port=8080)
+        uvicorn.run(app, host="127.0.0.1", port=port)
     else:
-        # Dev environment: use hot-reload and string reference
-        uvicorn.run("backend:app", host="127.0.0.1", port=8080, reload=True)
+        uvicorn.run("backend:app", host="127.0.0.1", port=port, reload=True)

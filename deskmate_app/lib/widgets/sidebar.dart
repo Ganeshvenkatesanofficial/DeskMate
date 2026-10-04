@@ -119,7 +119,9 @@ class _SidebarState extends State<Sidebar> {
                       _buildPersonalHealthCard(provider, theme),
                     ],
                     const SizedBox(height: 24),
-                    Text('CONFIGURATION', style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.5, color: Colors.black87)),
+                    Text('CONFIGURATION', style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.5, color: theme.colorScheme.onSurface)),
+                    const SizedBox(height: 16),
+                    _buildThemeSelector(provider, theme),
                     const SizedBox(height: 16),
                     _buildGeminiInput(provider, theme),
                     const SizedBox(height: 16),
@@ -359,34 +361,32 @@ class _SidebarState extends State<Sidebar> {
               ),
             ],
           ),
-          if (isOnline) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
-                  size: 16,
-                  color: provider.isUsingGemini 
-                      ? Colors.deepPurple 
-                      : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    provider.isUsingGemini 
-                        ? 'Gemini (Flash) Active' 
-                        : (provider.isLocalLlmOnline ? 'Local LLM Active' : 'Local LLM Offline'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: provider.isUsingGemini 
-                          ? Colors.deepPurple 
-                          : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
-                    ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
+                size: 16,
+                color: provider.isUsingGemini 
+                    ? Colors.deepPurple 
+                    : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  provider.isUsingGemini 
+                      ? 'Gemini (Flash) Active' 
+                      : (provider.isLocalLlmOnline ? 'Local LLM Active' : 'Local LLM Offline'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: provider.isUsingGemini 
+                        ? Colors.deepPurple 
+                        : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -433,6 +433,9 @@ class _SidebarState extends State<Sidebar> {
    }
 
    Widget _buildBackendUrlInput(ChatProvider provider, ThemeData theme) {
+     if (!_backendUrlFocusNode.hasFocus && _backendUrlController.text != provider.backendUrl) {
+       _backendUrlController.text = provider.backendUrl;
+     }
      return ConstrainedBox(
        constraints: const BoxConstraints(maxWidth: 400),
        child: Column(
@@ -500,6 +503,90 @@ class _SidebarState extends State<Sidebar> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildThemeSelector(ChatProvider provider, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'THEME MODE',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              _buildThemeOption(
+                provider: provider,
+                mode: ThemeMode.light,
+                icon: Icons.light_mode_outlined,
+                label: 'Light',
+              ),
+              _buildThemeOption(
+                provider: provider,
+                mode: ThemeMode.dark,
+                icon: Icons.dark_mode_outlined,
+                label: 'Dark',
+              ),
+              _buildThemeOption(
+                provider: provider,
+                mode: ThemeMode.system,
+                icon: Icons.desktop_windows_outlined,
+                label: 'System',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeOption({
+    required ChatProvider provider,
+    required ThemeMode mode,
+    required IconData icon,
+    required String label,
+  }) {
+    final isSelected = provider.themeMode == mode;
+    final activeColor = provider.themeMode == ThemeMode.dark ? const Color(0xFF1F6FEB) : const Color(0xFF0969DA);
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => provider.setThemeMode(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? activeColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? Colors.white : Colors.grey[600],
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
