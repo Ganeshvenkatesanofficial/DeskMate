@@ -12,6 +12,7 @@ class ApiService {
     required String message,
     String? conversationId,
     String? geminiApiKey,
+    String? model,
   }) async {
     // If Gemini API key is provided, use Gemini service; otherwise fallback to local backend.
     if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
@@ -22,13 +23,15 @@ class ApiService {
         'conversation_id': conversationId ?? '',
       };
     }
-    final url = Uri.parse('${baseUrl}/api/personal');
+    final url = Uri.parse('$baseUrl/api/personal');
     final body = {
       'message': message,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversation_id': conversationId,
       if (geminiApiKey != null && geminiApiKey.isNotEmpty)
         'api_key': geminiApiKey,
+      if (model != null && model.isNotEmpty)
+        'model': model,
     };
     try {
       final response = await http.post(
@@ -47,18 +50,17 @@ class ApiService {
   }
 
   Future<void> resetChat(String conversationId) async {
-    final url = Uri.parse('${baseUrl}/api/reset/${conversationId}');
+    final url = Uri.parse('$baseUrl/api/reset/$conversationId');
     try {
       await http.post(url).timeout(const Duration(seconds: 5));
     } catch (e) {
-      // Ignore reset errors in production, but log them in dev
-      print('Reset error: $e');
+      // Ignore reset errors in production
     }
   }
 
   Future<Map<String, dynamic>> checkHealth() async {
     try {
-      final response = await http.get(Uri.parse('${baseUrl}/api/health')).timeout(const Duration(seconds: 30));
+      final response = await http.get(Uri.parse('$baseUrl/api/health')).timeout(const Duration(seconds: 30));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -68,19 +70,37 @@ class ApiService {
     }
   }
 
-  // Send file‑lens (code) message using local backend.
+  /// Fetch list of available local models from backend
+  Future<List<String>> getAvailableModels() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/models')).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final rawModels = data['models'] as List<dynamic>? ?? [];
+        return rawModels.map((m) => m.toString()).where((m) => m.isNotEmpty).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Send file-lens (code) message using local backend.
   Future<Map<String, dynamic>> sendMessage({
     required String message,
     String? conversationId,
     String? geminiApiKey,
+    String? model,
   }) async {
-    final url = Uri.parse('${baseUrl}/api/chat');
+    final url = Uri.parse('$baseUrl/api/chat');
     final body = {
       'message': message,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversation_id': conversationId,
       if (geminiApiKey != null && geminiApiKey.isNotEmpty)
         'api_key': geminiApiKey,
+      if (model != null && model.isNotEmpty)
+        'model': model,
     };
     try {
       final response = await http.post(
@@ -100,7 +120,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> checkPersonalHealth() async {
     try {
-      final response = await http.get(Uri.parse('${baseUrl}/api/personal/health')).timeout(const Duration(seconds: 5));
+      final response = await http.get(Uri.parse('$baseUrl/api/personal/health')).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }

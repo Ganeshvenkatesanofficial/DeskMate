@@ -28,7 +28,7 @@ class BackendManager {
     try {
       final response = await http
           .get(Uri.parse('http://127.0.0.1:$checkPort/api/health'))
-          .timeout(const Duration(milliseconds: 500));
+          .timeout(const Duration(milliseconds: 1500));
       return response.statusCode == 200;
     } catch (_) {
       return false;
@@ -48,12 +48,9 @@ class BackendManager {
       return;
     }
 
-    _assignedPort = await findFreePort();
-    print('Assigned dynamic random port: $_assignedPort');
-
     try {
       final appDir = p.dirname(Platform.resolvedExecutable);
-      String exePath;
+      String exePath = '';
 
       if (Platform.isWindows) {
         exePath = p.join(
@@ -72,28 +69,26 @@ class BackendManager {
           p.join(appDir, 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
         ];
         
-        exePath = '';
         for (final candidate in candidatePaths) {
           if (await File(candidate).exists()) {
             exePath = candidate;
             break;
           }
         }
-        if (exePath.isEmpty) {
-          exePath = candidatePaths.first;
-        }
       } else {
         return;
       }
 
-      print('Starting backend from: $exePath on port $_assignedPort');
-
-      final file = File(exePath);
-      if (!await file.exists()) {
-        print('Error: Backend executable not found at $exePath.');
-        print('Please make sure backend is compiled and placed in assets/backend/');
+      if (exePath.isEmpty || !await File(exePath).exists()) {
+        _assignedPort = 8080;
+        print('Backend executable not found at $exePath. Defaulting to port 8080 for development.');
         return;
       }
+
+      _assignedPort = await findFreePort();
+      print('Assigned dynamic random port: $_assignedPort');
+      print('Starting backend from: $exePath on port $_assignedPort');
+
 
       // Ensure execution permissions on Unix/macOS
       if (Platform.isMacOS) {

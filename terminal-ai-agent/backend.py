@@ -143,6 +143,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     api_key: Optional[str] = None
+    model: Optional[str] = None
     message: str = Field(..., min_length=1, max_length=8000)
 
 
@@ -193,10 +194,26 @@ def health() -> dict[str, str]:
     return {"status": "ok", "local_llm": local_llm_status}
 
 
+@app.get("/api/models")
+def get_models() -> dict[str, list[str]]:
+    """Fetch list of locally installed Ollama models."""
+    import urllib.request
+    models = []
+    try:
+        req = urllib.request.Request("http://127.0.0.1:11434/api/tags", headers={"User-Agent": "DeskMate-AI/1.0"}, method="GET")
+        with urllib.request.urlopen(req, timeout=2) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+    except Exception:
+        pass
+    return {"models": models}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest) -> ChatResponse:
     conversation_id = payload.conversation_id or str(uuid4())
-    logger.info(f"Received chat request for conversation: {conversation_id}")
+    logger.info(f"Received chat request for conversation: {conversation_id} with model: {payload.model}")
     history = _CONVERSATIONS.get(conversation_id, []).copy()
 
     try:
@@ -204,6 +221,7 @@ def chat(payload: ChatRequest) -> ChatResponse:
             payload.message,
             history=history,
             api_key=payload.api_key,
+            model_id=payload.model,
         )
         logger.info(f"Agent replied successfully for conversation: {conversation_id}")
     except Exception as exc:
@@ -288,7 +306,7 @@ def personal_chat(payload: ChatRequest) -> ChatResponse:
     try:
         # Build prompt using existing _build_chat_prompt helper
         prompt = _build_chat_prompt(payload.message, history)
-        agent = get_personal_agent(api_key=payload.api_key)
+        agent = get_personal_agent(api_key=payload.api_key, model_id=payload.model)
         result = agent.run(prompt)
         reply = str(result)
         

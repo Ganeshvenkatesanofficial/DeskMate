@@ -376,7 +376,9 @@ class _SidebarState extends State<Sidebar> {
                 child: Text(
                   provider.isUsingGemini 
                       ? 'Gemini (Flash) Active' 
-                      : (provider.isLocalLlmOnline ? 'Local LLM Active' : 'Local LLM Offline'),
+                      : (provider.isLocalLlmOnline
+                          ? (provider.selectedLocalModel.isNotEmpty ? 'Local: ${provider.selectedLocalModel}' : 'Local LLM Active')
+                          : 'Local LLM Offline'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: provider.isUsingGemini 
@@ -387,6 +389,38 @@ class _SidebarState extends State<Sidebar> {
               ),
             ],
           ),
+          if (provider.availableLocalModels.length > 1 && !provider.isUsingGemini) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: provider.selectedLocalModel.isNotEmpty && provider.availableLocalModels.contains(provider.selectedLocalModel)
+                      ? provider.selectedLocalModel
+                      : provider.availableLocalModels.first,
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_drop_down, size: 20),
+                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                  onChanged: (val) {
+                    if (val != null) {
+                      provider.setSelectedLocalModel(val);
+                    }
+                  },
+                  items: provider.availableLocalModels.map((m) {
+                    return DropdownMenuItem<String>(
+                      value: m,
+                      child: Text(m, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -476,35 +510,7 @@ class _SidebarState extends State<Sidebar> {
 
 
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required FocusNode focusNode,
-    bool obscure = false,
-    Function(String)? onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          obscureText: obscure && !focusNode.hasFocus,
-          focusNode: focusNode,
-          onChanged: onChanged,
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, size: 18),
-            hintText: 'Enter $label',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black, width: 2)),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildThemeSelector(ChatProvider provider, ThemeData theme) {
     return Column(

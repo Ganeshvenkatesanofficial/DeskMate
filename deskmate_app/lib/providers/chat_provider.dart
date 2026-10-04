@@ -23,6 +23,12 @@ class ChatProvider extends ChangeNotifier {
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Timer? _healthTimer;
 
+  // Local Ollama Models state
+  List<String> _availableLocalModels = [];
+  String _selectedLocalModel = '';
+  bool _showModelSelectionDialog = false;
+  bool _hasPromptedModelSelection = false;
+
   // Gemini API key – kept only in memory, never persisted.
   String _geminiApiKey = '';
 
@@ -39,6 +45,9 @@ class ChatProvider extends ChangeNotifier {
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
+  List<String> get availableLocalModels => _availableLocalModels;
+  String get selectedLocalModel => _selectedLocalModel;
+  bool get showModelSelectionDialog => _showModelSelectionDialog;
 
   late ApiService _apiService;
 
@@ -59,18 +68,50 @@ class ChatProvider extends ChangeNotifier {
     _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
     _personalConversationId = prefs.getString('deskmate_personal_conversation_id') ?? '';
     final savedUrl = prefs.getString('deskmate_backend_url');
-    if (savedUrl == null || savedUrl.isEmpty || savedUrl.contains('8080')) {
+    if (savedUrl == null || savedUrl.isEmpty) {
       _backendUrl = BackendManager.backendUrl;
     } else {
       _backendUrl = savedUrl;
     }
+    _selectedLocalModel = prefs.getString('deskmate_selected_model') ?? '';
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
     final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
       _themeMode = ThemeMode.values[themeIndex];
     }
-    // Gemini key not persisted; asked each session.
     _apiService = ApiService(baseUrl: _backendUrl);
+    notifyListeners();
+  }
+
+  Future<void> fetchAvailableModels() async {
+    if (!_isBackendOnline) return;
+    try {
+      final models = await _apiService.getAvailableModels();
+      _availableLocalModels = models;
+      if (_availableLocalModels.isNotEmpty) {
+        if (_selectedLocalModel.isEmpty || !_availableLocalModels.contains(_selectedLocalModel)) {
+          _selectedLocalModel = _availableLocalModels.first;
+        }
+        if (_availableLocalModels.length > 1 && !_hasPromptedModelSelection) {
+          _showModelSelectionDialog = true;
+        }
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> setSelectedLocalModel(String model) async {
+    _selectedLocalModel = model;
+    _showModelSelectionDialog = false;
+    _hasPromptedModelSelection = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('deskmate_selected_model', model);
+    notifyListeners();
+  }
+
+  void dismissModelSelectionDialog() {
+    _showModelSelectionDialog = false;
+    _hasPromptedModelSelection = true;
     notifyListeners();
   }
 
@@ -122,23 +163,42 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
-    if (_backendUrl.isEmpty || _backendUrl.contains('8080')) {
+    if (_backendUrl.isEmpty) {
       _backendUrl = BackendManager.backendUrl;
-      _apiService = ApiService(baseUrl: _backendUrl);
     }
+    _apiService = ApiService(baseUrl: _backendUrl);
     notifyListeners();
     const int maxAttempts = 30;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      final health = await _apiService.checkHealth();
+      var health = await _apiService.checkHealth();
       if (health['status'] == 'ok') {
         _isBackendOnline = true;
         _isLocalLlmOnline = health['local_llm'] == 'online';
         _isConnecting = false;
         _errorMessage = '';
         checkPersonalAgentStatus();
+        fetchAvailableModels();
         notifyListeners();
         _startHealthPolling();
         return;
+      }
+      // Fallback check on default port 8080 if assigned port isn't responding yet
+      if (_backendUrl != 'http://127.0.0.1:8080') {
+        final fallbackService = ApiService(baseUrl: 'http://127.0.0.1:8080');
+        final fallbackHealth = await fallbackService.checkHealth();
+        if (fallbackHealth['status'] == 'ok') {
+          _backendUrl = 'http://127.0.0.1:8080';
+          _apiService = fallbackService;
+          _isBackendOnline = true;
+          _isLocalLlmOnline = fallbackHealth['local_llm'] == 'online';
+          _isConnecting = false;
+          _errorMessage = '';
+          checkPersonalAgentStatus();
+          fetchAvailableModels();
+          notifyListeners();
+          _startHealthPolling();
+          return;
+        }
       }
       await Future.delayed(const Duration(seconds: 1));
     }
@@ -159,6 +219,9 @@ class ChatProvider extends ChangeNotifier {
       if (_isBackendOnline != newBackendOnline || _isLocalLlmOnline != newLocalLlmOnline) {
         _isBackendOnline = newBackendOnline;
         _isLocalLlmOnline = newLocalLlmOnline;
+        if (_isBackendOnline && _availableLocalModels.isEmpty) {
+          fetchAvailableModels();
+        }
         notifyListeners();
       }
     });
@@ -205,17 +268,19 @@ class ChatProvider extends ChangeNotifier {
     try {
       Map<String, dynamic> response;
       if (_mode == AgentMode.personal) {
-        // Use Gemini if key provided, otherwise local backend.
+        // Use Gemini if key provided, otherwise local backend with selected model.
         response = await _apiService.sendPersonalMessage(
           message: text,
           conversationId: _personalConversationId,
           geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+          model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
         );
       } else {
         response = await _apiService.sendMessage(
           message: text,
           conversationId: _fileConversationId,
           geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+          model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
         );
       }
       final newId = response['conversation_id'] as String? ?? '';

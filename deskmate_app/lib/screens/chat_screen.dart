@@ -56,36 +56,201 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
       drawer: isDesktop ? null : const Drawer(child: Sidebar()),
-      body: Row(
+      body: Stack(
         children: [
-          if (isDesktop) const Sidebar(),
-          Expanded(
-            child: Container(
-              color: theme.scaffoldBackgroundColor,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: provider.messages.isEmpty
-                        ? _buildEmptyState(theme)
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                            itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index == provider.messages.length) {
-                                return _buildTypingIndicator(theme);
-                              }
-                              return ChatBubble(message: provider.messages[index]);
-                            },
-                          ),
+          Row(
+            children: [
+              if (isDesktop) const Sidebar(),
+              Expanded(
+                child: Container(
+                  color: theme.scaffoldBackgroundColor,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: provider.messages.isEmpty
+                            ? _buildEmptyState(theme)
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                                itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
+                                itemBuilder: (context, index) {
+                                  if (index == provider.messages.length) {
+                                    return _buildTypingIndicator(theme);
+                                  }
+                                  return ChatBubble(message: provider.messages[index]);
+                                },
+                              ),
+                      ),
+                      _buildInputArea(provider, theme),
+                    ],
                   ),
-                  _buildInputArea(provider, theme),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
+          if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: Center(
+                  child: _buildModelSelectionPopup(context, provider, theme),
+                ),
+              ).animate().fadeIn(duration: 250.ms),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildModelSelectionPopup(BuildContext context, ChatProvider provider, ThemeData theme) {
+    String tempSelected = provider.selectedLocalModel.isNotEmpty
+        ? provider.selectedLocalModel
+        : provider.availableLocalModels.first;
+
+    return StatefulBuilder(
+      builder: (context, setPopupState) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 12,
+          backgroundColor: theme.scaffoldBackgroundColor,
+          child: Container(
+            width: 480,
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.memory_rounded, color: theme.colorScheme.primary, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Multiple Local Models Detected',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Select which Ollama model to use for your AI queries:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.hintColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+                Text(
+                  'AVAILABLE MODELS ON THIS LAPTOP (${provider.availableLocalModels.length}):',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    color: theme.hintColor,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: provider.availableLocalModels.map((modelName) {
+                        final isSelected = tempSelected == modelName;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                                : theme.cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.dividerColor,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: RadioListTile<String>(
+                            value: modelName,
+                            groupValue: tempSelected,
+                            activeColor: theme.colorScheme.primary,
+                            title: Text(
+                              modelName,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            subtitle: Text(
+                              isSelected ? 'Active Selection' : 'Click to select',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isSelected ? theme.colorScheme.primary : theme.hintColor,
+                              ),
+                            ),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setPopupState(() {
+                                  tempSelected = val;
+                                });
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        provider.dismissModelSelectionDialog();
+                      },
+                      child: const Text('Use Default'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        provider.setSelectedLocalModel(tempSelected);
+                      },
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Proceed with Selected Model'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -131,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.blue.withOpacity(0.3),
+                      color: Colors.blue.withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -202,35 +367,35 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 16, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[700], letterSpacing: 0.5),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Expanded(
-                child: Text(
-                  text,
-                  style: const TextStyle(fontSize: 11, color: Colors.black87, height: 1.3),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 16, color: Colors.blue[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[700], letterSpacing: 0.5),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: const TextStyle(fontSize: 11, color: Colors.black87, height: 1.3),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildTypingIndicator(ThemeData theme) {
     return Padding(
@@ -238,7 +403,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: theme.colorScheme.secondary.withOpacity(0.1),
+            backgroundColor: theme.colorScheme.secondary.withValues(alpha: 0.1),
             radius: 12,
             child: const SizedBox(
               width: 12,
@@ -272,7 +437,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -321,9 +486,9 @@ class _ChatScreenState extends State<ChatScreen> {
           else if (!provider.isBackendOnline)
             Container(
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.08),
+                color: Colors.orange.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(

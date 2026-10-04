@@ -13,21 +13,13 @@ from typing import Any
 # Configuration – change only if you use a different model or host/port.
 # ----------------------------------------------------------------------
 BASE_URL = "http://127.0.0.1:11434"
-MODEL    = "phi3"  # <- the model you pulled earlier
+MODEL    = "phi3"  # default fallback model
 
-def ask_local_llm(prompt: str, *, stream: bool = False, temperature: float = 0.1) -> str:
-    """Send *prompt* to the local Ollama model and return the generated text.
-
-    Args:
-        prompt: The user‑visible prompt you want the model to answer.
-        stream: If True, the API streams partial chunks (not used here).
-        temperature: Controls randomness (0 = deterministic, 1 = very random).
-
-    Returns:
-        The raw response text (no surrounding metadata).
-    """
+def ask_local_llm(prompt: str, *, model: str | None = None, stream: bool = False, temperature: float = 0.1) -> str:
+    """Send *prompt* to the local Ollama model and return the generated text."""
+    selected_model = model or MODEL
     payload: dict[str, Any] = {
-        "model": MODEL,
+        "model": selected_model,
         "prompt": prompt,
         "stream": stream,
         "temperature": temperature,
@@ -43,19 +35,11 @@ def ask_local_llm(prompt: str, *, stream: bool = False, temperature: float = 0.1
     return data.get("response", "").strip()
 
 
-def chat_local_llm(messages: list[dict[str, Any]], *, stream: bool = False, temperature: float = 0.1) -> dict[str, Any]:
-    """Send message history to the local Ollama chat API and return the response message dict.
-
-    Args:
-        messages: A list of dicts representing chat history, e.g., [{"role": "user", "content": "..."}].
-        stream: Whether to stream responses (not supported here).
-        temperature: Temperature for generation.
-
-    Returns:
-        A dictionary containing the response message, e.g., {"role": "assistant", "content": "..."}.
-    """
+def chat_local_llm(messages: list[dict[str, Any]], *, model: str | None = None, stream: bool = False, temperature: float = 0.1) -> dict[str, Any]:
+    """Send message history to the local Ollama chat API and return the response message dict."""
+    selected_model = model or MODEL
     payload: dict[str, Any] = {
-        "model": MODEL,
+        "model": selected_model,
         "messages": messages,
         "stream": stream,
         "options": {
@@ -75,6 +59,6 @@ def chat_local_llm(messages: list[dict[str, Any]], *, stream: bool = False, temp
         raise RuntimeError(err_msg) from exc
 
     data = response.json()
-    # Ollama returns the generated assistant message under the "message" key
     return data.get("message", {"role": "assistant", "content": ""})
+
 
