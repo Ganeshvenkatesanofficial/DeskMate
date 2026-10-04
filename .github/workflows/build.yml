@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: [ main, test ]
   workflow_dispatch:
+    inputs:
+      target_platform:
+        description: 'Select platform to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
 
 jobs:
   flake8-lint:
@@ -32,11 +42,35 @@ jobs:
           # Complexity and line-length style check (non-blocking)
           flake8 . --exclude=.venv,venv,build,dist,__pycache__,.git --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
 
+  check-changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      build_windows: ${{ steps.filter.outputs.windows == 'true' || github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'windows' || (github.event_name == 'push' && steps.filter.outputs.macos != 'true') || steps.filter.outputs.common == 'true' }}
+      build_macos: ${{ steps.filter.outputs.macos == 'true' || github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'macos' || (github.event_name == 'push' && steps.filter.outputs.windows != 'true') || steps.filter.outputs.common == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            windows:
+              - 'deskmate_app/windows/**'
+            macos:
+              - 'deskmate_app/macos/**'
+            common:
+              - 'deskmate_app/lib/**'
+              - 'deskmate_app/pubspec.yaml'
+              - 'terminal-ai-agent/**'
+              - '.github/workflows/**'
+
   build-windows:
     name: Build Windows Executable Release
-    needs: flake8-lint
+    needs: [flake8-lint, check-changes]
+    if: |
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'windows')) ||
+      (github.event_name == 'push' && needs.check-changes.outputs.build_windows == 'true')
     runs-on: windows-latest
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -81,9 +115,11 @@ jobs:
 
   build-macos:
     name: Build macOS App Bundle Release
-    needs: flake8-lint
+    needs: [flake8-lint, check-changes]
+    if: |
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'macos')) ||
+      (github.event_name == 'push' && needs.check-changes.outputs.build_macos == 'true')
     runs-on: macos-latest
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
@@ -141,4 +177,3 @@ jobs:
         with:
           name: DeskMate-macOS-App
           path: deskmate_app/build/macos/Build/Products/Release/DeskMate-macOS.zip
-
