@@ -644,7 +644,7 @@ class GetWeatherTool(Tool):
         url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=8) as r:
+            with urllib.request.urlopen(req, timeout=8) as r:  # nosec B310
                 data = json.loads(r.read().decode('utf-8'))
             cur = data["current_condition"][0]
             area = data["nearest_area"][0]
@@ -816,7 +816,7 @@ class SearchGithubIssuesTool(Tool):
             if token:
                 req.add_header("Authorization", f"Bearer {token}")
                 
-            with urllib.request.urlopen(req, timeout=10) as r:
+            with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
                 issues = json.loads(r.read().decode('utf-8'))
                 
             results = []
@@ -874,7 +874,7 @@ class CreateGithubIssueTool(Tool):
             req.add_header("Authorization", f"Bearer {token}")
             req.add_header("Content-Type", "application/json")
             
-            with urllib.request.urlopen(req, timeout=10) as r:
+            with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
                 res_data = json.loads(r.read().decode('utf-8'))
                 
             return f"Successfully created GitHub issue #{res_data.get('number')} in '{repository}'!\nURL: {res_data.get('html_url')}"

@@ -185,7 +185,7 @@ def health() -> dict[str, str]:
     for url in urls_to_check:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "DeskMate-AI/1.0"}, method="GET")
-            with urllib.request.urlopen(req, timeout=2) as response:
+            with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
                 if response.status == 200:
                     local_llm_status = "online"
                     break
@@ -201,7 +201,7 @@ def get_models() -> dict[str, list[str]]:
     models = []
     try:
         req = urllib.request.Request("http://127.0.0.1:11434/api/tags", headers={"User-Agent": "DeskMate-AI/1.0"}, method="GET")
-        with urllib.request.urlopen(req, timeout=2) as response:
+        with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
             if response.status == 200:
                 data = json.loads(response.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
