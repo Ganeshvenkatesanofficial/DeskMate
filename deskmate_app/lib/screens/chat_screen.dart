@@ -44,16 +44,17 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     return Scaffold(
-      backgroundColor: AppTheme.bgCanvas,
+      backgroundColor: theme.bgCanvas,
       appBar: isDesktop
           ? null
           : AppBar(
-              backgroundColor: AppTheme.bgSubtle,
-              title: const Text('DeskMate', style: TextStyle(color: AppTheme.fgDefault, fontSize: 16, fontWeight: FontWeight.w600)),
+              backgroundColor: theme.bgSubtle,
+              elevation: 0,
+              title: Text('DeskMate', style: TextStyle(color: theme.fgDefault, fontSize: 16, fontWeight: FontWeight.w600)),
               actions: [
                 IconButton(
                   onPressed: () => provider.resetChat(),
-                  icon: const Icon(Icons.refresh, color: AppTheme.fgMuted),
+                  icon: Icon(Icons.refresh, color: theme.fgMuted),
                 ),
               ],
             ),
@@ -65,7 +66,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (isDesktop) const Sidebar(),
               Expanded(
                 child: Container(
-                  color: AppTheme.bgCanvas,
+                  color: theme.bgCanvas,
                   child: Column(
                     children: [
                       Expanded(
@@ -93,7 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
           if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withValues(alpha: 0.6),
+                color: Colors.black.withValues(alpha: 0.5),
                 child: Center(
                   child: _buildModelSelectionPopup(context, provider, theme),
                 ),
@@ -114,10 +115,10 @@ class _ChatScreenState extends State<ChatScreen> {
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(6),
-            side: const BorderSide(color: AppTheme.borderDefault, width: 1),
+            side: BorderSide(color: theme.borderDefault, width: 1),
           ),
           elevation: 8,
-          backgroundColor: AppTheme.bgOverlay,
+          backgroundColor: theme.bgOverlay,
           child: Container(
             width: 480,
             padding: const EdgeInsets.all(24),
@@ -130,31 +131,31 @@ class _ChatScreenState extends State<ChatScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppTheme.bgEmphasis,
+                        color: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppTheme.borderDefault, width: 1),
+                        border: Border.all(color: theme.borderDefault, width: 1),
                       ),
-                      child: const Icon(Icons.memory_rounded, color: AppTheme.accentFg, size: 22),
+                      child: Icon(Icons.memory_rounded, color: theme.accentFg, size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text(
                             'Multiple Local Models Detected',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.fgDefault,
+                              color: theme.fgDefault,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
                             'Select which Ollama model to use for your AI queries:',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppTheme.fgMuted,
+                              color: theme.fgMuted,
                             ),
                           ),
                         ],
@@ -163,15 +164,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Divider(color: AppTheme.borderDefault, height: 1),
+                Divider(color: theme.borderDefault, height: 1),
                 const SizedBox(height: 14),
                 Text(
                   'AVAILABLE MODELS ON THIS LAPTOP (${provider.availableLocalModels.length}):',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.08,
-                    color: AppTheme.fgMuted,
+                    color: theme.fgMuted,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -184,30 +185,32 @@ class _ChatScreenState extends State<ChatScreen> {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.bgEmphasis : AppTheme.bgSubtle,
+                            color: isSelected
+                                ? (theme.isDark ? theme.bgEmphasis : theme.bgSubtle)
+                                : theme.bgCanvas,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: isSelected ? AppTheme.accentFg : AppTheme.borderDefault,
+                              color: isSelected ? theme.accentFg : theme.borderDefault,
                               width: 1,
                             ),
                           ),
                           child: RadioListTile<String>(
                             value: modelName,
                             groupValue: tempSelected,
-                            activeColor: AppTheme.accentFg,
+                            activeColor: theme.accentFg,
                             title: Text(
                               modelName,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                color: AppTheme.fgDefault,
+                                color: theme.fgDefault,
                               ),
                             ),
                             subtitle: Text(
                               isSelected ? 'Active Selection' : 'Click to select',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: isSelected ? AppTheme.accentFg : AppTheme.fgMuted,
+                                color: isSelected ? theme.accentFg : theme.fgMuted,
                               ),
                             ),
                             onChanged: (val) {
@@ -285,29 +288,29 @@ class _ChatScreenState extends State<ChatScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.bgSubtle,
+                  color: theme.isDark ? theme.bgSubtle : theme.bgSubtle,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.borderDefault, width: 1),
+                  border: Border.all(color: theme.borderDefault, width: 1),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded, size: 32, color: AppTheme.accentFg),
+                child: Icon(Icons.auto_awesome_rounded, size: 32, color: theme.accentFg),
               ),
               const SizedBox(height: 20),
               Text(
                 title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppTheme.fgDefault),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: theme.fgDefault),
               ),
               const SizedBox(height: 8),
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppTheme.fgMuted, height: 1.5),
+                style: TextStyle(fontSize: 13, color: theme.fgMuted, height: 1.5),
               ),
               const SizedBox(height: 28),
               Row(
-                children: const [
+                children: [
                   Text(
                     'TRY THESE EXAMPLES',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.fgMuted, letterSpacing: 0.08),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.fgMuted, letterSpacing: 0.08),
                   ),
                 ],
               ),
@@ -342,9 +345,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildExampleCard(ThemeData theme, IconData icon, String label, String text) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.bgSubtle,
+        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.borderDefault, width: 1),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -355,7 +358,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _messageController.text = text;
             });
           },
-          hoverColor: AppTheme.bgEmphasis,
+          hoverColor: theme.bgEmphasis,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -364,11 +367,11 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(icon, size: 14, color: AppTheme.accentFg),
+                    Icon(icon, size: 14, color: theme.accentFg),
                     const SizedBox(width: 6),
                     Text(
                       label,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.accentFg),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.accentFg),
                     ),
                   ],
                 ),
@@ -376,7 +379,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: Text(
                     text,
-                    style: const TextStyle(fontSize: 12, color: AppTheme.fgDefault, height: 1.3),
+                    style: TextStyle(fontSize: 12, color: theme.fgDefault, height: 1.3),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -393,16 +396,16 @@ class _ChatScreenState extends State<ChatScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        children: const [
+        children: [
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentFg),
+            child: CircularProgressIndicator(strokeWidth: 2, color: theme.accentFg),
           ),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Text(
             'Assistant is thinking...',
-            style: TextStyle(fontSize: 12, color: AppTheme.fgMuted, fontStyle: FontStyle.italic),
+            style: TextStyle(fontSize: 12, color: theme.fgMuted, fontStyle: FontStyle.italic),
           ),
         ],
       ).animate().fadeIn(duration: 150.ms),
@@ -412,9 +415,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildInputArea(ChatProvider provider, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: const BoxDecoration(
-        color: AppTheme.bgSubtle,
-        border: Border(top: BorderSide(color: AppTheme.borderDefault, width: 1)),
+      decoration: BoxDecoration(
+        color: theme.bgSubtle,
+        border: Border(top: BorderSide(color: theme.borderDefault, width: 1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -425,18 +428,18 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.dangerBg,
+                  color: theme.dangerBg,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.dangerBorder, width: 1),
+                  border: Border.all(color: theme.dangerBorder, width: 1),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: AppTheme.dangerFg, size: 16),
+                    Icon(Icons.error_outline, color: theme.dangerFg, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         provider.errorMessage,
-                        style: const TextStyle(color: AppTheme.dangerFg, fontSize: 12),
+                        style: TextStyle(color: theme.dangerFg, fontSize: 12),
                       ),
                     ),
                   ],
@@ -448,20 +451,20 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
+                children: [
                   SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentFg),
+                      valueColor: AlwaysStoppedAnimation<Color>(theme.accentFg),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Text(
                     'Initializing local AI service & loading models...',
                     style: TextStyle(
-                      color: AppTheme.accentFg,
+                      color: theme.accentFg,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -472,20 +475,20 @@ class _ChatScreenState extends State<ChatScreen> {
           else if (!provider.isBackendOnline)
             Container(
               decoration: BoxDecoration(
-                color: AppTheme.bgEmphasis,
+                color: theme.bgEmphasis,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.attentionFg, width: 1),
+                border: Border.all(color: theme.attentionFg, width: 1),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.attentionFg, size: 18),
+                  Icon(Icons.warning_amber_rounded, color: theme.attentionFg, size: 18),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'AI Service is offline. Please wait or retry connecting.',
                       style: TextStyle(
-                        color: AppTheme.attentionFg,
+                        color: theme.attentionFg,
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -497,8 +500,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                     icon: const Icon(Icons.refresh, size: 14),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppTheme.attentionFg, width: 1),
-                      foregroundColor: AppTheme.attentionFg,
+                      side: BorderSide(color: theme.attentionFg, width: 1),
+                      foregroundColor: theme.attentionFg,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                     label: const Text('Retry'),
@@ -515,7 +518,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: 4,
                     minLines: 1,
                     textInputAction: TextInputAction.send,
-                    style: const TextStyle(color: AppTheme.fgDefault, fontSize: 13),
+                    style: TextStyle(color: theme.fgDefault, fontSize: 13),
                     onSubmitted: (val) {
                       if (val.isNotEmpty) {
                         provider.sendMessage(val);
@@ -528,9 +531,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           : provider.mode == AgentMode.personal
                               ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
                               : 'Ask about your files...',
-                      hintStyle: const TextStyle(color: AppTheme.fgMuted, fontSize: 13),
+                      hintStyle: TextStyle(color: theme.fgMuted, fontSize: 13),
                       enabled: !provider.isSending && (provider.isLocalLlmOnline || provider.isUsingGemini),
-                      fillColor: AppTheme.bgCanvas,
+                      fillColor: theme.bgCanvas,
                       filled: true,
                     ),
                   ),
@@ -550,8 +553,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           },
                     style: ElevatedButton.styleFrom(
                       padding: EdgeInsets.zero,
-                      backgroundColor: AppTheme.accentEmphasis,
-                      disabledBackgroundColor: AppTheme.bgEmphasis,
+                      backgroundColor: theme.accentEmphasis,
+                      disabledBackgroundColor: theme.bgEmphasis,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     ),
                     child: provider.isSending
@@ -564,10 +567,10 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Text(
                 'Powered by DeskMate AI • Open Source Edition',
-                style: TextStyle(fontSize: 10, color: AppTheme.fgMuted),
+                style: TextStyle(fontSize: 10, color: theme.fgMuted),
               ),
             ],
           ),

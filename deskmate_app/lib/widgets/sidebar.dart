@@ -46,9 +46,9 @@ class _SidebarState extends State<Sidebar> {
 
     return Container(
       width: 320,
-      decoration: const BoxDecoration(
-        color: AppTheme.bgSubtle,
-        border: Border(right: BorderSide(color: AppTheme.borderDefault, width: 1)),
+      decoration: BoxDecoration(
+        color: theme.bgSubtle,
+        border: Border(right: BorderSide(color: theme.borderDefault, width: 1)),
       ),
       padding: const EdgeInsets.all(20),
       child: SafeArea(
@@ -65,22 +65,22 @@ class _SidebarState extends State<Sidebar> {
                         Container(
                           padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
-                            color: AppTheme.bgEmphasis,
+                            color: theme.isDark ? theme.bgEmphasis : theme.bgCanvas,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AppTheme.borderDefault, width: 1),
+                            border: Border.all(color: theme.borderDefault, width: 1),
                           ),
-                          child: const Icon(Icons.auto_awesome_rounded, color: AppTheme.accentFg, size: 20),
+                          child: Icon(Icons.auto_awesome_rounded, color: theme.accentFg, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Text(
                               'DeskMate',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: AppTheme.fgDefault,
+                                color: theme.fgDefault,
                                 letterSpacing: -0.2,
                               ),
                             ),
@@ -89,7 +89,7 @@ class _SidebarState extends State<Sidebar> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: AppTheme.fgMuted,
+                                color: theme.accentFg,
                               ),
                             ),
                           ],
@@ -105,13 +105,13 @@ class _SidebarState extends State<Sidebar> {
                       _buildPersonalHealthCard(provider, theme),
                     ],
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       'CONFIGURATION',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.08,
-                        color: AppTheme.fgMuted,
+                        color: theme.fgMuted,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -133,12 +133,15 @@ class _SidebarState extends State<Sidebar> {
   }
 
   Widget _buildModeSelector(ChatProvider provider, ThemeData theme) {
+    final isDeskMate = provider.mode == AgentMode.deskMate;
+    final isPersonal = provider.mode == AgentMode.personal;
+
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppTheme.bgCanvas,
+        color: theme.bgCanvas,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.borderDefault, width: 1),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Row(
         children: [
@@ -148,10 +151,12 @@ class _SidebarState extends State<Sidebar> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.deskMate ? AppTheme.bgEmphasis : Colors.transparent,
+                  color: isDeskMate
+                      ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
-                  border: provider.mode == AgentMode.deskMate
-                      ? Border.all(color: AppTheme.borderDefault, width: 1)
+                  border: isDeskMate
+                      ? Border.all(color: theme.borderDefault, width: 1)
                       : null,
                 ),
                 child: Row(
@@ -160,7 +165,7 @@ class _SidebarState extends State<Sidebar> {
                     Icon(
                       Icons.folder_open_rounded,
                       size: 15,
-                      color: provider.mode == AgentMode.deskMate ? AppTheme.accentFg : AppTheme.fgMuted,
+                      color: isDeskMate ? theme.accentFg : theme.fgMuted,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -168,7 +173,7 @@ class _SidebarState extends State<Sidebar> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: provider.mode == AgentMode.deskMate ? AppTheme.fgDefault : AppTheme.fgMuted,
+                        color: isDeskMate ? theme.fgDefault : theme.fgMuted,
                       ),
                     ),
                   ],
@@ -182,10 +187,12 @@ class _SidebarState extends State<Sidebar> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.personal ? AppTheme.bgEmphasis : Colors.transparent,
+                  color: isPersonal
+                      ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
-                  border: provider.mode == AgentMode.personal
-                      ? Border.all(color: AppTheme.borderDefault, width: 1)
+                  border: isPersonal
+                      ? Border.all(color: theme.borderDefault, width: 1)
                       : null,
                 ),
                 child: Row(
@@ -194,7 +201,7 @@ class _SidebarState extends State<Sidebar> {
                     Icon(
                       Icons.person_rounded,
                       size: 15,
-                      color: provider.mode == AgentMode.personal ? AppTheme.accentFg : AppTheme.fgMuted,
+                      color: isPersonal ? theme.accentFg : theme.fgMuted,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -202,7 +209,7 @@ class _SidebarState extends State<Sidebar> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: provider.mode == AgentMode.personal ? AppTheme.fgDefault : AppTheme.fgMuted,
+                        color: isPersonal ? theme.fgDefault : theme.fgMuted,
                       ),
                     ),
                   ],
@@ -223,7 +230,7 @@ class _SidebarState extends State<Sidebar> {
     if (status == 'loading') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentFg))),
+        child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: theme.accentFg))),
       );
     }
 
@@ -231,18 +238,18 @@ class _SidebarState extends State<Sidebar> {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.dangerBg,
+          color: theme.dangerBg,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppTheme.dangerBorder, width: 1),
+          border: Border.all(color: theme.dangerBorder, width: 1),
         ),
         child: Row(
-          children: const [
-            Icon(Icons.error_outline_rounded, color: AppTheme.dangerFg, size: 16),
-            SizedBox(width: 8),
+          children: [
+            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 16),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Personal Agent server unreachable.',
-                style: TextStyle(fontSize: 11, color: AppTheme.dangerFg, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 11, color: theme.dangerFg, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -258,42 +265,42 @@ class _SidebarState extends State<Sidebar> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.bgSubtle,
+        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.borderDefault, width: 1),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'PERSONAL SERVICES HEALTH',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: AppTheme.fgMuted,
+              color: theme.fgMuted,
               letterSpacing: 0.08,
             ),
           ),
           const SizedBox(height: 10),
-          _buildHealthRow('Credentials JSON', hasCredsFile),
+          _buildHealthRow(theme, 'Credentials JSON', hasCredsFile),
           const SizedBox(height: 6),
-          _buildHealthRow('Gmail Access', hasGmailToken),
+          _buildHealthRow(theme, 'Gmail Access', hasGmailToken),
           const SizedBox(height: 6),
-          _buildHealthRow('Calendar Access', hasCalToken),
+          _buildHealthRow(theme, 'Calendar Access', hasCalToken),
           const SizedBox(height: 6),
-          _buildHealthRow('Drive Access', hasDriveToken),
+          _buildHealthRow(theme, 'Drive Access', hasDriveToken),
         ],
       ),
     );
   }
 
-  Widget _buildHealthRow(String label, bool isOk) {
+  Widget _buildHealthRow(ThemeData theme, String label, bool isOk) {
     return Row(
       children: [
         Icon(
           isOk ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
           size: 14,
-          color: isOk ? AppTheme.successFg : AppTheme.fgMuted,
+          color: isOk ? theme.successFg : theme.fgMuted,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -301,7 +308,7 @@ class _SidebarState extends State<Sidebar> {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: isOk ? AppTheme.fgDefault : AppTheme.fgMuted,
+              color: isOk ? theme.fgDefault : theme.fgMuted,
               fontWeight: isOk ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
@@ -315,9 +322,9 @@ class _SidebarState extends State<Sidebar> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.bgSubtle,
+        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.borderDefault, width: 1),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Column(
         children: [
@@ -327,17 +334,17 @@ class _SidebarState extends State<Sidebar> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isOnline ? AppTheme.successFg : AppTheme.dangerFg,
+                  color: isOnline ? theme.successFg : theme.dangerFg,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 isOnline ? 'Backend Online' : 'Backend Offline',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.fgDefault,
+                  color: theme.fgDefault,
                 ),
               ),
             ],
@@ -345,14 +352,14 @@ class _SidebarState extends State<Sidebar> {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(Icons.history_edu_outlined, size: 15, color: AppTheme.fgMuted),
+              Icon(Icons.history_edu_outlined, size: 15, color: theme.fgMuted),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   provider.conversationId.isEmpty 
                       ? 'No active session' 
                       : 'Session: ${provider.conversationId.substring(0, 8)}...',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.fgMuted),
+                  style: TextStyle(fontSize: 12, color: theme.fgMuted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -365,8 +372,8 @@ class _SidebarState extends State<Sidebar> {
                 provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
                 size: 15,
                 color: provider.isUsingGemini 
-                    ? AppTheme.accentFg 
-                    : (provider.isLocalLlmOnline ? AppTheme.successFg : AppTheme.dangerFg),
+                    ? theme.accentFg 
+                    : (provider.isLocalLlmOnline ? theme.successFg : theme.dangerFg),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -380,8 +387,8 @@ class _SidebarState extends State<Sidebar> {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: provider.isUsingGemini 
-                        ? AppTheme.accentFg 
-                        : (provider.isLocalLlmOnline ? AppTheme.successFg : AppTheme.dangerFg),
+                        ? theme.accentFg 
+                        : (provider.isLocalLlmOnline ? theme.successFg : theme.dangerFg),
                   ),
                 ),
               ),
@@ -392,9 +399,9 @@ class _SidebarState extends State<Sidebar> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
               decoration: BoxDecoration(
-                color: AppTheme.bgCanvas,
+                color: theme.bgCanvas,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.borderDefault, width: 1),
+                border: Border.all(color: theme.borderDefault, width: 1),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -402,9 +409,9 @@ class _SidebarState extends State<Sidebar> {
                       ? provider.selectedLocalModel
                       : provider.availableLocalModels.first,
                   isExpanded: true,
-                  dropdownColor: AppTheme.bgOverlay,
-                  icon: const Icon(Icons.arrow_drop_down, size: 18, color: AppTheme.fgMuted),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault),
+                  dropdownColor: theme.bgOverlay,
+                  icon: Icon(Icons.arrow_drop_down, size: 18, color: theme.fgMuted),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
                   onChanged: (val) {
                     if (val != null) {
                       provider.setSelectedLocalModel(val);
@@ -429,7 +436,7 @@ class _SidebarState extends State<Sidebar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Gemini API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault)),
+        Text('Gemini API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault)),
         const SizedBox(height: 6),
         SizedBox(
           height: 38,
@@ -437,9 +444,9 @@ class _SidebarState extends State<Sidebar> {
             controller: _geminiKeyController,
             obscureText: !_geminiKeyFocusNode.hasFocus,
             focusNode: _geminiKeyFocusNode,
-            style: const TextStyle(fontSize: 13, color: AppTheme.fgDefault),
+            style: TextStyle(fontSize: 13, color: theme.fgDefault),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.vpn_key_outlined, size: 16, color: AppTheme.fgMuted),
+              prefixIcon: Icon(Icons.vpn_key_outlined, size: 16, color: theme.fgMuted),
               hintText: 'Enter Gemini API Key',
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
@@ -470,16 +477,16 @@ class _SidebarState extends State<Sidebar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Backend URL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault)),
+        Text('Backend URL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault)),
         const SizedBox(height: 6),
         SizedBox(
           height: 38,
           child: TextField(
             controller: _backendUrlController,
             focusNode: _backendUrlFocusNode,
-            style: const TextStyle(fontSize: 13, color: AppTheme.fgDefault),
+            style: TextStyle(fontSize: 13, color: theme.fgDefault),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.link, size: 16, color: AppTheme.fgMuted),
+              prefixIcon: Icon(Icons.link, size: 16, color: theme.fgMuted),
               hintText: 'Enter Backend URL',
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
@@ -509,34 +516,37 @@ class _SidebarState extends State<Sidebar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'THEME MODE',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
         ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: AppTheme.bgCanvas,
+            color: theme.bgCanvas,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppTheme.borderDefault, width: 1),
+            border: Border.all(color: theme.borderDefault, width: 1),
           ),
           child: Row(
             children: [
               _buildThemeOption(
                 provider: provider,
+                theme: theme,
                 mode: ThemeMode.light,
                 icon: Icons.light_mode_outlined,
                 label: 'Light',
               ),
               _buildThemeOption(
                 provider: provider,
+                theme: theme,
                 mode: ThemeMode.dark,
                 icon: Icons.dark_mode_outlined,
                 label: 'Dark',
               ),
               _buildThemeOption(
                 provider: provider,
+                theme: theme,
                 mode: ThemeMode.system,
                 icon: Icons.desktop_windows_outlined,
                 label: 'System',
@@ -550,6 +560,7 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _buildThemeOption({
     required ChatProvider provider,
+    required ThemeData theme,
     required ThemeMode mode,
     required IconData icon,
     required String label,
@@ -561,9 +572,11 @@ class _SidebarState extends State<Sidebar> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.bgEmphasis : Colors.transparent,
+            color: isSelected
+                ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            border: isSelected ? Border.all(color: AppTheme.borderDefault, width: 1) : null,
+            border: isSelected ? Border.all(color: theme.borderDefault, width: 1) : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -571,7 +584,7 @@ class _SidebarState extends State<Sidebar> {
               Icon(
                 icon,
                 size: 13,
-                color: isSelected ? AppTheme.fgDefault : AppTheme.fgMuted,
+                color: isSelected ? theme.fgDefault : theme.fgMuted,
               ),
               const SizedBox(width: 4),
               Text(
@@ -579,7 +592,7 @@ class _SidebarState extends State<Sidebar> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? AppTheme.fgDefault : AppTheme.fgMuted,
+                  color: isSelected ? theme.fgDefault : theme.fgMuted,
                 ),
               ),
             ],
@@ -592,14 +605,14 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildFooter(ThemeData theme) {
     return Column(
       children: [
-        const Divider(color: AppTheme.borderDefault, height: 1),
+        Divider(color: theme.borderDefault, height: 1),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Text('Powered by DeskMate AI • Open Source Edition', style: TextStyle(fontSize: 10, color: AppTheme.fgMuted)),
-            SizedBox(width: 6),
-            Text('v1.0.0', style: TextStyle(fontSize: 10, color: AppTheme.fgMuted)),
+          children: [
+            Text('Powered by DeskMate AI • Open Source Edition', style: TextStyle(fontSize: 10, color: theme.fgMuted)),
+            const SizedBox(width: 6),
+            Text('v1.0.0', style: TextStyle(fontSize: 10, color: theme.fgMuted)),
           ],
         ),
       ],
