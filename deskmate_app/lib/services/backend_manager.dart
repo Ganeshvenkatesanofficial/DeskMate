@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 
@@ -38,13 +39,13 @@ class BackendManager {
   /// Launch backend executable silently in background on dynamic free port
   static Future<void> start() async {
     if (!Platform.isWindows && !Platform.isMacOS) {
-      print('Automated local background process spawning is only supported on Windows and macOS.');
+      debugPrint('Automated local background process spawning is only supported on Windows and macOS.');
       return;
     }
 
     if (await isBackendRunning(8080)) {
       _assignedPort = 8080;
-      print('Backend is already running on port 8080. Reusing existing instance.');
+      debugPrint('Backend is already running on port 8080. Reusing existing instance.');
       return;
     }
 
@@ -81,13 +82,13 @@ class BackendManager {
 
       if (exePath.isEmpty || !await File(exePath).exists()) {
         _assignedPort = 8080;
-        print('Backend executable not found at $exePath. Defaulting to port 8080 for development.');
+        debugPrint('Backend executable not found at $exePath. Defaulting to port 8080 for development.');
         return;
       }
 
       _assignedPort = await findFreePort();
-      print('Assigned dynamic random port: $_assignedPort');
-      print('Starting backend from: $exePath on port $_assignedPort');
+      debugPrint('Assigned dynamic random port: $_assignedPort');
+      debugPrint('Starting backend from: $exePath on port $_assignedPort');
 
 
       // Ensure execution permissions on Unix/macOS
@@ -106,19 +107,19 @@ class BackendManager {
         runInShell: false,
       );
 
-      print('Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort');
+      debugPrint('Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort');
 
       // Forward output to local Flutter debug log
       _process!.stdout.transform(utf8.decoder).listen((data) {
-        print('[Backend STDOUT]: $data');
+        debugPrint('[Backend STDOUT]: $data');
       });
 
       _process!.stderr.transform(utf8.decoder).listen((data) {
-        print('[Backend STDERR]: $data');
+        debugPrint('[Backend STDERR]: $data');
       });
 
     } catch (e) {
-      print('Failed to launch backend subprocess: $e');
+      debugPrint('Failed to launch backend subprocess: $e');
     }
   }
 
@@ -130,7 +131,7 @@ class BackendManager {
         _process!.kill(ProcessSignal.sigkill);
       } catch (_) {}
       _process = null;
-      print('Backend subprocess killed.');
+      debugPrint('Backend subprocess killed.');
     }
     try {
       if (Platform.isWindows) {
@@ -141,3 +142,4 @@ class BackendManager {
     } catch (_) {}
   }
 }
+

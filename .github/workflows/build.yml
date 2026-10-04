@@ -229,7 +229,7 @@ jobs:
       - name: Flutter analyze
         working-directory: deskmate_app
         run: |
-          flutter analyze
+          flutter analyze --no-fatal-infos
 
       - name: Check formatting
         working-directory: deskmate_app

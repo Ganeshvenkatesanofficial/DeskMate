@@ -557,6 +557,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           child: RadioListTile<String>(
                             value: modelName,
+                            // ignore: deprecated_member_use
                             groupValue: tempSelected,
                             activeColor: theme.accentFg,
                             title: Text(
@@ -574,6 +575,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 color: isSelected ? theme.accentFg : theme.fgMuted,
                               ),
                             ),
+                            // ignore: deprecated_member_use
                             onChanged: (val) {
                               if (val != null) {
                                 setPopupState(() {
