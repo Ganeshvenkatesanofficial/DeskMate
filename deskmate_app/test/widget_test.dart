@@ -18,5 +18,8 @@ void main() {
 
     // Verify that the MaterialApp is built successfully
     expect(find.byType(MaterialApp), findsOneWidget);
+
+    // Advance fake timer so background startup health check completes cleanly
+    await tester.pump(const Duration(seconds: 35));
   });
 }

@@ -167,14 +167,9 @@ class BackendManager {
   /// Stop the backend subprocess
   static Future<void> stop() async {
     if (!Platform.isWindows && !Platform.isMacOS) return;
-    if (_process != null) {
-      try {
-        _process!.kill(ProcessSignal.sigkill);
-      } catch (_) {}
-      _process = null;
-      debugPrint('Backend subprocess killed.');
-    }
+    if (_process == null) return;
     try {
+      _process!.kill(ProcessSignal.sigkill);
       if (Platform.isWindows) {
         await Process.run('taskkill', [
           '/F',
@@ -186,5 +181,7 @@ class BackendManager {
         await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
       }
     } catch (_) {}
+    _process = null;
+    debugPrint('Backend subprocess killed.');
   }
 }
