@@ -131,8 +131,14 @@ jobs:
           name: DeskMate-macOS-DMG
           path: deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
 
+      - name: Zip macOS App Bundle
+        working-directory: deskmate_app/build/macos/Build/Products/Release
+        run: |
+          zip -r DeskMate-macOS.zip DeskMate.app
+
       - name: Upload macOS App Bundle Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DeskMate-macOS-App
-          path: deskmate_app/build/macos/Build/Products/Release/DeskMate.app
+          path: deskmate_app/build/macos/Build/Products/Release/DeskMate-macOS.zip
+
