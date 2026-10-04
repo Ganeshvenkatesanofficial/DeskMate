@@ -18,6 +18,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
+  ThemeMode _themeMode = ThemeMode.system;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Timer? _healthTimer;
@@ -34,6 +35,7 @@ class ChatProvider extends ChangeNotifier {
   bool get isLocalLlmOnline => _isLocalLlmOnline;
   bool get isConnecting => _isConnecting;
   AgentMode get mode => _mode;
+  ThemeMode get themeMode => _themeMode;
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
@@ -63,8 +65,20 @@ class ChatProvider extends ChangeNotifier {
       _backendUrl = savedUrl;
     }
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
+    final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
+    if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
+      _themeMode = ThemeMode.values[themeIndex];
+    }
     // Gemini key not persisted; asked each session.
     _apiService = ApiService(baseUrl: _backendUrl);
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode newMode) async {
+    if (_themeMode == newMode) return;
+    _themeMode = newMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('deskmate_theme_mode', _themeMode.index);
     notifyListeners();
   }
 

@@ -52,12 +52,13 @@ class _DeskMateAppState extends State<DeskMateApp> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<ChatProvider>(context);
     return MaterialApp(
       title: 'DeskMate - AI Desktop Copilot',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: provider.themeMode,
       home: const ChatScreen(),
     );
   }
