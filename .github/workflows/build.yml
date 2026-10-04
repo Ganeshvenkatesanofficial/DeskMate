@@ -1,4 +1,4 @@
-name: DeskMate CI/CD Pipeline
+name: Build DeskMate Multi-Platform Releases
 
 on:
   push:
@@ -20,27 +20,23 @@ on:
         type: choice
         options:
           - all
-          - windows
           - macos
+          - windows
 
 
 # ============================================================
-# 1️⃣ CODE QUALITY
+# 1. PYTHON LINT
 # ============================================================
 
 jobs:
 
-  code-quality:
-    name: "1️⃣ Code Quality"
+  flake8-lint:
+    name: Python Lint
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # -------------------------
-      # Python
-      # -------------------------
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -48,19 +44,19 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Python lint tools
+      - name: Install Flake8
         run: |
           python -m pip install --upgrade pip
           pip install flake8
 
-      - name: Flake8 critical checks
+      - name: Critical Flake8 checks
         working-directory: terminal-ai-agent
         run: |
           flake8 . \
             --select=E9,F63,F7,F82 \
             --exclude=.venv,venv,build,dist,__pycache__
 
-      - name: Flake8 complexity and line length
+      - name: Complexity and line length
         working-directory: terminal-ai-agent
         run: |
           flake8 . \
@@ -69,48 +65,19 @@ jobs:
             --exclude=.venv,venv,build,dist,__pycache__ \
             --exit-zero
 
-      # -------------------------
-      # Flutter
-      # -------------------------
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Flutter dependencies
-        working-directory: deskmate_app
-        run: flutter pub get
-
-      - name: Flutter analyze
-        working-directory: deskmate_app
-        run: flutter analyze
-
-      - name: Check Dart formatting
-        working-directory: deskmate_app
-        run: |
-          dart format \
-            --output=none \
-            --set-exit-if-changed \
-            .
-
 
 # ============================================================
-# 2️⃣ TESTS
+# 2. PYTHON UNIT TESTS
 # ============================================================
 
-  tests:
-    name: "2️⃣ Tests"
+  python-tests:
+    name: Python Tests
     runs-on: ubuntu-latest
-    needs: code-quality
+    needs: flake8-lint
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # -------------------------
-      # Python Tests
-      # -------------------------
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -118,14 +85,14 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         working-directory: terminal-ai-agent
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov
 
-      - name: Run Python tests
+      - name: Run tests
         working-directory: terminal-ai-agent
         run: |
           pytest -v \
@@ -133,54 +100,30 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml
 
-      # -------------------------
-      # Flutter Tests
-      # -------------------------
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Flutter dependencies
-        working-directory: deskmate_app
-        run: flutter pub get
-
-      - name: Run Flutter tests
-        working-directory: deskmate_app
-        run: flutter test
-
 
 # ============================================================
-# 3️⃣ SECURITY
+# 3. PYTHON SECURITY - BANDIT
 # ============================================================
 
-  security:
-    name: "3️⃣ Security"
+  bandit-security:
+    name: Python Security Scan
     runs-on: ubuntu-latest
-    needs: tests
 
     steps:
-      - name: Checkout full repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # -------------------------
-      # Bandit
-      # -------------------------
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install security tools
+      - name: Install Bandit
         run: |
           python -m pip install --upgrade pip
-          pip install bandit pip-audit
+          pip install bandit
 
-      - name: Bandit Python security scan
+      - name: Run Bandit
         working-directory: terminal-ai-agent
         run: |
           bandit -r . \
@@ -188,34 +131,70 @@ jobs:
             -ll \
             -ii
 
-      # -------------------------
-      # pip-audit
-      # -------------------------
 
-      - name: Install application dependencies
+# ============================================================
+# 4. PYTHON DEPENDENCY VULNERABILITY SCAN
+# ============================================================
+
+  dependency-security:
+    name: Python Dependency Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
         working-directory: terminal-ai-agent
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pip-audit
 
-      - name: Python dependency vulnerability scan
+      - name: Run pip-audit
         working-directory: terminal-ai-agent
         run: |
           pip-audit
 
-      # -------------------------
-      # Gitleaks
-      # -------------------------
 
-      - name: Secret scanning
+# ============================================================
+# 5. SECRET SCANNING
+# ============================================================
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # -------------------------
-      # Trivy
-      # -------------------------
 
-      - name: Filesystem vulnerability scan
+# ============================================================
+# 6. FILESYSTEM VULNERABILITY SCAN
+# ============================================================
+
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -226,44 +205,72 @@ jobs:
 
 
 # ============================================================
-# 4️⃣ DEPENDENCY REVIEW
+# 7. FLUTTER QUALITY
+# ============================================================
+
+  flutter-quality:
+    name: Flutter Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Get dependencies
+        working-directory: deskmate_app
+        run: |
+          flutter pub get
+
+      - name: Flutter analyze
+        working-directory: deskmate_app
+        run: |
+          flutter analyze
+
+      - name: Check formatting
+        working-directory: deskmate_app
+        run: |
+          dart format \
+            --output=none \
+            --set-exit-if-changed \
+            .
+
+      - name: Flutter tests
+        working-directory: deskmate_app
+        run: |
+          flutter test
+
+
+# ============================================================
+# 8. GITHUB DEPENDENCY REVIEW
 # ============================================================
 
   dependency-review:
-    name: "4️⃣ Dependency Review"
-    runs-on: ubuntu-latest
-    needs: security
+    name: Dependency Review
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
 
     steps:
-      - name: Review dependencies
+      - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
 
 
 # ============================================================
-# 5️⃣ CHECK CHANGES
+# 9. CHECK CHANGED FILES
 # ============================================================
 
   check-changes:
-    name: "5️⃣ Change Detection"
+    name: Check Changed Components
     runs-on: ubuntu-latest
-
-    needs:
-      - security
-      - dependency-review
-
-    if: |
-      always() &&
-      needs.security.result == 'success' &&
-      (
-        needs.dependency-review.result == 'success' ||
-        needs.dependency-review.result == 'skipped'
-      )
 
     outputs:
       windows: ${{ steps.filter.outputs.windows }}
@@ -273,7 +280,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Detect platform changes
+      - name: Detect changes
         id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -292,14 +299,22 @@ jobs:
 
 
 # ============================================================
-# 6️⃣ WINDOWS RELEASE
+# 10. WINDOWS BUILD
 # ============================================================
 
   build-windows:
-    name: "6️⃣ Windows Release"
+    name: Build Windows
     runs-on: windows-latest
 
-    needs: check-changes
+    needs:
+      - flake8-lint
+      - python-tests
+      - bandit-security
+      - dependency-security
+      - secret-scan
+      - trivy-scan
+      - flutter-quality
+      - check-changes
 
     if: |
       (
@@ -316,7 +331,6 @@ jobs:
       )
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -330,29 +344,20 @@ jobs:
         with:
           channel: stable
 
-      # -------------------------
-      # Python Backend
-      # -------------------------
-
       - name: Create Python environment
         working-directory: terminal-ai-agent
         shell: pwsh
         run: |
           python -m venv .venv
-
           .\.venv\Scripts\python.exe -m pip install --upgrade pip
-
           .\.venv\Scripts\pip.exe install -r requirements.txt
-
           .\.venv\Scripts\pip.exe install pyinstaller
 
       - name: Build backend
         working-directory: terminal-ai-agent
         shell: pwsh
         run: |
-          .\.venv\Scripts\pyinstaller.exe `
-            deskmate_backend.spec `
-            --clean
+          .\.venv\Scripts\pyinstaller.exe deskmate_backend.spec --clean
 
       - name: Copy backend executable
         shell: pwsh
@@ -362,21 +367,15 @@ jobs:
             "deskmate_app\assets\deskmate_backend.exe" `
             -Force
 
-      # -------------------------
-      # Flutter
-      # -------------------------
-
       - name: Flutter dependencies
         working-directory: deskmate_app
-        run: flutter pub get
+        run: |
+          flutter pub get
 
       - name: Build Windows application
         working-directory: deskmate_app
-        run: flutter build windows --release
-
-      # -------------------------
-      # Verify
-      # -------------------------
+        run: |
+          flutter build windows --release
 
       - name: Verify Windows build
         shell: pwsh
@@ -386,10 +385,6 @@ jobs:
             exit 1
           }
 
-      # -------------------------
-      # Artifact
-      # -------------------------
-
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -398,14 +393,22 @@ jobs:
 
 
 # ============================================================
-# 7️⃣ MACOS RELEASE
+# 11. MACOS BUILD
 # ============================================================
 
   build-macos:
-    name: "7️⃣ macOS Release"
+    name: Build macOS
     runs-on: macos-latest
 
-    needs: check-changes
+    needs:
+      - flake8-lint
+      - python-tests
+      - bandit-security
+      - dependency-security
+      - secret-scan
+      - trivy-scan
+      - flutter-quality
+      - check-changes
 
     if: |
       (
@@ -422,7 +425,6 @@ jobs:
       )
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -436,27 +438,18 @@ jobs:
         with:
           channel: stable
 
-      # -------------------------
-      # Python Backend
-      # -------------------------
-
       - name: Create Python environment
         working-directory: terminal-ai-agent
         run: |
           python -m venv .venv
-
           .venv/bin/python -m pip install --upgrade pip
-
           .venv/bin/pip install -r requirements.txt
-
           .venv/bin/pip install pyinstaller
 
       - name: Build backend
         working-directory: terminal-ai-agent
         run: |
-          .venv/bin/pyinstaller \
-            deskmate_backend.spec \
-            --clean
+          .venv/bin/pyinstaller deskmate_backend.spec --clean
 
       - name: Copy backend binary
         run: |
@@ -464,33 +457,21 @@ jobs:
             terminal-ai-agent/dist/deskmate_backend \
             deskmate_app/assets/deskmate_backend
 
-          chmod +x \
-            deskmate_app/assets/deskmate_backend
-
-      # -------------------------
-      # Flutter
-      # -------------------------
+          chmod +x deskmate_app/assets/deskmate_backend
 
       - name: Flutter dependencies
         working-directory: deskmate_app
-        run: flutter pub get
+        run: |
+          flutter pub get
 
       - name: Build macOS application
         working-directory: deskmate_app
-        run: flutter build macos --release
-
-      # -------------------------
-      # Verify
-      # -------------------------
+        run: |
+          flutter build macos --release
 
       - name: Verify macOS build
         run: |
-          test -d \
-            deskmate_app/build/macos/Build/Products/Release
-
-      # -------------------------
-      # DMG
-      # -------------------------
+          test -d deskmate_app/build/macos/Build/Products/Release
 
       - name: Create DMG
         run: |
@@ -507,27 +488,16 @@ jobs:
             -format UDZO \
             DeskMate-macOS.dmg
 
-      # -------------------------
-      # Upload DMG
-      # -------------------------
-
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
           name: DeskMate-macOS-DMG
           path: DeskMate-macOS.dmg
 
-      # -------------------------
-      # ZIP
-      # -------------------------
-
-      - name: Create macOS ZIP
+      - name: Zip macOS application
         run: |
           cd deskmate_app/build/macos/Build/Products/Release
-
-          zip -r \
-            ../../../../../DeskMate-macOS.zip \
-            *.app
+          zip -r ../../../../../DeskMate-macOS.zip *.app
 
       - name: Upload macOS application
         uses: actions/upload-artifact@v4
