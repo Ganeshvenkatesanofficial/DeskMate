@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
+import '../theme/app_theme.dart';
 
 class Sidebar extends StatefulWidget {
   const Sidebar({super.key});
@@ -15,7 +16,6 @@ class _SidebarState extends State<Sidebar> {
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
-
   @override
   void initState() {
     super.initState();
@@ -28,7 +28,6 @@ class _SidebarState extends State<Sidebar> {
     });
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController = TextEditingController(text: provider.backendUrl);
-  
   }
 
   @override
@@ -47,11 +46,11 @@ class _SidebarState extends State<Sidebar> {
 
     return Container(
       width: 320,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: theme.dividerColor.withOpacity(0.1))),
+      decoration: const BoxDecoration(
+        color: AppTheme.bgSubtle,
+        border: Border(right: BorderSide(color: AppTheme.borderDefault, width: 1)),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,56 +60,43 @@ class _SidebarState extends State<Sidebar> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Colors.blue[700]!, Colors.indigo[800]!],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgEmphasis,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.borderDefault, width: 1),
+                          ),
+                          child: const Icon(Icons.auto_awesome_rounded, color: AppTheme.accentFg, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'DeskMate',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.fgDefault,
+                                letterSpacing: -0.2,
                               ),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.blue.withOpacity(0.25),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
                             ),
-                            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'DeskMate',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.5,
-                                  color: Colors.black87,
-                                ),
+                            Text(
+                              'Open Source AI',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.fgMuted,
                               ),
-                              Text(
-                                'Open Source AI',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     _buildStatusCard(provider, theme),
                     const SizedBox(height: 16),
                     _buildModeSelector(provider, theme),
@@ -119,15 +105,21 @@ class _SidebarState extends State<Sidebar> {
                       _buildPersonalHealthCard(provider, theme),
                     ],
                     const SizedBox(height: 24),
-                    Text('CONFIGURATION', style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.5, color: theme.colorScheme.onSurface)),
-                    const SizedBox(height: 16),
+                    const Text(
+                      'CONFIGURATION',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.08,
+                        color: AppTheme.fgMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _buildThemeSelector(provider, theme),
                     const SizedBox(height: 16),
                     _buildGeminiInput(provider, theme),
                     const SizedBox(height: 16),
                     _buildBackendUrlInput(provider, theme),
-                    const SizedBox(height: 12),
-
                   ],
                 ),
               ),
@@ -142,10 +134,11 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _buildModeSelector(ChatProvider provider, ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.borderDefault, width: 1),
       ),
       child: Row(
         children: [
@@ -153,34 +146,32 @@ class _SidebarState extends State<Sidebar> {
             child: GestureDetector(
               onTap: () => provider.switchMode(AgentMode.deskMate),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.deskMate ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: provider.mode == AgentMode.deskMate
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                  color: provider.mode == AgentMode.deskMate ? AppTheme.bgEmphasis : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: provider.mode == AgentMode.deskMate
+                      ? Border.all(color: AppTheme.borderDefault, width: 1)
                       : null,
                 ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.folder_open_rounded,
-                        size: 16,
-                        color: provider.mode == AgentMode.deskMate ? theme.colorScheme.primary : Colors.grey[600],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.folder_open_rounded,
+                      size: 15,
+                      color: provider.mode == AgentMode.deskMate ? AppTheme.accentFg : AppTheme.fgMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'File Explorer',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: provider.mode == AgentMode.deskMate ? AppTheme.fgDefault : AppTheme.fgMuted,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'File Explorer',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: provider.mode == AgentMode.deskMate ? Colors.black : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -189,34 +180,32 @@ class _SidebarState extends State<Sidebar> {
             child: GestureDetector(
               onTap: () => provider.switchMode(AgentMode.personal),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.personal ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: provider.mode == AgentMode.personal
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                  color: provider.mode == AgentMode.personal ? AppTheme.bgEmphasis : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: provider.mode == AgentMode.personal
+                      ? Border.all(color: AppTheme.borderDefault, width: 1)
                       : null,
                 ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.person_rounded,
-                        size: 16,
-                        color: provider.mode == AgentMode.personal ? theme.colorScheme.primary : Colors.grey[600],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_rounded,
+                      size: 15,
+                      color: provider.mode == AgentMode.personal ? AppTheme.accentFg : AppTheme.fgMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Personal Agent',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: provider.mode == AgentMode.personal ? AppTheme.fgDefault : AppTheme.fgMuted,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Personal Agent',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: provider.mode == AgentMode.personal ? Colors.black : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -234,7 +223,7 @@ class _SidebarState extends State<Sidebar> {
     if (status == 'loading') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+        child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentFg))),
       );
     }
 
@@ -242,18 +231,18 @@ class _SidebarState extends State<Sidebar> {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.red[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red[100]!),
+          color: AppTheme.dangerBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.dangerBorder, width: 1),
         ),
         child: Row(
-          children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
-            const SizedBox(width: 8),
+          children: const [
+            Icon(Icons.error_outline_rounded, color: AppTheme.dangerFg, size: 16),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Personal Agent server unreachable.',
-                style: TextStyle(fontSize: 11, color: Colors.red[900], fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 11, color: AppTheme.dangerFg, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -267,18 +256,23 @@ class _SidebarState extends State<Sidebar> {
     final hasDriveToken = checks['drive_token'] ?? false;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.blueGrey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blueGrey[100]!),
+        color: AppTheme.bgSubtle,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.borderDefault, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'PERSONAL SERVICES HEALTH',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.fgMuted,
+              letterSpacing: 0.08,
+            ),
           ),
           const SizedBox(height: 10),
           _buildHealthRow('Credentials JSON', hasCredsFile),
@@ -299,16 +293,16 @@ class _SidebarState extends State<Sidebar> {
         Icon(
           isOk ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
           size: 14,
-          color: isOk ? Colors.green : Colors.grey,
+          color: isOk ? AppTheme.successFg : AppTheme.fgMuted,
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
-              color: isOk ? Colors.black87 : Colors.grey[600],
-              fontWeight: isOk ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+              color: isOk ? AppTheme.fgDefault : AppTheme.fgMuted,
+              fontWeight: isOk ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ),
@@ -316,15 +310,14 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-
   Widget _buildStatusCard(ChatProvider provider, ThemeData theme) {
     final isOnline = provider.isBackendOnline;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
+        color: AppTheme.bgSubtle,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.borderDefault, width: 1),
       ),
       child: Column(
         children: [
@@ -334,44 +327,48 @@ class _SidebarState extends State<Sidebar> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isOnline ? Colors.green : Colors.red,
+                  color: isOnline ? AppTheme.successFg : AppTheme.dangerFg,
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Text(
                 isOnline ? 'Backend Online' : 'Backend Offline',
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.black),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.fgDefault,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(Icons.history_edu_outlined, size: 16, color: Colors.grey),
-              const SizedBox(width: 12),
+              const Icon(Icons.history_edu_outlined, size: 15, color: AppTheme.fgMuted),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   provider.conversationId.isEmpty 
                       ? 'No active session' 
                       : 'Session: ${provider.conversationId.substring(0, 8)}...',
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  style: const TextStyle(fontSize: 12, color: AppTheme.fgMuted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               Icon(
                 provider.isUsingGemini ? Icons.auto_awesome : Icons.memory,
-                size: 16,
+                size: 15,
                 color: provider.isUsingGemini 
-                    ? Colors.deepPurple 
-                    : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
+                    ? AppTheme.accentFg 
+                    : (provider.isLocalLlmOnline ? AppTheme.successFg : AppTheme.dangerFg),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   provider.isUsingGemini 
@@ -379,24 +376,25 @@ class _SidebarState extends State<Sidebar> {
                       : (provider.isLocalLlmOnline
                           ? (provider.selectedLocalModel.isNotEmpty ? 'Local: ${provider.selectedLocalModel}' : 'Local LLM Active')
                           : 'Local LLM Offline'),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                     color: provider.isUsingGemini 
-                        ? Colors.deepPurple 
-                        : (provider.isLocalLlmOnline ? Colors.green : Colors.red),
+                        ? AppTheme.accentFg 
+                        : (provider.isLocalLlmOnline ? AppTheme.successFg : AppTheme.dangerFg),
                   ),
                 ),
               ),
             ],
           ),
           if (provider.availableLocalModels.length > 1 && !provider.isUsingGemini) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
               decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: theme.dividerColor),
+                color: AppTheme.bgCanvas,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.borderDefault, width: 1),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -404,8 +402,9 @@ class _SidebarState extends State<Sidebar> {
                       ? provider.selectedLocalModel
                       : provider.availableLocalModels.first,
                   isExpanded: true,
-                  icon: const Icon(Icons.arrow_drop_down, size: 20),
-                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                  dropdownColor: AppTheme.bgOverlay,
+                  icon: const Icon(Icons.arrow_drop_down, size: 18, color: AppTheme.fgMuted),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault),
                   onChanged: (val) {
                     if (val != null) {
                       provider.setSelectedLocalModel(val);
@@ -426,107 +425,101 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-   Widget _buildGeminiInput(ChatProvider provider, ThemeData theme) {
-     return ConstrainedBox(
-       constraints: const BoxConstraints(maxWidth: 400),
-       child: Column(
-         crossAxisAlignment: CrossAxisAlignment.start,
-         children: [
-           Text('Gemini API Key', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-           const SizedBox(height: 8),
-           TextField(
-             controller: _geminiKeyController,
-             obscureText: !_geminiKeyFocusNode.hasFocus,
-             focusNode: _geminiKeyFocusNode,
-             decoration: InputDecoration(
-               prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
-               hintText: 'Enter Gemini API Key',
-               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black, width: 2)),
-             ),
-           ),
-           const SizedBox(height: 8),
-           SizedBox(
-             width: double.infinity,
-             child: ElevatedButton.icon(
-               onPressed: () {
-                 provider.setGeminiApiKey(_geminiKeyController.text);
-                 // clear field after setting
-                 _geminiKeyController.clear();
-                 // dismiss keyboard
-                 FocusScope.of(context).unfocus();
-               },
-               icon: const Icon(Icons.vpn_key),
-               label: const Text('Load Gemini API'),
-             ),
-           ),
-         ],
-       ),
-     );
-   }
+  Widget _buildGeminiInput(ChatProvider provider, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Gemini API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault)),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 38,
+          child: TextField(
+            controller: _geminiKeyController,
+            obscureText: !_geminiKeyFocusNode.hasFocus,
+            focusNode: _geminiKeyFocusNode,
+            style: const TextStyle(fontSize: 13, color: AppTheme.fgDefault),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.vpn_key_outlined, size: 16, color: AppTheme.fgMuted),
+              hintText: 'Enter Gemini API Key',
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          height: 36,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              provider.setGeminiApiKey(_geminiKeyController.text);
+              _geminiKeyController.clear();
+              FocusScope.of(context).unfocus();
+            },
+            icon: const Icon(Icons.vpn_key, size: 15),
+            label: const Text('Load Gemini API'),
+          ),
+        ),
+      ],
+    );
+  }
 
-   Widget _buildBackendUrlInput(ChatProvider provider, ThemeData theme) {
-     if (!_backendUrlFocusNode.hasFocus && _backendUrlController.text != provider.backendUrl) {
-       _backendUrlController.text = provider.backendUrl;
-     }
-     return ConstrainedBox(
-       constraints: const BoxConstraints(maxWidth: 400),
-       child: Column(
-         crossAxisAlignment: CrossAxisAlignment.start,
-         children: [
-           Text('Backend URL', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-           const SizedBox(height: 8),
-           TextField(
-             controller: _backendUrlController,
-             focusNode: _backendUrlFocusNode,
-             decoration: InputDecoration(
-               prefixIcon: const Icon(Icons.link, size: 18),
-               hintText: 'Enter Backend URL',
-               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
-               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black, width: 2)),
-             ),
-             onSubmitted: (value) {
-               provider.setBackendUrl(value);
-             },
-           ),
-           const SizedBox(height: 8),
-           SizedBox(
-             width: double.infinity,
-             child: ElevatedButton.icon(
-               onPressed: () {
-                 provider.setBackendUrl(_backendUrlController.text);
-                 FocusScope.of(context).unfocus();
-               },
-               icon: const Icon(Icons.save),
-               label: const Text('Save URL'),
-             ),
-           ),
-         ],
-       ),
-     );
-   }
-
-
-
-
+  Widget _buildBackendUrlInput(ChatProvider provider, ThemeData theme) {
+    if (!_backendUrlFocusNode.hasFocus && _backendUrlController.text != provider.backendUrl) {
+      _backendUrlController.text = provider.backendUrl;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Backend URL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault)),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 38,
+          child: TextField(
+            controller: _backendUrlController,
+            focusNode: _backendUrlFocusNode,
+            style: const TextStyle(fontSize: 13, color: AppTheme.fgDefault),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.link, size: 16, color: AppTheme.fgMuted),
+              hintText: 'Enter Backend URL',
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            onSubmitted: (value) {
+              provider.setBackendUrl(value);
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          height: 36,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              provider.setBackendUrl(_backendUrlController.text);
+              FocusScope.of(context).unfocus();
+            },
+            icon: const Icon(Icons.save, size: 15),
+            label: const Text('Save URL'),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildThemeSelector(ChatProvider provider, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'THEME MODE',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.fgDefault),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.2)),
+            color: AppTheme.bgCanvas,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderDefault, width: 1),
           ),
           child: Row(
             children: [
@@ -562,31 +555,31 @@ class _SidebarState extends State<Sidebar> {
     required String label,
   }) {
     final isSelected = provider.themeMode == mode;
-    final activeColor = provider.themeMode == ThemeMode.dark ? const Color(0xFF1F6FEB) : const Color(0xFF0969DA);
     return Expanded(
       child: GestureDetector(
         onTap: () => provider.setThemeMode(mode),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? activeColor : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: isSelected ? AppTheme.bgEmphasis : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: isSelected ? Border.all(color: AppTheme.borderDefault, width: 1) : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 14,
-                color: isSelected ? Colors.white : Colors.grey[600],
+                size: 13,
+                color: isSelected ? AppTheme.fgDefault : AppTheme.fgMuted,
               ),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : Colors.grey[600],
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? AppTheme.fgDefault : AppTheme.fgMuted,
                 ),
               ),
             ],
@@ -599,16 +592,14 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildFooter(ThemeData theme) {
     return Column(
       children: [
-        const Divider(),
-        const SizedBox(height: 8),
+        const Divider(color: AppTheme.borderDefault, height: 1),
+        const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('v1.0.0', style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54)),
-            const SizedBox(width: 8),
-            const Icon(Icons.circle, size: 4, color: Colors.black54),
-            const SizedBox(width: 8),
-            const Text('Production Ready', style: TextStyle(fontSize: 10, color: Colors.black87)),
+          children: const [
+            Text('Powered by DeskMate AI • Open Source Edition', style: TextStyle(fontSize: 10, color: AppTheme.fgMuted)),
+            SizedBox(width: 6),
+            Text('v1.0.0', style: TextStyle(fontSize: 10, color: AppTheme.fgMuted)),
           ],
         ),
       ],
