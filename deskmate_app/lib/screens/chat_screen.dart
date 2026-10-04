@@ -16,11 +16,35 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  
+  bool _isSettingsOpen = false;
+  final TextEditingController _geminiKeyController = TextEditingController();
+  final FocusNode _geminiKeyFocusNode = FocusNode();
+  late TextEditingController _backendUrlController;
+  late FocusNode _backendUrlFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _backendUrlFocusNode = FocusNode();
+    _backendUrlFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _geminiKeyFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    _backendUrlController = TextEditingController(text: provider.backendUrl);
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _geminiKeyController.dispose();
+    _geminiKeyFocusNode.dispose();
+    _backendUrlController.dispose();
+    _backendUrlFocusNode.dispose();
     super.dispose();
   }
 
@@ -34,6 +58,20 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _openSettings() {
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    _backendUrlController.text = provider.backendUrl;
+    setState(() {
+      _isSettingsOpen = true;
+    });
+  }
+
+  void _closeSettings() {
+    setState(() {
+      _isSettingsOpen = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ChatProvider>(context);
@@ -43,64 +81,387 @@ class _ChatScreenState extends State<ChatScreen> {
     // Auto-scroll on new messages
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
-    return Scaffold(
-      backgroundColor: theme.bgCanvas,
-      appBar: isDesktop
-          ? null
-          : AppBar(
-              backgroundColor: theme.bgSubtle,
-              elevation: 0,
-              title: Text('DeskMate', style: TextStyle(color: theme.fgDefault, fontSize: 16, fontWeight: FontWeight.w600)),
-              actions: [
-                IconButton(
-                  onPressed: () => provider.resetChat(),
-                  icon: Icon(Icons.refresh, color: theme.fgMuted),
+    return KeyboardListener(
+      focusNode: FocusNode()..requestFocus(),
+      onKeyEvent: (event) {
+        if (event.logicalKey.keyLabel == 'Escape' && _isSettingsOpen) {
+          _closeSettings();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: theme.bgCanvas,
+        appBar: isDesktop
+            ? null
+            : AppBar(
+                backgroundColor: theme.bgSubtle,
+                elevation: 0,
+                title: Text('DeskMate', style: TextStyle(color: theme.fgDefault, fontSize: 16, fontWeight: FontWeight.w600)),
+                actions: [
+                  IconButton(
+                    onPressed: _openSettings,
+                    icon: Icon(Icons.settings_outlined, color: theme.fgMuted),
+                  ),
+                  IconButton(
+                    onPressed: () => provider.resetChat(),
+                    icon: Icon(Icons.refresh, color: theme.fgMuted),
+                  ),
+                ],
+              ),
+        drawer: isDesktop ? null : Drawer(child: Sidebar(onOpenSettings: _openSettings)),
+        body: Stack(
+          children: [
+            Row(
+              children: [
+                if (isDesktop) Sidebar(onOpenSettings: _openSettings),
+                Expanded(
+                  child: Container(
+                    color: theme.bgCanvas,
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: provider.messages.isEmpty
+                              ? _buildEmptyState(theme)
+                              : ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                                  itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
+                                  itemBuilder: (context, index) {
+                                    if (index == provider.messages.length) {
+                                      return _buildTypingIndicator(theme);
+                                    }
+                                    return ChatBubble(message: provider.messages[index]);
+                                  },
+                                ),
+                        ),
+                        _buildInputArea(provider, theme),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-      drawer: isDesktop ? null : const Drawer(child: Sidebar()),
-      body: Stack(
-        children: [
-          Row(
-            children: [
-              if (isDesktop) const Sidebar(),
-              Expanded(
+            if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
+              Positioned.fill(
                 child: Container(
-                  color: theme.bgCanvas,
-                  child: Column(
+                  color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
+                  child: Center(
+                    child: _buildModelSelectionPopup(context, provider, theme),
+                  ),
+                ).animate().fadeIn(duration: 200.ms),
+              ),
+            if (_isSettingsOpen) ...[
+              // Solid Overlay
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _closeSettings,
+                  child: Container(
+                    color: theme.isDark ? const Color(0x73010409) : const Color(0x1A1F2328),
+                  ),
+                ).animate().fadeIn(duration: 150.ms),
+              ),
+              // Right Settings Drawer Panel
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: 420,
+                child: _buildSettingsPanel(provider, theme)
+                    .animate()
+                    .slideX(begin: 1.0, end: 0.0, duration: 200.ms, curve: Curves.easeOut),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsPanel(ChatProvider provider, ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
+        border: Border(left: BorderSide(color: theme.borderDefault, width: 1)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x40010409),
+            blurRadius: 24,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Panel Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: provider.messages.isEmpty
-                            ? _buildEmptyState(theme)
-                            : ListView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                                itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
-                                itemBuilder: (context, index) {
-                                  if (index == provider.messages.length) {
-                                    return _buildTypingIndicator(theme);
-                                  }
-                                  return ChatBubble(message: provider.messages[index]);
-                                },
-                              ),
+                      Text(
+                        'Settings',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: theme.fgDefault,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                      _buildInputArea(provider, theme),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Manage your DeskMate preferences',
+                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                      ),
                     ],
                   ),
+                  IconButton(
+                    onPressed: _closeSettings,
+                    icon: Icon(Icons.close, color: theme.fgMuted, size: 20),
+                    hoverColor: theme.bgEmphasis,
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+            ),
+            Divider(color: theme.borderDefault, height: 1),
+
+            // Scrollable Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- SECTION 1: APPEARANCE ---
+                    Text(
+                      'Appearance',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Choose how DeskMate looks.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Theme Mode',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildThemeSelectorInSettings(provider, theme),
+
+                    const SizedBox(height: 28),
+                    Divider(color: theme.borderDefault, height: 1),
+                    const SizedBox(height: 28),
+
+                    // --- SECTION 2: AI CONFIGURATION ---
+                    Text(
+                      'AI Configuration',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Configure your AI provider.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Gemini API Key',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _geminiKeyController,
+                        obscureText: !_geminiKeyFocusNode.hasFocus,
+                        focusNode: _geminiKeyFocusNode,
+                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(Icons.vpn_key_outlined, size: 16, color: theme.fgMuted),
+                          hintText: 'Enter Gemini API Key',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 38,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          provider.setGeminiApiKey(_geminiKeyController.text);
+                          _geminiKeyController.clear();
+                          FocusScope.of(context).unfocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Gemini API Key loaded for this session.'),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: theme.successFg,
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.accentEmphasis,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: const Icon(Icons.vpn_key, size: 15),
+                        label: const Text('Load Gemini API'),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+                    Divider(color: theme.borderDefault, height: 1),
+                    const SizedBox(height: 28),
+
+                    // --- SECTION 3: BACKEND ---
+                    Text(
+                      'Backend',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Connect DeskMate to your backend.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Backend URL',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _backendUrlController,
+                        focusNode: _backendUrlFocusNode,
+                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(Icons.link, size: 16, color: theme.fgMuted),
+                          hintText: 'Enter Backend URL',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        onSubmitted: (value) {
+                          provider.setBackendUrl(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 38,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          provider.setBackendUrl(_backendUrlController.text);
+                          FocusScope.of(context).unfocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Backend URL saved.'),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: theme.accentEmphasis,
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+                          side: BorderSide(color: theme.borderDefault, width: 1),
+                          foregroundColor: theme.fgDefault,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: const Icon(Icons.save, size: 15),
+                        label: const Text('Save URL'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeSelectorInSettings(ChatProvider provider, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
+      ),
+      child: Row(
+        children: [
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.light,
+            icon: Icons.light_mode_outlined,
+            label: 'Light',
+          ),
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.dark,
+            icon: Icons.dark_mode_outlined,
+            label: 'Dark',
+          ),
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.system,
+            icon: Icons.desktop_windows_outlined,
+            label: 'System',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeOptionInSettings({
+    required ChatProvider provider,
+    required ThemeData theme,
+    required ThemeMode mode,
+    required IconData icon,
+    required String label,
+  }) {
+    final isSelected = provider.themeMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => provider.setThemeMode(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+            border: isSelected ? Border.all(color: theme.borderDefault, width: 1) : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? theme.accentFg : theme.fgMuted,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? theme.fgDefault : theme.fgMuted,
                 ),
               ),
             ],
           ),
-          if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
-            Positioned.fill(
-              child: Container(
-                color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
-                child: Center(
-                  child: _buildModelSelectionPopup(context, provider, theme),
-                ),
-              ).animate().fadeIn(duration: 200.ms),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -536,7 +897,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                     decoration: InputDecoration(
                       hintText: (!provider.isLocalLlmOnline && !provider.isUsingGemini)
-                          ? 'Please enter your Gemini API Key in the sidebar to continue...'
+                          ? 'Please configure your Gemini API Key in Settings to continue...'
                           : provider.mode == AgentMode.personal
                               ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
                               : 'Ask about your files...',
