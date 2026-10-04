@@ -97,16 +97,42 @@ ChatProvider (Dart) sends HTTP POST
 
 ---
 
-## Standalone Run (For Clients & Reviewers)
+## Standalone Run & Releases (Windows & macOS)
 
-1. **Extract** the application `.zip` folder.
-2. **Double-click `DeskMate.exe`** — the backend launches silently in the background.
-3. Paste your **Gemini API Key** in the sidebar and click **Load Key**.
-4. Toggle between **File Explorer** and **Personal Agent** modes.
-5. Start chatting! (e.g. *"Show me the structure of D:\"* or *"What's the weather in Chennai?"*).
-6. **Close the Flutter window** — the backend terminates cleanly.
+### 🪟 Running on Windows
+1. Download **`DeskMate-Windows-Release`** `.zip` from GitHub Releases / Actions.
+2. Extract the `.zip` archive.
+3. Double-click **`DeskMate.exe`** — the backend launches automatically.
+4. Enter your **Gemini API Key** in the sidebar (optional) and start chatting!
 
 ---
+
+### 🍏 Running on macOS (First-Time Setup)
+
+Because DeskMate is open-source and not signed with a paid Apple Developer certificate, macOS Gatekeeper may show a warning: *"DeskMate.app cannot be opened because it is from an unidentified developer"*.
+
+You can bypass this in **1 second** using either method below:
+
+#### Option A: Quick Right-Click Method (Recommended - No Terminal Needed)
+1. Unzip **`DeskMate-macOS-App`** (`DeskMate-macOS.zip`) or mount `DeskMate.dmg`.
+2. Move **`DeskMate.app`** into your **`Applications`** folder.
+3. **Right-click** (or Control-click) **`DeskMate.app`** and click **Open**.
+4. Click **Open** again in the macOS confirmation pop-up.
+5. *Done! macOS remembers this choice and you can double-click normally from then on.*
+
+#### Option B: Terminal Command Method
+If you prefer using Terminal, remove the quarantine attribute directly:
+```bash
+# For DeskMate moved to Applications folder:
+sudo xattr -rd com.apple.quarantine /Applications/DeskMate.app
+
+# Or for DeskMate in Downloads folder:
+xattr -d com.apple.quarantine ~/Downloads/DeskMate.app
+```
+
+---
+
+
 
 ## Developer Setup (Running from Source)
 
