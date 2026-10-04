@@ -123,10 +123,16 @@ jobs:
 
       - name: Create macOS DMG Installer
         run: |
-          hdiutil create -volname "DeskMate" -srcfolder deskmate_app/build/macos/Build/Products/Release/DeskMate.app -ov -format UDZO deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
+          hdiutil create -volname "DeskMate" -srcfolder deskmate_app/build/macos/Build/Products/Release/DeskMate.app -fs HFS+ -format UDZO deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
 
       - name: Upload macOS DMG Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DeskMate-macOS-DMG
           path: deskmate_app/build/macos/Build/Products/Release/DeskMate.dmg
+
+      - name: Upload macOS App Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskMate-macOS-App
+          path: deskmate_app/build/macos/Build/Products/Release/DeskMate.app
