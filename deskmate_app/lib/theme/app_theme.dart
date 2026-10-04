@@ -1,13 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// GitHub Primer Design System Tokens (Light Default & Dark Default)
+/// GitHub Primer Design System Tokens (Dark Default & Light Default with DeskMate Purple Accent)
 class AppTheme {
+  // --- PURPLE BRAND ACCENT TOKENS ---
+  static const Color purplePrimary = Color(0xFF6A35F5);
+  static const Color purpleMid = Color(0xFF7C49F6);
+  static const Color purpleLight = Color(0xFF8E67F6);
+  static const Color purpleHover = Color(0xFF8E67F6);
+  static const Color purpleActive = Color(0xFF5B24E8);
+  static const Color purpleHighlight = Color(0xFFA78BFA);
+  static const Color purpleMuted = Color(0x266A35F5); // rgba(106, 53, 245, 0.15)
+  static const Color purpleBorder = Color(0x666A35F5); // rgba(106, 53, 245, 0.40)
+  static const Color purpleFocusRing = Color(0x4D6A35F5); // rgba(106, 53, 245, 0.30)
+
+  static const LinearGradient purpleGradient = LinearGradient(
+    colors: [Color(0xFF6A35F5), Color(0xFF7C49F6), Color(0xFF8E67F6)],
+    stops: [0.0, 0.5, 1.0],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
   // --- GITHUB PRIMER LIGHT DEFAULT TOKENS ---
   static const Color lightBgCanvas = Color(0xFFFFFFFF);
   static const Color lightBgSubtle = Color(0xFFF6F8FA);
-  static const Color lightBgInset = Color(0xFFF6F8FA);
-  static const Color lightBgEmphasis = Color(0xFFEAEEF2);
+  static const Color lightBgInset = Color(0xFFEAEEF2);
+  static const Color lightBgEmphasis = Color(0xFFD0D7DE);
   static const Color lightBgOverlay = Color(0xFFFFFFFF);
 
   static const Color lightFgDefault = Color(0xFF1F2328);
@@ -16,34 +34,37 @@ class AppTheme {
   static const Color lightFgDisabled = Color(0xFF8C959F);
 
   static const Color lightBorderDefault = Color(0xFFD0D7DE);
-  static const Color lightBorderMuted = Color(0xFFD8DEE4);
+  static const Color lightBorderMuted = Color(0xFF8C959F);
 
-  static const Color lightAccentFg = Color(0xFF0969DA);
-  static const Color lightAccentEmphasis = Color(0xFF0969DA);
+  static const Color lightAccentFg = Color(0xFF6A35F5);
+  static const Color lightAccentEmphasis = Color(0xFF6A35F5);
+  static const Color lightAccentHover = Color(0xFF5B24E8);
   static const Color lightSuccessFg = Color(0xFF1A7F37);
   static const Color lightSuccessEmphasis = Color(0xFF1F883D);
   static const Color lightAttentionFg = Color(0xFF9A6700);
-  static const Color lightDangerFg = Color(0xFFCF222E);
-  static const Color lightDangerBg = Color(0x14CF222E); // rgba(207, 34, 46, 0.08)
-  static const Color lightDangerBorder = Color(0x4DCF222E); // rgba(207, 34, 46, 0.30)
+  static const Color lightDangerFg = Color(0xFFD1242F);
+  static const Color lightDangerBg = Color(0x14D1242F); // rgba(209, 36, 47, 0.08)
+  static const Color lightDangerBorder = Color(0x4DD1242F); // rgba(209, 36, 47, 0.30)
 
   // --- GITHUB PRIMER DARK DEFAULT TOKENS ---
   static const Color darkBgCanvas = Color(0xFF0D1117);
   static const Color darkBgSubtle = Color(0xFF161B22);
   static const Color darkBgInset = Color(0xFF010409);
   static const Color darkBgEmphasis = Color(0xFF21262D);
-  static const Color darkBgOverlay = Color(0xFF1C2128);
+  static const Color darkBgOverlay = Color(0xFF161B22);
 
   static const Color darkFgDefault = Color(0xFFE6EDF3);
-  static const Color darkFgMuted = Color(0xFF7D8590);
+  static const Color darkFgMuted = Color(0xFF8B949E);
   static const Color darkFgSubtle = Color(0xFF6E7681);
   static const Color darkFgDisabled = Color(0xFF484F58);
 
   static const Color darkBorderDefault = Color(0xFF30363D);
   static const Color darkBorderMuted = Color(0xFF21262D);
+  static const Color darkBorderStrong = Color(0xFF484F58);
 
-  static const Color darkAccentFg = Color(0xFF2F81F7);
-  static const Color darkAccentEmphasis = Color(0xFF1F6FEB);
+  static const Color darkAccentFg = Color(0xFF8E67F6);
+  static const Color darkAccentEmphasis = Color(0xFF6A35F5);
+  static const Color darkAccentHover = Color(0xFF8E67F6);
   static const Color darkSuccessFg = Color(0xFF3FB950);
   static const Color darkSuccessEmphasis = Color(0xFF238636);
   static const Color darkAttentionFg = Color(0xFFD29922);
@@ -57,11 +78,11 @@ class AppTheme {
     brightness: Brightness.light,
     scaffoldBackgroundColor: lightBgCanvas,
     canvasColor: lightBgCanvas,
-    cardColor: lightBgCanvas,
+    cardColor: lightBgSubtle,
     dividerColor: lightBorderDefault,
     colorScheme: const ColorScheme.light(
-      primary: lightAccentFg,
-      secondary: lightAccentEmphasis,
+      primary: purplePrimary,
+      secondary: purpleMid,
       surface: lightBgSubtle,
       onPrimary: Colors.white,
       onSurface: lightFgDefault,
@@ -80,7 +101,7 @@ class AppTheme {
         borderRadius: BorderRadius.all(Radius.circular(6)),
         side: BorderSide(color: lightBorderDefault, width: 1),
       ),
-      color: lightBgCanvas,
+      color: lightBgSubtle,
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: lightBgOverlay,
@@ -96,9 +117,8 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),
-          side: const BorderSide(color: lightAccentEmphasis, width: 1),
         ),
-        backgroundColor: lightAccentEmphasis,
+        backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
       ),
@@ -130,7 +150,7 @@ class AppTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: lightAccentFg, width: 1.5),
+        borderSide: const BorderSide(color: purplePrimary, width: 1.5),
       ),
     ),
   );
@@ -144,8 +164,8 @@ class AppTheme {
     cardColor: darkBgSubtle,
     dividerColor: darkBorderDefault,
     colorScheme: const ColorScheme.dark(
-      primary: darkAccentFg,
-      secondary: darkAccentEmphasis,
+      primary: purplePrimary,
+      secondary: purpleLight,
       surface: darkBgSubtle,
       onPrimary: Colors.white,
       onSurface: darkFgDefault,
@@ -180,9 +200,8 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),
-          side: const BorderSide(color: darkAccentEmphasis, width: 1),
         ),
-        backgroundColor: darkAccentEmphasis,
+        backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
       ),
@@ -200,7 +219,7 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: darkBgInset,
+      fillColor: darkBgCanvas,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       hintStyle: const TextStyle(color: darkFgMuted, fontSize: 13),
       labelStyle: const TextStyle(color: darkFgMuted, fontSize: 13),
@@ -214,7 +233,7 @@ class AppTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: darkAccentFg, width: 1.5),
+        borderSide: const BorderSide(color: purplePrimary, width: 1.5),
       ),
     ),
   );
@@ -237,10 +256,20 @@ extension GitHubPrimerTheme on ThemeData {
 
   Color get borderDefault => isDark ? AppTheme.darkBorderDefault : AppTheme.lightBorderDefault;
   Color get borderMuted => isDark ? AppTheme.darkBorderMuted : AppTheme.lightBorderMuted;
+  Color get borderStrong => isDark ? AppTheme.darkBorderStrong : AppTheme.lightBorderMuted;
 
-  Color get accentFg => isDark ? AppTheme.darkAccentFg : AppTheme.lightAccentFg;
-  Color get accentEmphasis => isDark ? AppTheme.darkAccentEmphasis : AppTheme.lightAccentEmphasis;
+  Color get accentFg => isDark ? AppTheme.purpleLight : AppTheme.purplePrimary;
+  Color get accentEmphasis => AppTheme.purplePrimary;
+  Color get accentHover => AppTheme.purpleHover;
+  Color get accentActive => AppTheme.purpleActive;
+  Color get accentHighlight => AppTheme.purpleHighlight;
+  Color get accentMuted => AppTheme.purpleMuted;
+  Color get accentBorder => AppTheme.purpleBorder;
+  Color get accentFocus => AppTheme.purpleFocusRing;
+  LinearGradient get accentGradient => AppTheme.purpleGradient;
+
   Color get successFg => isDark ? AppTheme.darkSuccessFg : AppTheme.lightSuccessFg;
+  Color get successEmphasis => isDark ? AppTheme.darkSuccessEmphasis : AppTheme.lightSuccessEmphasis;
   Color get attentionFg => isDark ? AppTheme.darkAttentionFg : AppTheme.lightAttentionFg;
   Color get dangerFg => isDark ? AppTheme.darkDangerFg : AppTheme.lightDangerFg;
   Color get dangerBg => isDark ? AppTheme.darkDangerBg : AppTheme.lightDangerBg;

@@ -37,12 +37,16 @@ class ChatBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isUser ? theme.accentEmphasis : theme.bgSubtle,
+                color: isUser ? theme.bgEmphasis : theme.bgSubtle,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isUser ? theme.accentEmphasis : theme.borderDefault,
-                  width: 1,
-                ),
+                border: isUser
+                    ? Border(
+                        left: BorderSide(color: theme.accentEmphasis, width: 3),
+                        top: BorderSide(color: theme.borderDefault, width: 1),
+                        right: BorderSide(color: theme.borderDefault, width: 1),
+                        bottom: BorderSide(color: theme.borderDefault, width: 1),
+                      )
+                    : Border.all(color: theme.borderDefault, width: 1),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,15 +56,15 @@ class ChatBubble extends StatelessWidget {
                     selectable: true,
                     styleSheet: MarkdownStyleSheet(
                       p: TextStyle(
-                        color: isUser ? Colors.white : theme.fgDefault,
+                        color: theme.fgDefault,
                         fontSize: 14,
                         height: 1.5,
                       ),
                       code: TextStyle(
-                        backgroundColor: isUser ? Colors.black.withValues(alpha: 0.2) : theme.bgInset,
+                        backgroundColor: theme.bgInset,
                         fontFamily: 'monospace',
                         fontSize: 13,
-                        color: isUser ? Colors.white : theme.fgDefault,
+                        color: theme.fgDefault,
                       ),
                       codeblockDecoration: BoxDecoration(
                         color: theme.bgInset,
@@ -75,7 +79,7 @@ class ChatBubble extends StatelessWidget {
                     message.formattedTime,
                     style: TextStyle(
                       fontSize: 10,
-                      color: isUser ? Colors.white.withValues(alpha: 0.7) : theme.fgMuted,
+                      color: theme.fgMuted,
                     ),
                   ),
                 ],

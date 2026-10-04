@@ -68,6 +68,13 @@ class _SidebarState extends State<Sidebar> {
                             color: theme.isDark ? theme.bgEmphasis : theme.bgCanvas,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(color: theme.borderDefault, width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.accentEmphasis.withValues(alpha: 0.25),
+                                blurRadius: 16,
+                                spreadRadius: 0,
+                              ),
+                            ],
                           ),
                           child: Icon(Icons.auto_awesome_rounded, color: theme.accentFg, size: 20),
                         ),
@@ -89,7 +96,7 @@ class _SidebarState extends State<Sidebar> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: theme.accentFg,
+                                color: theme.fgMuted,
                               ),
                             ),
                           ],
@@ -344,7 +351,7 @@ class _SidebarState extends State<Sidebar> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: theme.fgDefault,
+                  color: isOnline ? (theme.isDark ? theme.fgDefault : theme.fgDefault) : theme.dangerFg,
                 ),
               ),
             ],
@@ -462,6 +469,11 @@ class _SidebarState extends State<Sidebar> {
               _geminiKeyController.clear();
               FocusScope.of(context).unfocus();
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.accentEmphasis,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
             icon: const Icon(Icons.vpn_key, size: 15),
             label: const Text('Load Gemini API'),
           ),
@@ -504,6 +516,12 @@ class _SidebarState extends State<Sidebar> {
               provider.setBackendUrl(_backendUrlController.text);
               FocusScope.of(context).unfocus();
             },
+            style: OutlinedButton.styleFrom(
+              backgroundColor: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+              side: BorderSide(color: theme.borderDefault, width: 1),
+              foregroundColor: theme.fgDefault,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
             icon: const Icon(Icons.save, size: 15),
             label: const Text('Save URL'),
           ),
@@ -584,7 +602,7 @@ class _SidebarState extends State<Sidebar> {
               Icon(
                 icon,
                 size: 13,
-                color: isSelected ? theme.fgDefault : theme.fgMuted,
+                color: isSelected ? theme.accentFg : theme.fgMuted,
               ),
               const SizedBox(width: 4),
               Text(

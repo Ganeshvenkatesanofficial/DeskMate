@@ -94,7 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
           if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
                 child: Center(
                   child: _buildModelSelectionPopup(context, provider, theme),
                 ),
@@ -234,6 +234,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       onPressed: () {
                         provider.dismissModelSelectionDialog();
                       },
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+                        side: BorderSide(color: theme.borderDefault, width: 1),
+                        foregroundColor: theme.fgDefault,
+                      ),
                       child: const Text('Use Default'),
                     ),
                     const SizedBox(width: 10),
@@ -241,6 +246,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       onPressed: () {
                         provider.setSelectedLocalModel(tempSelected);
                       },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.accentEmphasis,
+                        foregroundColor: Colors.white,
+                      ),
                       icon: const Icon(Icons.check_circle_outline, size: 16),
                       label: const Text('Proceed with Selected Model'),
                     ),
