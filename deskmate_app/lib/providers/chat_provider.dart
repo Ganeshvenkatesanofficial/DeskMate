@@ -32,10 +32,13 @@ class ChatProvider extends ChangeNotifier {
   // Gemini API key – kept only in memory, never persisted.
   String _geminiApiKey = '';
 
-  List<ChatMessage> get messages => _mode == AgentMode.personal ? _personalMessages : _fileMessages;
+  List<ChatMessage> get messages =>
+      _mode == AgentMode.personal ? _personalMessages : _fileMessages;
   bool get isSending => _isSending;
   String get errorMessage => _errorMessage;
-  String get conversationId => _mode == AgentMode.personal ? _personalConversationId : _fileConversationId;
+  String get conversationId => _mode == AgentMode.personal
+      ? _personalConversationId
+      : _fileConversationId;
   String get backendUrl => _backendUrl;
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
@@ -66,7 +69,8 @@ class ChatProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
-    _personalConversationId = prefs.getString('deskmate_personal_conversation_id') ?? '';
+    _personalConversationId =
+        prefs.getString('deskmate_personal_conversation_id') ?? '';
     final savedUrl = prefs.getString('deskmate_backend_url');
     if (savedUrl == null || savedUrl.isEmpty) {
       _backendUrl = BackendManager.backendUrl;
@@ -89,7 +93,8 @@ class ChatProvider extends ChangeNotifier {
       final models = await _apiService.getAvailableModels();
       _availableLocalModels = models;
       if (_availableLocalModels.isNotEmpty) {
-        if (_selectedLocalModel.isEmpty || !_availableLocalModels.contains(_selectedLocalModel)) {
+        if (_selectedLocalModel.isEmpty ||
+            !_availableLocalModels.contains(_selectedLocalModel)) {
           _selectedLocalModel = _availableLocalModels.first;
         }
         if (_availableLocalModels.length > 1 && !_hasPromptedModelSelection) {
@@ -205,7 +210,8 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = false;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
-    _errorMessage = 'Failed to connect to local backend. Please ensure the backend server is running.';
+    _errorMessage =
+        'Failed to connect to local backend. Please ensure the backend server is running.';
     notifyListeners();
   }
 
@@ -215,8 +221,9 @@ class ChatProvider extends ChangeNotifier {
       final health = await _apiService.checkHealth();
       bool newBackendOnline = health['status'] == 'ok';
       bool newLocalLlmOnline = health['local_llm'] == 'online';
-      
-      if (_isBackendOnline != newBackendOnline || _isLocalLlmOnline != newLocalLlmOnline) {
+
+      if (_isBackendOnline != newBackendOnline ||
+          _isLocalLlmOnline != newLocalLlmOnline) {
         _isBackendOnline = newBackendOnline;
         _isLocalLlmOnline = newLocalLlmOnline;
         if (_isBackendOnline && _availableLocalModels.isEmpty) {
@@ -256,7 +263,11 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || _isSending) return;
-    final userMsg = ChatMessage(id: DateTime.now().toString(), role: MessageRole.user, content: text);
+    final userMsg = ChatMessage(
+      id: DateTime.now().toString(),
+      role: MessageRole.user,
+      content: text,
+    );
     if (_mode == AgentMode.personal) {
       _personalMessages.add(userMsg);
     } else {
@@ -288,23 +299,33 @@ class ChatProvider extends ChangeNotifier {
       if (_mode == AgentMode.personal) {
         if (newId.isNotEmpty && newId != _personalConversationId) {
           _personalConversationId = newId;
-          await prefs.setString('deskmate_personal_conversation_id', _personalConversationId);
+          await prefs.setString(
+            'deskmate_personal_conversation_id',
+            _personalConversationId,
+          );
         }
-        _personalMessages.add(ChatMessage(
-          id: DateTime.now().toString(),
-          role: MessageRole.assistant,
-          content: response['reply'] as String? ?? '',
-        ));
+        _personalMessages.add(
+          ChatMessage(
+            id: DateTime.now().toString(),
+            role: MessageRole.assistant,
+            content: response['reply'] as String? ?? '',
+          ),
+        );
       } else {
         if (newId.isNotEmpty && newId != _fileConversationId) {
           _fileConversationId = newId;
-          await prefs.setString('deskmate_conversation_id', _fileConversationId);
+          await prefs.setString(
+            'deskmate_conversation_id',
+            _fileConversationId,
+          );
         }
-        _fileMessages.add(ChatMessage(
-          id: DateTime.now().toString(),
-          role: MessageRole.assistant,
-          content: response['reply'] as String? ?? '',
-        ));
+        _fileMessages.add(
+          ChatMessage(
+            id: DateTime.now().toString(),
+            role: MessageRole.assistant,
+            content: response['reply'] as String? ?? '',
+          ),
+        );
       }
     } catch (e) {
       _errorMessage = e.toString();

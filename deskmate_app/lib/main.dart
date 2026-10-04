@@ -8,15 +8,13 @@ import 'services/backend_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Start the background python backend silently
   await BackendManager.start();
-  
+
   runApp(
     MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => ChatProvider())],
       child: const DeskMateApp(),
     ),
   );

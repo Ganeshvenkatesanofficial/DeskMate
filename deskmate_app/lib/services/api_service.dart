@@ -18,10 +18,7 @@ class ApiService {
     if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
       final gemini = GeminiService(apiKey: geminiApiKey);
       final reply = await gemini.generateContent(message);
-      return {
-        'reply': reply,
-        'conversation_id': conversationId ?? '',
-      };
+      return {'reply': reply, 'conversation_id': conversationId ?? ''};
     }
     final url = Uri.parse('$baseUrl/api/personal');
     final body = {
@@ -30,18 +27,22 @@ class ApiService {
         'conversation_id': conversationId,
       if (geminiApiKey != null && geminiApiKey.isNotEmpty)
         'api_key': geminiApiKey,
-      if (model != null && model.isNotEmpty)
-        'model': model,
+      if (model != null && model.isNotEmpty) 'model': model,
     };
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      ).timeout(const Duration(minutes: 10));
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(minutes: 10));
       final data = jsonDecode(response.body);
       if (response.statusCode != 200) {
-        throw Exception(data['detail'] ?? 'Request failed with status: ${response.statusCode}');
+        throw Exception(
+          data['detail'] ??
+              'Request failed with status: ${response.statusCode}',
+        );
       }
       return data;
     } catch (e) {
@@ -60,7 +61,9 @@ class ApiService {
 
   Future<Map<String, dynamic>> checkHealth() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/health')).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/health'))
+          .timeout(const Duration(seconds: 30));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -73,11 +76,16 @@ class ApiService {
   /// Fetch list of available local models from backend
   Future<List<String>> getAvailableModels() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/models')).timeout(const Duration(seconds: 5));
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/models'))
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final rawModels = data['models'] as List<dynamic>? ?? [];
-        return rawModels.map((m) => m.toString()).where((m) => m.isNotEmpty).toList();
+        return rawModels
+            .map((m) => m.toString())
+            .where((m) => m.isNotEmpty)
+            .toList();
       }
       return [];
     } catch (_) {
@@ -99,18 +107,22 @@ class ApiService {
         'conversation_id': conversationId,
       if (geminiApiKey != null && geminiApiKey.isNotEmpty)
         'api_key': geminiApiKey,
-      if (model != null && model.isNotEmpty)
-        'model': model,
+      if (model != null && model.isNotEmpty) 'model': model,
     };
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      ).timeout(const Duration(minutes: 10));
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(minutes: 10));
       final data = jsonDecode(response.body);
       if (response.statusCode != 200) {
-        throw Exception(data['detail'] ?? 'Request failed with status: ${response.statusCode}');
+        throw Exception(
+          data['detail'] ??
+              'Request failed with status: ${response.statusCode}',
+        );
       }
       return data;
     } catch (e) {
@@ -120,7 +132,9 @@ class ApiService {
 
   Future<Map<String, dynamic>> checkPersonalHealth() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/personal/health')).timeout(const Duration(seconds: 5));
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/personal/health'))
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }

@@ -17,7 +17,9 @@ class ChatBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -29,7 +31,11 @@ class ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: theme.borderDefault, width: 1),
               ),
-              child: Icon(Icons.smart_toy_outlined, color: theme.accentFg, size: 16),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                color: theme.accentFg,
+                size: 16,
+              ),
             ).animate().scale(duration: 200.ms, curve: Curves.easeOut),
             const SizedBox(width: 12),
           ],
@@ -44,7 +50,10 @@ class ChatBubble extends StatelessWidget {
                         left: BorderSide(color: theme.accentEmphasis, width: 3),
                         top: BorderSide(color: theme.borderDefault, width: 1),
                         right: BorderSide(color: theme.borderDefault, width: 1),
-                        bottom: BorderSide(color: theme.borderDefault, width: 1),
+                        bottom: BorderSide(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
                       )
                     : Border.all(color: theme.borderDefault, width: 1),
               ),
@@ -69,7 +78,10 @@ class ChatBubble extends StatelessWidget {
                       codeblockDecoration: BoxDecoration(
                         color: theme.bgInset,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: theme.borderDefault, width: 1),
+                        border: Border.all(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
                       ),
                       codeblockPadding: const EdgeInsets.all(12),
                     ),
@@ -77,10 +89,7 @@ class ChatBubble extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     message.formattedTime,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: theme.fgMuted,
-                    ),
+                    style: TextStyle(fontSize: 10, color: theme.fgMuted),
                   ),
                 ],
               ),
@@ -96,7 +105,11 @@ class ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: theme.borderDefault, width: 1),
               ),
-              child: Icon(Icons.person_outline, color: theme.fgDefault, size: 16),
+              child: Icon(
+                Icons.person_outline,
+                color: theme.fgDefault,
+                size: 16,
+              ),
             ).animate().scale(duration: 200.ms, curve: Curves.easeOut),
           ],
         ],

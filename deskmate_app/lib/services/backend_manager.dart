@@ -39,13 +39,17 @@ class BackendManager {
   /// Launch backend executable silently in background on dynamic free port
   static Future<void> start() async {
     if (!Platform.isWindows && !Platform.isMacOS) {
-      debugPrint('Automated local background process spawning is only supported on Windows and macOS.');
+      debugPrint(
+        'Automated local background process spawning is only supported on Windows and macOS.',
+      );
       return;
     }
 
     if (await isBackendRunning(8080)) {
       _assignedPort = 8080;
-      debugPrint('Backend is already running on port 8080. Reusing existing instance.');
+      debugPrint(
+        'Backend is already running on port 8080. Reusing existing instance.',
+      );
       return;
     }
 
@@ -64,12 +68,48 @@ class BackendManager {
         );
       } else if (Platform.isMacOS) {
         final candidatePaths = [
-          p.join(appDir, '..', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
-          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
-          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Versions', 'A', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
-          p.join(appDir, 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(
+            appDir,
+            '..',
+            'Resources',
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
+          p.join(
+            appDir,
+            '..',
+            'Frameworks',
+            'App.framework',
+            'Resources',
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
+          p.join(
+            appDir,
+            '..',
+            'Frameworks',
+            'App.framework',
+            'Versions',
+            'A',
+            'Resources',
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
+          p.join(
+            appDir,
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
         ];
-        
+
         for (final candidate in candidatePaths) {
           if (await File(candidate).exists()) {
             exePath = candidate;
@@ -82,14 +122,15 @@ class BackendManager {
 
       if (exePath.isEmpty || !await File(exePath).exists()) {
         _assignedPort = 8080;
-        debugPrint('Backend executable not found at $exePath. Defaulting to port 8080 for development.');
+        debugPrint(
+          'Backend executable not found at $exePath. Defaulting to port 8080 for development.',
+        );
         return;
       }
 
       _assignedPort = await findFreePort();
       debugPrint('Assigned dynamic random port: $_assignedPort');
       debugPrint('Starting backend from: $exePath on port $_assignedPort');
-
 
       // Ensure execution permissions on Unix/macOS
       if (Platform.isMacOS) {
@@ -101,13 +142,14 @@ class BackendManager {
       }
 
       // Spawn process silently with dynamic port argument
-      _process = await Process.start(
-        exePath,
-        ['--port', '$_assignedPort'],
-        runInShell: false,
-      );
+      _process = await Process.start(exePath, [
+        '--port',
+        '$_assignedPort',
+      ], runInShell: false);
 
-      debugPrint('Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort');
+      debugPrint(
+        'Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort',
+      );
 
       // Forward output to local Flutter debug log
       _process!.stdout.transform(utf8.decoder).listen((data) {
@@ -117,7 +159,6 @@ class BackendManager {
       _process!.stderr.transform(utf8.decoder).listen((data) {
         debugPrint('[Backend STDERR]: $data');
       });
-
     } catch (e) {
       debugPrint('Failed to launch backend subprocess: $e');
     }
@@ -135,11 +176,15 @@ class BackendManager {
     }
     try {
       if (Platform.isWindows) {
-        await Process.run('taskkill', ['/F', '/IM', 'deskmate_backend.exe', '/T']);
+        await Process.run('taskkill', [
+          '/F',
+          '/IM',
+          'deskmate_backend.exe',
+          '/T',
+        ]);
       } else if (Platform.isMacOS) {
         await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
       }
     } catch (_) {}
   }
 }
-

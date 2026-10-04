@@ -10,9 +10,15 @@ class AppTheme {
   static const Color purpleHover = Color(0xFF8E67F6);
   static const Color purpleActive = Color(0xFF5B24E8);
   static const Color purpleHighlight = Color(0xFFA78BFA);
-  static const Color purpleMuted = Color(0x266A35F5); // rgba(106, 53, 245, 0.15)
-  static const Color purpleBorder = Color(0x666A35F5); // rgba(106, 53, 245, 0.40)
-  static const Color purpleFocusRing = Color(0x4D6A35F5); // rgba(106, 53, 245, 0.30)
+  static const Color purpleMuted = Color(
+    0x266A35F5,
+  ); // rgba(106, 53, 245, 0.15)
+  static const Color purpleBorder = Color(
+    0x666A35F5,
+  ); // rgba(106, 53, 245, 0.40)
+  static const Color purpleFocusRing = Color(
+    0x4D6A35F5,
+  ); // rgba(106, 53, 245, 0.30)
 
   static const LinearGradient purpleGradient = LinearGradient(
     colors: [Color(0xFF6A35F5), Color(0xFF7C49F6), Color(0xFF8E67F6)],
@@ -43,8 +49,12 @@ class AppTheme {
   static const Color lightSuccessEmphasis = Color(0xFF1F883D);
   static const Color lightAttentionFg = Color(0xFF9A6700);
   static const Color lightDangerFg = Color(0xFFD1242F);
-  static const Color lightDangerBg = Color(0x14D1242F); // rgba(209, 36, 47, 0.08)
-  static const Color lightDangerBorder = Color(0x4DD1242F); // rgba(209, 36, 47, 0.30)
+  static const Color lightDangerBg = Color(
+    0x14D1242F,
+  ); // rgba(209, 36, 47, 0.08)
+  static const Color lightDangerBorder = Color(
+    0x4DD1242F,
+  ); // rgba(209, 36, 47, 0.30)
 
   // --- GITHUB PRIMER DARK DEFAULT TOKENS ---
   static const Color darkBgCanvas = Color(0xFF0D1117);
@@ -69,8 +79,12 @@ class AppTheme {
   static const Color darkSuccessEmphasis = Color(0xFF238636);
   static const Color darkAttentionFg = Color(0xFFD29922);
   static const Color darkDangerFg = Color(0xFFF85149);
-  static const Color darkDangerBg = Color(0x1AF85149); // rgba(248, 81, 73, 0.10)
-  static const Color darkDangerBorder = Color(0x66F85149); // rgba(248, 81, 73, 0.40)
+  static const Color darkDangerBg = Color(
+    0x1AF85149,
+  ); // rgba(248, 81, 73, 0.10)
+  static const Color darkDangerBorder = Color(
+    0x66F85149,
+  ); // rgba(248, 81, 73, 0.40)
 
   // --- GITHUB PRIMER LIGHT THEME ---
   static ThemeData lightTheme = ThemeData(
@@ -115,9 +129,7 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
@@ -198,9 +210,7 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
@@ -246,17 +256,24 @@ extension GitHubPrimerTheme on ThemeData {
   Color get bgCanvas => isDark ? AppTheme.darkBgCanvas : AppTheme.lightBgCanvas;
   Color get bgSubtle => isDark ? AppTheme.darkBgSubtle : AppTheme.lightBgSubtle;
   Color get bgInset => isDark ? AppTheme.darkBgInset : AppTheme.lightBgInset;
-  Color get bgEmphasis => isDark ? AppTheme.darkBgEmphasis : AppTheme.lightBgEmphasis;
-  Color get bgOverlay => isDark ? AppTheme.darkBgOverlay : AppTheme.lightBgOverlay;
+  Color get bgEmphasis =>
+      isDark ? AppTheme.darkBgEmphasis : AppTheme.lightBgEmphasis;
+  Color get bgOverlay =>
+      isDark ? AppTheme.darkBgOverlay : AppTheme.lightBgOverlay;
 
-  Color get fgDefault => isDark ? AppTheme.darkFgDefault : AppTheme.lightFgDefault;
+  Color get fgDefault =>
+      isDark ? AppTheme.darkFgDefault : AppTheme.lightFgDefault;
   Color get fgMuted => isDark ? AppTheme.darkFgMuted : AppTheme.lightFgMuted;
   Color get fgSubtle => isDark ? AppTheme.darkFgSubtle : AppTheme.lightFgSubtle;
-  Color get fgDisabled => isDark ? AppTheme.darkFgDisabled : AppTheme.lightFgDisabled;
+  Color get fgDisabled =>
+      isDark ? AppTheme.darkFgDisabled : AppTheme.lightFgDisabled;
 
-  Color get borderDefault => isDark ? AppTheme.darkBorderDefault : AppTheme.lightBorderDefault;
-  Color get borderMuted => isDark ? AppTheme.darkBorderMuted : AppTheme.lightBorderMuted;
-  Color get borderStrong => isDark ? AppTheme.darkBorderStrong : AppTheme.lightBorderMuted;
+  Color get borderDefault =>
+      isDark ? AppTheme.darkBorderDefault : AppTheme.lightBorderDefault;
+  Color get borderMuted =>
+      isDark ? AppTheme.darkBorderMuted : AppTheme.lightBorderMuted;
+  Color get borderStrong =>
+      isDark ? AppTheme.darkBorderStrong : AppTheme.lightBorderMuted;
 
   Color get accentFg => isDark ? AppTheme.purpleLight : AppTheme.purplePrimary;
   Color get accentEmphasis => AppTheme.purplePrimary;
@@ -268,10 +285,14 @@ extension GitHubPrimerTheme on ThemeData {
   Color get accentFocus => AppTheme.purpleFocusRing;
   LinearGradient get accentGradient => AppTheme.purpleGradient;
 
-  Color get successFg => isDark ? AppTheme.darkSuccessFg : AppTheme.lightSuccessFg;
-  Color get successEmphasis => isDark ? AppTheme.darkSuccessEmphasis : AppTheme.lightSuccessEmphasis;
-  Color get attentionFg => isDark ? AppTheme.darkAttentionFg : AppTheme.lightAttentionFg;
+  Color get successFg =>
+      isDark ? AppTheme.darkSuccessFg : AppTheme.lightSuccessFg;
+  Color get successEmphasis =>
+      isDark ? AppTheme.darkSuccessEmphasis : AppTheme.lightSuccessEmphasis;
+  Color get attentionFg =>
+      isDark ? AppTheme.darkAttentionFg : AppTheme.lightAttentionFg;
   Color get dangerFg => isDark ? AppTheme.darkDangerFg : AppTheme.lightDangerFg;
   Color get dangerBg => isDark ? AppTheme.darkDangerBg : AppTheme.lightDangerBg;
-  Color get dangerBorder => isDark ? AppTheme.darkDangerBorder : AppTheme.lightDangerBorder;
+  Color get dangerBorder =>
+      isDark ? AppTheme.darkDangerBorder : AppTheme.lightDangerBorder;
 }

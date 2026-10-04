@@ -16,7 +16,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+
   bool _isSettingsOpen = false;
   final TextEditingController _geminiKeyController = TextEditingController();
   final FocusNode _geminiKeyFocusNode = FocusNode();
@@ -95,7 +95,14 @@ class _ChatScreenState extends State<ChatScreen> {
             : AppBar(
                 backgroundColor: theme.bgSubtle,
                 elevation: 0,
-                title: Text('DeskMate', style: TextStyle(color: theme.fgDefault, fontSize: 16, fontWeight: FontWeight.w600)),
+                title: Text(
+                  'DeskMate',
+                  style: TextStyle(
+                    color: theme.fgDefault,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 actions: [
                   IconButton(
                     onPressed: _openSettings,
@@ -107,7 +114,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ],
               ),
-        drawer: isDesktop ? null : Drawer(child: Sidebar(onOpenSettings: _openSettings)),
+        drawer: isDesktop
+            ? null
+            : Drawer(child: Sidebar(onOpenSettings: _openSettings)),
         body: Stack(
           children: [
             Row(
@@ -123,13 +132,20 @@ class _ChatScreenState extends State<ChatScreen> {
                               ? _buildEmptyState(theme)
                               : ListView.builder(
                                   controller: _scrollController,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                                  itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 24,
+                                  ),
+                                  itemCount:
+                                      provider.messages.length +
+                                      (provider.isSending ? 1 : 0),
                                   itemBuilder: (context, index) {
                                     if (index == provider.messages.length) {
                                       return _buildTypingIndicator(theme);
                                     }
-                                    return ChatBubble(message: provider.messages[index]);
+                                    return ChatBubble(
+                                      message: provider.messages[index],
+                                    );
                                   },
                                 ),
                         ),
@@ -140,7 +156,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ],
             ),
-            if (provider.showModelSelectionDialog && provider.availableLocalModels.length > 1)
+            if (provider.showModelSelectionDialog &&
+                provider.availableLocalModels.length > 1)
               Positioned.fill(
                 child: Container(
                   color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
@@ -155,7 +172,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: GestureDetector(
                   onTap: _closeSettings,
                   child: Container(
-                    color: theme.isDark ? const Color(0x73010409) : const Color(0x1A1F2328),
+                    color: theme.isDark
+                        ? const Color(0x73010409)
+                        : const Color(0x1A1F2328),
                   ),
                 ).animate().fadeIn(duration: 150.ms),
               ),
@@ -165,9 +184,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 bottom: 0,
                 right: 0,
                 width: 420,
-                child: _buildSettingsPanel(provider, theme)
-                    .animate()
-                    .slideX(begin: 1.0, end: 0.0, duration: 200.ms, curve: Curves.easeOut),
+                child: _buildSettingsPanel(provider, theme).animate().slideX(
+                  begin: 1.0,
+                  end: 0.0,
+                  duration: 200.ms,
+                  curve: Curves.easeOut,
+                ),
               ),
             ],
           ],
@@ -238,7 +260,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     // --- SECTION 1: APPEARANCE ---
                     Text(
                       'Appearance',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -248,7 +274,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     const SizedBox(height: 14),
                     Text(
                       'Theme Mode',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     _buildThemeSelectorInSettings(provider, theme),
@@ -260,7 +290,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     // --- SECTION 2: AI CONFIGURATION ---
                     Text(
                       'AI Configuration',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -270,7 +304,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     const SizedBox(height: 14),
                     Text(
                       'Gemini API Key',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
@@ -281,9 +319,16 @@ class _ChatScreenState extends State<ChatScreen> {
                         focusNode: _geminiKeyFocusNode,
                         style: TextStyle(fontSize: 13, color: theme.fgDefault),
                         decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.vpn_key_outlined, size: 16, color: theme.fgMuted),
+                          prefixIcon: Icon(
+                            Icons.vpn_key_outlined,
+                            size: 16,
+                            color: theme.fgMuted,
+                          ),
                           hintText: 'Enter Gemini API Key',
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                         ),
                       ),
                     ),
@@ -298,7 +343,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           FocusScope.of(context).unfocus();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: const Text('Gemini API Key loaded for this session.'),
+                              content: const Text(
+                                'Gemini API Key loaded for this session.',
+                              ),
                               duration: const Duration(seconds: 2),
                               backgroundColor: theme.successFg,
                             ),
@@ -307,7 +354,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.accentEmphasis,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                         icon: const Icon(Icons.vpn_key, size: 15),
                         label: const Text('Load Gemini API'),
@@ -321,7 +370,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     // --- SECTION 3: BACKEND ---
                     Text(
                       'Backend',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -331,7 +384,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     const SizedBox(height: 14),
                     Text(
                       'Backend URL',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
@@ -341,9 +398,16 @@ class _ChatScreenState extends State<ChatScreen> {
                         focusNode: _backendUrlFocusNode,
                         style: TextStyle(fontSize: 13, color: theme.fgDefault),
                         decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.link, size: 16, color: theme.fgMuted),
+                          prefixIcon: Icon(
+                            Icons.link,
+                            size: 16,
+                            color: theme.fgMuted,
+                          ),
                           hintText: 'Enter Backend URL',
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                         ),
                         onSubmitted: (value) {
                           provider.setBackendUrl(value);
@@ -367,10 +431,17 @@ class _ChatScreenState extends State<ChatScreen> {
                           );
                         },
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
-                          side: BorderSide(color: theme.borderDefault, width: 1),
+                          backgroundColor: theme.isDark
+                              ? theme.bgEmphasis
+                              : theme.bgSubtle,
+                          side: BorderSide(
+                            color: theme.borderDefault,
+                            width: 1,
+                          ),
                           foregroundColor: theme.fgDefault,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                         icon: const Icon(Icons.save, size: 15),
                         label: const Text('Save URL'),
@@ -440,7 +511,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? (theme.isDark ? theme.bgEmphasis : Colors.white)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(5),
-            border: isSelected ? Border.all(color: theme.borderDefault, width: 1) : null,
+            border: isSelected
+                ? Border.all(color: theme.borderDefault, width: 1)
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -466,7 +539,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildModelSelectionPopup(BuildContext context, ChatProvider provider, ThemeData theme) {
+  Widget _buildModelSelectionPopup(
+    BuildContext context,
+    ChatProvider provider,
+    ThemeData theme,
+  ) {
     String tempSelected = provider.selectedLocalModel.isNotEmpty
         ? provider.selectedLocalModel
         : provider.availableLocalModels.first;
@@ -494,9 +571,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       decoration: BoxDecoration(
                         color: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: theme.borderDefault, width: 1),
+                        border: Border.all(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
                       ),
-                      child: Icon(Icons.memory_rounded, color: theme.accentFg, size: 22),
+                      child: Icon(
+                        Icons.memory_rounded,
+                        color: theme.accentFg,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -547,11 +631,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? (theme.isDark ? theme.bgEmphasis : theme.bgSubtle)
+                                ? (theme.isDark
+                                      ? theme.bgEmphasis
+                                      : theme.bgSubtle)
                                 : theme.bgCanvas,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: isSelected ? theme.accentFg : theme.borderDefault,
+                              color: isSelected
+                                  ? theme.accentFg
+                                  : theme.borderDefault,
                               width: 1,
                             ),
                           ),
@@ -564,15 +652,21 @@ class _ChatScreenState extends State<ChatScreen> {
                               modelName,
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                                 color: theme.fgDefault,
                               ),
                             ),
                             subtitle: Text(
-                              isSelected ? 'Active Selection' : 'Click to select',
+                              isSelected
+                                  ? 'Active Selection'
+                                  : 'Click to select',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: isSelected ? theme.accentFg : theme.fgMuted,
+                                color: isSelected
+                                    ? theme.accentFg
+                                    : theme.fgMuted,
                               ),
                             ),
                             // ignore: deprecated_member_use
@@ -598,7 +692,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         provider.dismissModelSelectionDialog();
                       },
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+                        backgroundColor: theme.isDark
+                            ? theme.bgEmphasis
+                            : theme.bgSubtle,
                         side: BorderSide(color: theme.borderDefault, width: 1),
                         foregroundColor: theme.fgDefault,
                       ),
@@ -630,23 +726,58 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     final isPersonal = provider.mode == AgentMode.personal;
 
-    final title = isPersonal ? 'DeskMate Personal Agent' : 'Welcome to DeskMate';
+    final title = isPersonal
+        ? 'DeskMate Personal Agent'
+        : 'Welcome to DeskMate';
     final subtitle = isPersonal
         ? 'Your free offline & cloud assistant. Manage tasks, notes, weather, emails, and calendar.'
         : 'Search, analyze, and manage your local files with smart AI capability.';
 
     final examples = isPersonal
         ? [
-            {'icon': Icons.task_alt_rounded, 'text': 'Add task to my Google Tasks: Prep demo', 'label': 'Google Tasks'},
-            {'icon': Icons.insert_drive_file_outlined, 'text': 'Create a Google Doc named Project Outline containing scope', 'label': 'Google Docs'},
-            {'icon': Icons.mail_outline_rounded, 'text': 'Search my sent emails', 'label': 'Gmail Search'},
-            {'icon': Icons.calendar_today_rounded, 'text': 'List my calendar events for tomorrow', 'label': 'Google Calendar'},
+            {
+              'icon': Icons.task_alt_rounded,
+              'text': 'Add task to my Google Tasks: Prep demo',
+              'label': 'Google Tasks',
+            },
+            {
+              'icon': Icons.insert_drive_file_outlined,
+              'text':
+                  'Create a Google Doc named Project Outline containing scope',
+              'label': 'Google Docs',
+            },
+            {
+              'icon': Icons.mail_outline_rounded,
+              'text': 'Search my sent emails',
+              'label': 'Gmail Search',
+            },
+            {
+              'icon': Icons.calendar_today_rounded,
+              'text': 'List my calendar events for tomorrow',
+              'label': 'Google Calendar',
+            },
           ]
         : [
-            {'icon': Icons.search_rounded, 'text': 'Find PDF files larger than 10MB', 'label': 'Find Files'},
-            {'icon': Icons.analytics_outlined, 'text': 'Summarize recent financial reports', 'label': 'Summarize'},
-            {'icon': Icons.find_in_page_outlined, 'text': 'Search "react" inside folder', 'label': 'Grep Search'},
-            {'icon': Icons.info_outline, 'text': 'Show details of requirements.txt', 'label': 'Metadata'},
+            {
+              'icon': Icons.search_rounded,
+              'text': 'Find PDF files larger than 10MB',
+              'label': 'Find Files',
+            },
+            {
+              'icon': Icons.analytics_outlined,
+              'text': 'Summarize recent financial reports',
+              'label': 'Summarize',
+            },
+            {
+              'icon': Icons.find_in_page_outlined,
+              'text': 'Search "react" inside folder',
+              'label': 'Grep Search',
+            },
+            {
+              'icon': Icons.info_outline,
+              'text': 'Show details of requirements.txt',
+              'label': 'Metadata',
+            },
           ];
 
     return Center(
@@ -664,25 +795,42 @@ class _ChatScreenState extends State<ChatScreen> {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: theme.borderDefault, width: 1),
                 ),
-                child: Icon(Icons.auto_awesome_rounded, size: 32, color: theme.accentFg),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 32,
+                  color: theme.accentFg,
+                ),
               ),
               const SizedBox(height: 20),
               Text(
                 title,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: theme.fgDefault,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: theme.fgMuted, height: 1.5),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.fgMuted,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 28),
               Row(
                 children: [
                   Text(
                     'TRY THESE EXAMPLES',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.fgMuted, letterSpacing: 0.08),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgMuted,
+                      letterSpacing: 0.08,
+                    ),
                   ),
                 ],
               ),
@@ -714,7 +862,12 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildExampleCard(ThemeData theme, IconData icon, String label, String text) {
+  Widget _buildExampleCard(
+    ThemeData theme,
+    IconData icon,
+    String label,
+    String text,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
@@ -743,7 +896,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     const SizedBox(width: 6),
                     Text(
                       label,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.accentFg),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.accentFg,
+                      ),
                     ),
                   ],
                 ),
@@ -751,7 +908,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: Text(
                     text,
-                    style: TextStyle(fontSize: 12, color: theme.fgDefault, height: 1.3),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.fgDefault,
+                      height: 1.3,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -772,12 +933,19 @@ class _ChatScreenState extends State<ChatScreen> {
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: theme.accentFg),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
+            ),
           ),
           const SizedBox(width: 10),
           Text(
             'Assistant is thinking...',
-            style: TextStyle(fontSize: 12, color: theme.fgMuted, fontStyle: FontStyle.italic),
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.fgMuted,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       ).animate().fadeIn(duration: 150.ms),
@@ -794,11 +962,16 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (provider.errorMessage.isNotEmpty && !provider.isConnecting && provider.isBackendOnline)
+          if (provider.errorMessage.isNotEmpty &&
+              !provider.isConnecting &&
+              provider.isBackendOnline)
             Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: theme.dangerBg,
                   borderRadius: BorderRadius.circular(6),
@@ -854,7 +1027,11 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: theme.attentionFg, size: 18),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: theme.attentionFg,
+                    size: 18,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -874,7 +1051,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: theme.attentionFg, width: 1),
                       foregroundColor: theme.attentionFg,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                     ),
                     label: const Text('Retry'),
                   ),
@@ -898,13 +1078,17 @@ class _ChatScreenState extends State<ChatScreen> {
                       }
                     },
                     decoration: InputDecoration(
-                      hintText: (!provider.isLocalLlmOnline && !provider.isUsingGemini)
+                      hintText:
+                          (!provider.isLocalLlmOnline &&
+                              !provider.isUsingGemini)
                           ? 'Please configure your Gemini API Key in Settings to continue...'
                           : provider.mode == AgentMode.personal
-                              ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
-                              : 'Ask about your files...',
+                          ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
+                          : 'Ask about your files...',
                       hintStyle: TextStyle(color: theme.fgMuted, fontSize: 13),
-                      enabled: !provider.isSending && (provider.isLocalLlmOnline || provider.isUsingGemini),
+                      enabled:
+                          !provider.isSending &&
+                          (provider.isLocalLlmOnline || provider.isUsingGemini),
                       fillColor: theme.bgCanvas,
                       filled: true,
                     ),
@@ -915,7 +1099,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   height: 40,
                   width: 42,
                   child: ElevatedButton(
-                    onPressed: provider.isSending || (!provider.isLocalLlmOnline && !provider.isUsingGemini)
+                    onPressed:
+                        provider.isSending ||
+                            (!provider.isLocalLlmOnline &&
+                                !provider.isUsingGemini)
                         ? null
                         : () {
                             if (_messageController.text.isNotEmpty) {
@@ -927,11 +1114,24 @@ class _ChatScreenState extends State<ChatScreen> {
                       padding: EdgeInsets.zero,
                       backgroundColor: theme.accentEmphasis,
                       disabledBackgroundColor: theme.bgEmphasis,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                     child: provider.isSending
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                   ),
                 ),
               ],

@@ -6,12 +6,12 @@ import 'package:deskmate_app/providers/chat_provider.dart';
 import 'package:deskmate_app/main.dart';
 
 void main() {
-  testWidgets('Smoke test DeskMateApp builds successfully', (WidgetTester tester) async {
+  testWidgets('Smoke test DeskMateApp builds successfully', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ],
+        providers: [ChangeNotifierProvider(create: (_) => ChatProvider())],
         child: const DeskMateApp(),
       ),
     );

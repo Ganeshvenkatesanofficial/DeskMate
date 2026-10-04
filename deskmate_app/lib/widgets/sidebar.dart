@@ -38,7 +38,11 @@ class _SidebarState extends State<Sidebar> {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: theme.borderDefault, width: 1),
                   ),
-                  child: Icon(Icons.auto_awesome_rounded, color: theme.accentFg, size: 18),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: theme.accentFg,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Column(
@@ -227,7 +231,9 @@ class _SidebarState extends State<Sidebar> {
                 decoration: BoxDecoration(
                   color: provider.isUsingGemini
                       ? theme.accentFg
-                      : (provider.isLocalLlmOnline ? theme.successFg : theme.dangerFg),
+                      : (provider.isLocalLlmOnline
+                            ? theme.successFg
+                            : theme.dangerFg),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -237,21 +243,26 @@ class _SidebarState extends State<Sidebar> {
                   provider.isUsingGemini
                       ? 'Gemini (Flash) Active'
                       : (provider.isLocalLlmOnline
-                          ? (provider.selectedLocalModel.isNotEmpty ? 'Local: ${provider.selectedLocalModel}' : 'Local LLM Active')
-                          : 'Local LLM Offline'),
+                            ? (provider.selectedLocalModel.isNotEmpty
+                                  ? 'Local: ${provider.selectedLocalModel}'
+                                  : 'Local LLM Active')
+                            : 'Local LLM Offline'),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: provider.isUsingGemini
                         ? theme.accentFg
-                        : (provider.isLocalLlmOnline ? theme.successFg : theme.dangerFg),
+                        : (provider.isLocalLlmOnline
+                              ? theme.successFg
+                              : theme.dangerFg),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          if (provider.availableLocalModels.length > 1 && !provider.isUsingGemini) ...[
+          if (provider.availableLocalModels.length > 1 &&
+              !provider.isUsingGemini) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -262,13 +273,25 @@ class _SidebarState extends State<Sidebar> {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: provider.selectedLocalModel.isNotEmpty && provider.availableLocalModels.contains(provider.selectedLocalModel)
+                  value:
+                      provider.selectedLocalModel.isNotEmpty &&
+                          provider.availableLocalModels.contains(
+                            provider.selectedLocalModel,
+                          )
                       ? provider.selectedLocalModel
                       : provider.availableLocalModels.first,
                   isExpanded: true,
                   dropdownColor: theme.bgOverlay,
-                  icon: Icon(Icons.arrow_drop_down, size: 16, color: theme.fgMuted),
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                  icon: Icon(
+                    Icons.arrow_drop_down,
+                    size: 16,
+                    color: theme.fgMuted,
+                  ),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.fgDefault,
+                  ),
                   onChanged: (val) {
                     if (val != null) {
                       provider.setSelectedLocalModel(val);
@@ -297,7 +320,16 @@ class _SidebarState extends State<Sidebar> {
     if (status == 'loading') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: theme.accentFg))),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
+            ),
+          ),
+        ),
       );
     }
 
@@ -316,7 +348,11 @@ class _SidebarState extends State<Sidebar> {
             Expanded(
               child: Text(
                 'Personal Agent offline',
-                style: TextStyle(fontSize: 11, color: theme.dangerFg, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.dangerFg,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -365,7 +401,9 @@ class _SidebarState extends State<Sidebar> {
     return Row(
       children: [
         Icon(
-          isOk ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+          isOk
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
           size: 13,
           color: isOk ? theme.successFg : theme.fgMuted,
         ),
