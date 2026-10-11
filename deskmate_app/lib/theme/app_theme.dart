@@ -3,17 +3,22 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// GitHub Primer Design System Tokens (Dark Default & Light Default with DeskMate Purple Accent)
 class AppTheme {
-  // Light Theme Palette
-  static const lightBackground = Color(0xFFFFFFFF);
-  static const lightSurface = Color(0xFFF6F8FA);
-  static const lightText = Color(0xFF24292F);
-  static const lightPrimaryBlue = Color(0xFF0969DA);
-
-  // Dark Theme Palette
-  static const darkBackground = Color(0xFF0D1117);
-  static const darkSurface = Color(0xFF161B22);
-  static const darkText = Color(0xFFC9D1D9);
-  static const darkPrimaryBlue = Color(0xFF1F6FEB);
+  // --- PURPLE BRAND ACCENT TOKENS ---
+  static const Color purplePrimary = Color(0xFF6A35F5);
+  static const Color purpleMid = Color(0xFF7C49F6);
+  static const Color purpleLight = Color(0xFF8E67F6);
+  static const Color purpleHover = Color(0xFF8E67F6);
+  static const Color purpleActive = Color(0xFF5B24E8);
+  static const Color purpleHighlight = Color(0xFFA78BFA);
+  static const Color purpleMuted = Color(
+    0x266A35F5,
+  ); // rgba(106, 53, 245, 0.15)
+  static const Color purpleBorder = Color(
+    0x666A35F5,
+  ); // rgba(106, 53, 245, 0.40)
+  static const Color purpleFocusRing = Color(
+    0x4D6A35F5,
+  ); // rgba(106, 53, 245, 0.30)
 
   static const LinearGradient purpleGradient = LinearGradient(
     colors: [Color(0xFF6A35F5), Color(0xFF7C49F6), Color(0xFF8E67F6)],
@@ -84,31 +89,48 @@ class AppTheme {
   // --- GITHUB PRIMER LIGHT THEME ---
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: lightBackground,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: lightBgCanvas,
+    canvasColor: lightBgCanvas,
+    cardColor: lightBgSubtle,
+    dividerColor: lightBorderDefault,
     colorScheme: const ColorScheme.light(
-      primary: lightPrimaryBlue,
-      secondary: lightPrimaryBlue,
-      surface: lightBackground,
+      primary: purplePrimary,
+      secondary: purpleMid,
+      surface: lightBgSubtle,
       onPrimary: Colors.white,
-      onSurface: lightText,
+      onSurface: lightFgDefault,
+      error: lightDangerFg,
+      outline: lightBorderDefault,
     ),
     textTheme: GoogleFonts.interTextTheme(
       ThemeData.light().textTheme.apply(
-        bodyColor: lightText,
-        displayColor: lightText,
+        bodyColor: lightFgDefault,
+        displayColor: lightFgDefault,
       ),
     ),
     cardTheme: const CardThemeData(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-      color: lightSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        side: BorderSide(color: lightBorderDefault, width: 1),
+      ),
+      color: lightBgSubtle,
+    ),
+    dialogTheme: const DialogThemeData(
+      backgroundColor: lightBgOverlay,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        side: BorderSide(color: lightBorderDefault, width: 1),
+      ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: lightPrimaryBlue,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
       ),
@@ -126,18 +148,21 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: lightSurface,
+      fillColor: lightBgCanvas,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      hintStyle: const TextStyle(color: lightFgMuted, fontSize: 13),
+      labelStyle: const TextStyle(color: lightFgMuted, fontSize: 13),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD0D7DE)),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: lightBorderDefault, width: 1),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD0D7DE)),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: lightBorderDefault, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: lightPrimaryBlue, width: 2),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: purplePrimary, width: 1.5),
       ),
     ),
   );
@@ -145,31 +170,48 @@ class AppTheme {
   // --- GITHUB PRIMER DARK THEME ---
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: darkBackground,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: darkBgCanvas,
+    canvasColor: darkBgCanvas,
+    cardColor: darkBgSubtle,
+    dividerColor: darkBorderDefault,
     colorScheme: const ColorScheme.dark(
-      primary: darkPrimaryBlue,
-      secondary: darkPrimaryBlue,
-      surface: darkSurface,
+      primary: purplePrimary,
+      secondary: purpleLight,
+      surface: darkBgSubtle,
       onPrimary: Colors.white,
-      onSurface: darkText,
+      onSurface: darkFgDefault,
+      error: darkDangerFg,
+      outline: darkBorderDefault,
     ),
     textTheme: GoogleFonts.interTextTheme(
       ThemeData.dark().textTheme.apply(
-        bodyColor: darkText,
-        displayColor: darkText,
+        bodyColor: darkFgDefault,
+        displayColor: darkFgDefault,
       ),
     ),
     cardTheme: const CardThemeData(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-      color: darkSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        side: BorderSide(color: darkBorderDefault, width: 1),
+      ),
+      color: darkBgSubtle,
+    ),
+    dialogTheme: const DialogThemeData(
+      backgroundColor: darkBgOverlay,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        side: BorderSide(color: darkBorderDefault, width: 1),
+      ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: darkPrimaryBlue,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        backgroundColor: purplePrimary,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
       ),
@@ -187,18 +229,21 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFF21262D),
+      fillColor: darkBgCanvas,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      hintStyle: const TextStyle(color: darkFgMuted, fontSize: 13),
+      labelStyle: const TextStyle(color: darkFgMuted, fontSize: 13),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: darkBorderDefault, width: 1),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: darkBorderDefault, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: darkPrimaryBlue, width: 2),
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: purplePrimary, width: 1.5),
       ),
     ),
   );
