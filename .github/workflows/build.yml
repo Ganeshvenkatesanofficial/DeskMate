@@ -362,9 +362,10 @@ jobs:
       - name: Copy backend executable
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Path "deskmate_app\assets\backend" -Force
           Copy-Item `
             "terminal-ai-agent\dist\deskmate_backend.exe" `
-            "deskmate_app\assets\deskmate_backend.exe" `
+            "deskmate_app\assets\backend\deskmate_backend.exe" `
             -Force
 
       - name: Flutter dependencies
@@ -453,11 +454,12 @@ jobs:
 
       - name: Copy backend binary
         run: |
+          mkdir -p deskmate_app/assets/backend
           cp \
             terminal-ai-agent/dist/deskmate_backend \
-            deskmate_app/assets/deskmate_backend
+            deskmate_app/assets/backend/deskmate_backend
 
-          chmod +x deskmate_app/assets/deskmate_backend
+          chmod +x deskmate_app/assets/backend/deskmate_backend
 
       - name: Flutter dependencies
         working-directory: deskmate_app
