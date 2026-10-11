@@ -5,20 +5,7 @@
 Run the FastAPI backend from the `terminal-ai-agent` folder:
 
 ```bash
-cd d:/DeskMate/terminal-ai-agent
-d:/DeskMate/.venv/Scripts/python.exe -m uvicorn backend:app --reload --host 127.0.0.1 --port 8000
+cd terminal-ai-agent
+python backend.py --port 8080
 ```
 
-## Frontend
-
-The React Vite UI lives in `terminal-ai-agent/frontend`.
-
-You need Node.js installed to run the frontend locally.
-
-```bash
-cd d:/DeskMate/terminal-ai-agent/frontend
-npm install
-npm run dev
-```
-
-Set `VITE_BACKEND_URL` in `frontend/.env` if your backend is running on a different host or port.
