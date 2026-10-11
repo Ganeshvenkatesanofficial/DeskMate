@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/chat_message.dart';
+import '../theme/app_theme.dart';
 
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
@@ -16,35 +17,45 @@ class ChatBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.secondary.withOpacity(0.1),
-              child: Icon(Icons.smart_toy_outlined, color: theme.colorScheme.secondary, size: 20),
-            ).animate().scale(duration: 300.ms, curve: Curves.easeOutBack),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: theme.bgSubtle,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: theme.borderDefault, width: 1),
+              ),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                color: theme.accentFg,
+                size: 16,
+              ),
+            ).animate().scale(duration: 200.ms, curve: Curves.easeOut),
             const SizedBox(width: 12),
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isUser ? theme.colorScheme.primary : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isUser ? 16 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 16),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-                border: isUser ? null : Border.all(color: Colors.grey.shade200),
+                color: isUser ? theme.bgEmphasis : theme.bgSubtle,
+                borderRadius: BorderRadius.circular(6),
+                border: isUser
+                    ? Border(
+                        left: BorderSide(color: theme.accentEmphasis, width: 3),
+                        top: BorderSide(color: theme.borderDefault, width: 1),
+                        right: BorderSide(color: theme.borderDefault, width: 1),
+                        bottom: BorderSide(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
+                      )
+                    : Border.all(color: theme.borderDefault, width: 1),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,48 +65,55 @@ class ChatBubble extends StatelessWidget {
                     selectable: true,
                     styleSheet: MarkdownStyleSheet(
                       p: TextStyle(
-                        color: isUser ? Colors.white : Colors.black,
-                        fontSize: 15,
+                        color: theme.fgDefault,
+                        fontSize: 14,
                         height: 1.5,
                       ),
                       code: TextStyle(
-                        backgroundColor: isUser ? Colors.black.withOpacity(0.2) : Colors.grey.shade100,
+                        backgroundColor: theme.bgInset,
                         fontFamily: 'monospace',
                         fontSize: 13,
-                        color: isUser ? Colors.white : Colors.black,
+                        color: theme.fgDefault,
                       ),
                       codeblockDecoration: BoxDecoration(
-                        color: isUser ? Colors.black.withOpacity(0.2) : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
+                        color: theme.bgInset,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
                       ),
+                      codeblockPadding: const EdgeInsets.all(12),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     message.formattedTime,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: (isUser ? Colors.white : Colors.black).withOpacity(0.6),
-                    ),
+                    style: TextStyle(fontSize: 10, color: theme.fgMuted),
                   ),
                 ],
               ),
-            ).animate().slideX(
-              begin: isUser ? 0.1 : -0.1,
-              duration: 400.ms,
-              curve: Curves.easeOutCubic,
-            ).fade(duration: 400.ms),
+            ).animate().fade(duration: 200.ms),
           ),
           if (isUser) ...[
             const SizedBox(width: 12),
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-              child: Icon(Icons.person_outline, color: theme.colorScheme.primary, size: 20),
-            ).animate().scale(duration: 300.ms, curve: Curves.easeOutBack),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: theme.bgEmphasis,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: theme.borderDefault, width: 1),
+              ),
+              child: Icon(
+                Icons.person_outline,
+                color: theme.fgDefault,
+                size: 16,
+              ),
+            ).animate().scale(duration: 200.ms, curve: Curves.easeOut),
           ],
         ],
       ),
     );
   }
 }
-

@@ -31,14 +31,14 @@ Rules:
 6. For web searches and GitHub references, cite the URL of the most relevant result.
 """)
 
-def get_personal_agent(api_key: str | None = None) -> ToolCallingAgent:
+def get_personal_agent(api_key: str | None = None, model_id: str | None = None) -> ToolCallingAgent:
     """
     Return a ToolCallingAgent loaded with all personal tools using either Gemini (if API key provided) or local Ollama.
     """
     if api_key:
         model = LiteLLMModel(model_id="gemini/gemini-2.5-flash", api_key=api_key)
     else:
-        model = LocalLiteLLMModel()
+        model = LocalLiteLLMModel(model_id=model_id or "phi3")
     agent = ToolCallingAgent(
         tools=ALL_PERSONAL_TOOLS,
         model=model,

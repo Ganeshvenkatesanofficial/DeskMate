@@ -1,113 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
+import '../theme/app_theme.dart';
 
 class Sidebar extends StatefulWidget {
-  const Sidebar({super.key});
+  final VoidCallback? onOpenSettings;
+  const Sidebar({super.key, this.onOpenSettings});
 
   @override
   State<Sidebar> createState() => _SidebarState();
 }
 
 class _SidebarState extends State<Sidebar> {
-  final TextEditingController _geminiKeyController = TextEditingController();
-  final FocusNode _geminiKeyFocusNode = FocusNode();
-  late TextEditingController _backendUrlController;
-  late FocusNode _backendUrlFocusNode;
-
-
-  @override
-  void initState() {
-    super.initState();
-    _backendUrlFocusNode = FocusNode();
-    _backendUrlFocusNode.addListener(() {
-      setState(() {});
-    });
-    _geminiKeyFocusNode.addListener(() {
-      setState(() {});
-    });
-    final provider = Provider.of<ChatProvider>(context, listen: false);
-    _backendUrlController = TextEditingController(text: provider.backendUrl);
-  
-  }
-
-  @override
-  void dispose() {
-    _backendUrlController.dispose();
-    _backendUrlFocusNode.dispose();
-    _geminiKeyController.dispose();
-    _geminiKeyFocusNode.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ChatProvider>(context);
     final theme = Theme.of(context);
 
     return Container(
-      width: 320,
+      width: 260,
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: theme.dividerColor.withOpacity(0.1))),
+        color: theme.bgSubtle,
+        border: Border(right: BorderSide(color: theme.borderDefault, width: 1)),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
+            // --- BRAND HEADER ---
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: theme.isDark ? theme.bgEmphasis : theme.bgCanvas,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: theme.borderDefault, width: 1),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: theme.accentFg,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Colors.blue[700]!, Colors.indigo[800]!],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.blue.withOpacity(0.25),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'DeskMate',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.5,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              Text(
-                                'Open Source AI',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                    Text(
+                      'DeskMate',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    Text(
+                      'Open Source AI',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgMuted,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -130,10 +85,27 @@ class _SidebarState extends State<Sidebar> {
 
                   ],
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 16),
-            _buildFooter(theme),
+
+            // --- MODE SELECTOR ---
+            _buildModeSelector(provider, theme),
+            const SizedBox(height: 14),
+
+            // --- STATUS CARD ---
+            _buildStatusCard(provider, theme),
+
+            if (provider.mode == AgentMode.personal) ...[
+              const SizedBox(height: 14),
+              _buildPersonalHealthCard(provider, theme),
+            ],
+
+            const Spacer(),
+
+            // --- SETTINGS BUTTON AT BOTTOM ---
+            const SizedBox(height: 12),
+            _buildSettingsButton(theme),
           ],
         ),
       ),
@@ -141,86 +113,218 @@ class _SidebarState extends State<Sidebar> {
   }
 
   Widget _buildModeSelector(ChatProvider provider, ThemeData theme) {
+    final isDeskMate = provider.mode == AgentMode.deskMate;
+    final isPersonal = provider.mode == AgentMode.personal;
+
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => provider.switchMode(AgentMode.deskMate),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.deskMate ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: provider.mode == AgentMode.deskMate
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
-                      : null,
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.folder_open_rounded,
-                        size: 16,
-                        color: provider.mode == AgentMode.deskMate ? theme.colorScheme.primary : Colors.grey[600],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'File Explorer',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: provider.mode == AgentMode.deskMate ? Colors.black : Colors.grey[600],
-                        ),
-                      ),
-                    ],
+          GestureDetector(
+            onTap: () => provider.switchMode(AgentMode.deskMate),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
+              decoration: BoxDecoration(
+                color: isDeskMate
+                    ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+                border: isDeskMate
+                    ? Border.all(color: theme.borderDefault, width: 1)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.folder_open_rounded,
+                    size: 15,
+                    color: isDeskMate ? theme.accentFg : theme.fgMuted,
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'File Explorer',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDeskMate ? theme.fgDefault : theme.fgMuted,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => provider.switchMode(AgentMode.personal),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: provider.mode == AgentMode.personal ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: provider.mode == AgentMode.personal
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
-                      : null,
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.person_rounded,
-                        size: 16,
-                        color: provider.mode == AgentMode.personal ? theme.colorScheme.primary : Colors.grey[600],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Personal Agent',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: provider.mode == AgentMode.personal ? Colors.black : Colors.grey[600],
-                        ),
-                      ),
-                    ],
+          const SizedBox(height: 3),
+          GestureDetector(
+            onTap: () => provider.switchMode(AgentMode.personal),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
+              decoration: BoxDecoration(
+                color: isPersonal
+                    ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+                border: isPersonal
+                    ? Border.all(color: theme.borderDefault, width: 1)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person_rounded,
+                    size: 15,
+                    color: isPersonal ? theme.accentFg : theme.fgMuted,
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Personal Agent',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isPersonal ? theme.fgDefault : theme.fgMuted,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(ChatProvider provider, ThemeData theme) {
+    final isOnline = provider.isBackendOnline;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.isDark ? theme.bgCanvas : theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STATUS',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.08,
+              color: theme.fgMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: isOnline ? theme.successFg : theme.dangerFg,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isOnline ? 'Backend Online' : 'Backend Offline',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isOnline ? theme.fgDefault : theme.dangerFg,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: provider.isUsingGemini
+                      ? theme.accentFg
+                      : (provider.isLocalLlmOnline
+                            ? theme.successFg
+                            : theme.dangerFg),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  provider.isUsingGemini
+                      ? 'Gemini (Flash) Active'
+                      : (provider.isLocalLlmOnline
+                            ? (provider.selectedLocalModel.isNotEmpty
+                                  ? 'Local: ${provider.selectedLocalModel}'
+                                  : 'Local LLM Active')
+                            : 'Local LLM Offline'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: provider.isUsingGemini
+                        ? theme.accentFg
+                        : (provider.isLocalLlmOnline
+                              ? theme.successFg
+                              : theme.dangerFg),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (provider.availableLocalModels.length > 1 &&
+              !provider.isUsingGemini) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+              decoration: BoxDecoration(
+                color: theme.bgSubtle,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: theme.borderDefault, width: 1),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value:
+                      provider.selectedLocalModel.isNotEmpty &&
+                          provider.availableLocalModels.contains(
+                            provider.selectedLocalModel,
+                          )
+                      ? provider.selectedLocalModel
+                      : provider.availableLocalModels.first,
+                  isExpanded: true,
+                  dropdownColor: theme.bgOverlay,
+                  icon: Icon(
+                    Icons.arrow_drop_down,
+                    size: 16,
+                    color: theme.fgMuted,
+                  ),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.fgDefault,
+                  ),
+                  onChanged: (val) {
+                    if (val != null) {
+                      provider.setSelectedLocalModel(val);
+                    }
+                  },
+                  items: provider.availableLocalModels.map((m) {
+                    return DropdownMenuItem<String>(
+                      value: m,
+                      child: Text(m, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -233,27 +337,40 @@ class _SidebarState extends State<Sidebar> {
 
     if (status == 'loading') {
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
+            ),
+          ),
+        ),
       );
     }
 
     if (status == 'offline') {
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.red[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red[100]!),
+          color: theme.dangerBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.dangerBorder, width: 1),
         ),
         child: Row(
           children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
-            const SizedBox(width: 8),
+            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Personal Agent server unreachable.',
-                style: TextStyle(fontSize: 11, color: Colors.red[900], fontWeight: FontWeight.bold),
+                'Personal Agent offline',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.dangerFg,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -269,46 +386,53 @@ class _SidebarState extends State<Sidebar> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blueGrey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blueGrey[100]!),
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'PERSONAL SERVICES HEALTH',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1),
+          Text(
+            'PERSONAL HEALTH',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.fgMuted,
+              letterSpacing: 0.08,
+            ),
           ),
-          const SizedBox(height: 10),
-          _buildHealthRow('Credentials JSON', hasCredsFile),
-          const SizedBox(height: 6),
-          _buildHealthRow('Gmail Access', hasGmailToken),
-          const SizedBox(height: 6),
-          _buildHealthRow('Calendar Access', hasCalToken),
-          const SizedBox(height: 6),
-          _buildHealthRow('Drive Access', hasDriveToken),
+          const SizedBox(height: 8),
+          _buildHealthRow(theme, 'Credentials JSON', hasCredsFile),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Gmail Access', hasGmailToken),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Calendar Access', hasCalToken),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Drive Access', hasDriveToken),
         ],
       ),
     );
   }
 
-  Widget _buildHealthRow(String label, bool isOk) {
+  Widget _buildHealthRow(ThemeData theme, String label, bool isOk) {
     return Row(
       children: [
         Icon(
-          isOk ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-          size: 14,
-          color: isOk ? Colors.green : Colors.grey,
+          isOk
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
+          size: 13,
+          color: isOk ? theme.successFg : theme.fgMuted,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isOk ? Colors.black87 : Colors.grey[600],
-              fontWeight: isOk ? FontWeight.bold : FontWeight.normal,
+              color: isOk ? theme.fgDefault : theme.fgMuted,
+              fontWeight: isOk ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ),
@@ -316,47 +440,29 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-
-  Widget _buildStatusCard(ChatProvider provider, ThemeData theme) {
-    final isOnline = provider.isBackendOnline;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isOnline ? Colors.green : Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                isOnline ? 'Backend Online' : 'Backend Offline',
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.black),
-              ),
-            ],
+  Widget _buildSettingsButton(ThemeData theme) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onOpenSettings,
+        borderRadius: BorderRadius.circular(6),
+        hoverColor: theme.bgEmphasis,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: theme.borderDefault, width: 1),
           ),
-          const SizedBox(height: 12),
-          Row(
+          child: Row(
             children: [
-              const Icon(Icons.history_edu_outlined, size: 16, color: Colors.grey),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  provider.conversationId.isEmpty 
-                      ? 'No active session' 
-                      : 'Session: ${provider.conversationId.substring(0, 8)}...',
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-                  overflow: TextOverflow.ellipsis,
+              Icon(Icons.settings_outlined, size: 16, color: theme.fgMuted),
+              const SizedBox(width: 8),
+              Text(
+                'Settings',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.fgDefault,
                 ),
               ),
             ],

@@ -176,7 +176,6 @@ class LocalLiteLLMModel(Model):
         messages_list = completion_kwargs.get("messages", [])
         
         # Clean messages list for Ollama: Ollama expects "content" to be a string.
-        # smolagents may pass it as a list of dicts (e.g. for multi-modal structures).
         clean_messages = []
         for msg in messages_list:
             role = msg.get("role", "user")
@@ -196,8 +195,8 @@ class LocalLiteLLMModel(Model):
         # Get response dictionary from Ollama chat endpoint
         print("--- OLLAMA CHAT INPUT MESSAGES ---")
         print(json.dumps(clean_messages, indent=2))
-        print("---------------------------------")
-        response_msg = chat_local_llm(clean_messages)
+        print(f"--- MODEL: {self.model_id} ---")
+        response_msg = chat_local_llm(clean_messages, model=self.model_id)
         
         # Extract and clean content to ensure we only return the clean JSON tool call block
         content = response_msg.get("content", "")
@@ -239,11 +238,11 @@ except Exception:
             return fn
         return decorator
 
-def get_agent(api_key: Optional[str] = None) -> ToolCallingAgent:
+def get_agent(api_key: Optional[str] = None, model_id: Optional[str] = None) -> ToolCallingAgent:
     if api_key:
         model = LiteLLMModel(model_id="gemini/gemini-2.5-flash", api_key=api_key)
     else:
-        model = LocalLiteLLMModel()
+        model = LocalLiteLLMModel(model_id=model_id or "phi3")
     
     agent = ToolCallingAgent(
         tools=[read_file, list_directory, search_files, index_document, search_qdrant],
@@ -309,7 +308,8 @@ def _build_chat_prompt(user_input: str, history: Optional[list[dict[str, str]]] 
 def run_agent(
     user_input: str,
     history: Optional[list[dict[str, str]]] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    model_id: Optional[str] = None
 ) -> str:
     if _LANGFUSE_ENABLED and langfuse_context:
         try:
@@ -324,7 +324,7 @@ def run_agent(
         except Exception as e:
             return f"Error invoking list_directory tool: {e}"
     prompt = _build_chat_prompt(user_input, history)
-    result = get_agent(api_key=api_key).run(prompt)
+    result = get_agent(api_key=api_key, model_id=model_id).run(prompt)
     res_str = str(result)
     
     marker = "Based on the above, please provide an answer to the following user task:"

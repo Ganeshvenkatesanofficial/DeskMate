@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/chat_provider.dart';
+import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/sidebar.dart';
 
@@ -16,10 +17,34 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  bool _isSettingsOpen = false;
+  final TextEditingController _geminiKeyController = TextEditingController();
+  final FocusNode _geminiKeyFocusNode = FocusNode();
+  late TextEditingController _backendUrlController;
+  late FocusNode _backendUrlFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _backendUrlFocusNode = FocusNode();
+    _backendUrlFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _geminiKeyFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    _backendUrlController = TextEditingController(text: provider.backendUrl);
+  }
+
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _geminiKeyController.dispose();
+    _geminiKeyFocusNode.dispose();
+    _backendUrlController.dispose();
+    _backendUrlFocusNode.dispose();
     super.dispose();
   }
 
@@ -31,6 +56,20 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  void _openSettings() {
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    _backendUrlController.text = provider.backendUrl;
+    setState(() {
+      _isSettingsOpen = true;
+    });
+  }
+
+  void _closeSettings() {
+    setState(() {
+      _isSettingsOpen = false;
+    });
   }
 
   @override
@@ -64,28 +103,505 @@ class _ChatScreenState extends State<ChatScreen> {
               color: theme.scaffoldBackgroundColor,
               child: Column(
                 children: [
-                  Expanded(
-                    child: provider.messages.isEmpty
-                        ? _buildEmptyState(theme)
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                            itemCount: provider.messages.length + (provider.isSending ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index == provider.messages.length) {
-                                return _buildTypingIndicator(theme);
-                              }
-                              return ChatBubble(message: provider.messages[index]);
-                            },
-                          ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Settings',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: theme.fgDefault,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Manage your DeskMate preferences',
+                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                      ),
+                    ],
                   ),
-                  _buildInputArea(provider, theme),
+                  IconButton(
+                    onPressed: _closeSettings,
+                    icon: Icon(Icons.close, color: theme.fgMuted, size: 20),
+                    hoverColor: theme.bgEmphasis,
+                    splashRadius: 20,
+                  ),
                 ],
               ),
             ),
+            Divider(color: theme.borderDefault, height: 1),
+
+            // Scrollable Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- SECTION 1: APPEARANCE ---
+                    Text(
+                      'Appearance',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Choose how DeskMate looks.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Theme Mode',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildThemeSelectorInSettings(provider, theme),
+
+                    const SizedBox(height: 28),
+                    Divider(color: theme.borderDefault, height: 1),
+                    const SizedBox(height: 28),
+
+                    // --- SECTION 2: AI CONFIGURATION ---
+                    Text(
+                      'AI Configuration',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Configure your AI provider.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Gemini API Key',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _geminiKeyController,
+                        obscureText: !_geminiKeyFocusNode.hasFocus,
+                        focusNode: _geminiKeyFocusNode,
+                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(
+                            Icons.vpn_key_outlined,
+                            size: 16,
+                            color: theme.fgMuted,
+                          ),
+                          hintText: 'Enter Gemini API Key',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 38,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          provider.setGeminiApiKey(_geminiKeyController.text);
+                          _geminiKeyController.clear();
+                          FocusScope.of(context).unfocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                'Gemini API Key loaded for this session.',
+                              ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: theme.successFg,
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.accentEmphasis,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        icon: const Icon(Icons.vpn_key, size: 15),
+                        label: const Text('Load Gemini API'),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+                    Divider(color: theme.borderDefault, height: 1),
+                    const SizedBox(height: 28),
+
+                    // --- SECTION 3: BACKEND ---
+                    Text(
+                      'Backend',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Connect DeskMate to your backend.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Backend URL',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _backendUrlController,
+                        focusNode: _backendUrlFocusNode,
+                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(
+                            Icons.link,
+                            size: 16,
+                            color: theme.fgMuted,
+                          ),
+                          hintText: 'Enter Backend URL',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        onSubmitted: (value) {
+                          provider.setBackendUrl(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 38,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          provider.setBackendUrl(_backendUrlController.text);
+                          FocusScope.of(context).unfocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Backend URL saved.'),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: theme.accentEmphasis,
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: theme.isDark
+                              ? theme.bgEmphasis
+                              : theme.bgSubtle,
+                          side: BorderSide(
+                            color: theme.borderDefault,
+                            width: 1,
+                          ),
+                          foregroundColor: theme.fgDefault,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        icon: const Icon(Icons.save, size: 15),
+                        label: const Text('Save URL'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeSelectorInSettings(ChatProvider provider, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
+      ),
+      child: Row(
+        children: [
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.light,
+            icon: Icons.light_mode_outlined,
+            label: 'Light',
+          ),
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.dark,
+            icon: Icons.dark_mode_outlined,
+            label: 'Dark',
+          ),
+          _buildThemeOptionInSettings(
+            provider: provider,
+            theme: theme,
+            mode: ThemeMode.system,
+            icon: Icons.desktop_windows_outlined,
+            label: 'System',
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildThemeOptionInSettings({
+    required ChatProvider provider,
+    required ThemeData theme,
+    required ThemeMode mode,
+    required IconData icon,
+    required String label,
+  }) {
+    final isSelected = provider.themeMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => provider.setThemeMode(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+            border: isSelected
+                ? Border.all(color: theme.borderDefault, width: 1)
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? theme.accentFg : theme.fgMuted,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? theme.fgDefault : theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModelSelectionPopup(
+    BuildContext context,
+    ChatProvider provider,
+    ThemeData theme,
+  ) {
+    String tempSelected = provider.selectedLocalModel.isNotEmpty
+        ? provider.selectedLocalModel
+        : provider.availableLocalModels.first;
+
+    return StatefulBuilder(
+      builder: (context, setPopupState) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+            side: BorderSide(color: theme.borderDefault, width: 1),
+          ),
+          elevation: 8,
+          backgroundColor: theme.bgOverlay,
+          child: Container(
+            width: 480,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.borderDefault,
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.memory_rounded,
+                        color: theme.accentFg,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Multiple Local Models Detected',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: theme.fgDefault,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Select which Ollama model to use for your AI queries:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.fgMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(color: theme.borderDefault, height: 1),
+                const SizedBox(height: 14),
+                Text(
+                  'AVAILABLE MODELS ON THIS LAPTOP (${provider.availableLocalModels.length}):',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.08,
+                    color: theme.fgMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: provider.availableLocalModels.map((modelName) {
+                        final isSelected = tempSelected == modelName;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (theme.isDark
+                                      ? theme.bgEmphasis
+                                      : theme.bgSubtle)
+                                : theme.bgCanvas,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isSelected
+                                  ? theme.accentFg
+                                  : theme.borderDefault,
+                              width: 1,
+                            ),
+                          ),
+                          child: RadioListTile<String>(
+                            value: modelName,
+                            // ignore: deprecated_member_use
+                            groupValue: tempSelected,
+                            activeColor: theme.accentFg,
+                            title: Text(
+                              modelName,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: theme.fgDefault,
+                              ),
+                            ),
+                            subtitle: Text(
+                              isSelected
+                                  ? 'Active Selection'
+                                  : 'Click to select',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isSelected
+                                    ? theme.accentFg
+                                    : theme.fgMuted,
+                              ),
+                            ),
+                            // ignore: deprecated_member_use
+                            onChanged: (val) {
+                              if (val != null) {
+                                setPopupState(() {
+                                  tempSelected = val;
+                                });
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () {
+                        provider.dismissModelSelectionDialog();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: theme.isDark
+                            ? theme.bgEmphasis
+                            : theme.bgSubtle,
+                        side: BorderSide(color: theme.borderDefault, width: 1),
+                        foregroundColor: theme.fgDefault,
+                      ),
+                      child: const Text('Use Default'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        provider.setSelectedLocalModel(tempSelected);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.accentEmphasis,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Proceed with Selected Model'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -93,77 +609,123 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     final isPersonal = provider.mode == AgentMode.personal;
 
-    final title = isPersonal ? 'DeskMate Personal Agent' : 'Welcome to DeskMate';
+    final title = isPersonal
+        ? 'DeskMate Personal Agent'
+        : 'Welcome to DeskMate';
     final subtitle = isPersonal
         ? 'Your free offline & cloud assistant. Manage tasks, notes, weather, emails, and calendar.'
         : 'Search, analyze, and manage your local files with smart AI capability.';
 
     final examples = isPersonal
         ? [
-            {'icon': Icons.task_alt_rounded, 'text': 'Add task to my Google Tasks: Prep demo', 'label': 'Google Tasks'},
-            {'icon': Icons.insert_drive_file_outlined, 'text': 'Create a Google Doc named Project Outline containing scope', 'label': 'Google Docs'},
-            {'icon': Icons.mail_outline_rounded, 'text': 'Search my sent emails', 'label': 'Gmail Search'},
-            {'icon': Icons.calendar_today_rounded, 'text': 'List my calendar events for tomorrow', 'label': 'Google Calendar'},
+            {
+              'icon': Icons.task_alt_rounded,
+              'text': 'Add task to my Google Tasks: Prep demo',
+              'label': 'Google Tasks',
+            },
+            {
+              'icon': Icons.insert_drive_file_outlined,
+              'text':
+                  'Create a Google Doc named Project Outline containing scope',
+              'label': 'Google Docs',
+            },
+            {
+              'icon': Icons.mail_outline_rounded,
+              'text': 'Search my sent emails',
+              'label': 'Gmail Search',
+            },
+            {
+              'icon': Icons.calendar_today_rounded,
+              'text': 'List my calendar events for tomorrow',
+              'label': 'Google Calendar',
+            },
           ]
         : [
-            {'icon': Icons.search_rounded, 'text': 'Find PDF files larger than 10MB', 'label': 'Find Files'},
-            {'icon': Icons.analytics_outlined, 'text': 'Summarize recent financial reports', 'label': 'Summarize'},
-            {'icon': Icons.find_in_page_outlined, 'text': 'Search "react" inside folder', 'label': 'Grep Search'},
-            {'icon': Icons.info_outline, 'text': 'Show details of requirements.txt', 'label': 'Metadata'},
+            {
+              'icon': Icons.search_rounded,
+              'text': 'Find PDF files larger than 10MB',
+              'label': 'Find Files',
+            },
+            {
+              'icon': Icons.analytics_outlined,
+              'text': 'Summarize recent financial reports',
+              'label': 'Summarize',
+            },
+            {
+              'icon': Icons.find_in_page_outlined,
+              'text': 'Search "react" inside folder',
+              'label': 'Grep Search',
+            },
+            {
+              'icon': Icons.info_outline,
+              'text': 'Show details of requirements.txt',
+              'label': 'Metadata',
+            },
           ];
 
     return Center(
       child: SingleChildScrollView(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          constraints: const BoxConstraints(maxWidth: 640),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue[700]!, Colors.indigo[800]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  color: theme.isDark ? theme.bgSubtle : theme.bgSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.borderDefault, width: 1),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded, size: 40, color: Colors.white),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 32,
+                  color: theme.accentFg,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Text(
                 title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: theme.fgDefault,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.fgMuted,
+                  height: 1.5,
+                ),
               ),
-              const SizedBox(height: 32),
-              Text(
-                'TRY THESE EXAMPLES',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[400], letterSpacing: 1.5),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Text(
+                    'TRY THESE EXAMPLES',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgMuted,
+                      letterSpacing: 0.08,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 2.3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 2.4,
                 ),
                 itemCount: examples.length,
                 itemBuilder: (context, index) {
@@ -183,76 +745,93 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildExampleCard(ThemeData theme, IconData icon, String label, String text) {
+  Widget _buildExampleCard(
+    ThemeData theme,
+    IconData icon,
+    String label,
+    String text,
+  ) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(6),
           onTap: () {
             setState(() {
               _messageController.text = text;
             });
           },
+          hoverColor: theme.bgEmphasis,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 16, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[700], letterSpacing: 0.5),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Expanded(
-                child: Text(
-                  text,
-                  style: const TextStyle(fontSize: 11, color: Colors.black87, height: 1.3),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 14, color: theme.accentFg),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.accentFg,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.fgDefault,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildTypingIndicator(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: theme.colorScheme.secondary.withOpacity(0.1),
-            radius: 12,
-            child: const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Text(
             'Assistant is thinking...',
-            style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.fgMuted,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
-      ).animate().fadeIn(),
+      ).animate().fadeIn(duration: 150.ms),
     );
   }
 
@@ -260,29 +839,35 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: theme.bgSubtle,
+        border: Border(top: BorderSide(color: theme.borderDefault, width: 1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (provider.errorMessage.isNotEmpty && !provider.isConnecting && provider.isBackendOnline)
+          if (provider.errorMessage.isNotEmpty &&
+              !provider.isConnecting &&
+              provider.isBackendOnline)
             Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: theme.dangerBg,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.dangerBorder, width: 1),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                    Icon(Icons.error_outline, color: theme.dangerFg, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         provider.errorMessage,
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                        style: TextStyle(color: theme.dangerFg, fontSize: 12),
                       ),
                     ),
                   ],
@@ -291,66 +876,68 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           if (provider.isConnecting)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
+                  SizedBox(
+                    width: 16,
+                    height: 16,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(theme.accentFg),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Text(
                     'Initializing local AI service & loading models...',
                     style: TextStyle(
-                      color: Colors.blue[800],
+                      color: theme.accentFg,
                       fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                      fontSize: 13,
                     ),
                   ),
                 ],
-              )
-              .animate(onPlay: (controller) => controller.repeat(reverse: true))
-              .fadeIn(duration: 400.ms)
-              .shimmer(color: Colors.blue[100], duration: 1500.ms),
+              ),
             )
           else if (!provider.isBackendOnline)
             Container(
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                color: theme.bgEmphasis,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: theme.attentionFg, width: 1),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
-                  const SizedBox(width: 12),
-                  const Expanded(
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: theme.attentionFg,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
                     child: Text(
                       'AI Service is offline. Please wait or retry connecting.',
                       style: TextStyle(
-                        color: Colors.orange,
+                        color: theme.attentionFg,
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ),
-                  ElevatedButton.icon(
+                  OutlinedButton.icon(
                     onPressed: () {
                       provider.retryConnecting();
                     },
-                    icon: const Icon(Icons.refresh, size: 16),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    icon: const Icon(Icons.refresh, size: 14),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: theme.attentionFg, width: 1),
+                      foregroundColor: theme.attentionFg,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                     ),
                     label: const Text('Retry'),
                   ),
@@ -366,7 +953,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: 4,
                     minLines: 1,
                     textInputAction: TextInputAction.send,
-                    style: const TextStyle(color: Colors.black),
+                    style: TextStyle(color: theme.fgDefault, fontSize: 13),
                     onSubmitted: (val) {
                       if (val.isNotEmpty) {
                         provider.sendMessage(val);
@@ -374,42 +961,73 @@ class _ChatScreenState extends State<ChatScreen> {
                       }
                     },
                     decoration: InputDecoration(
-                      hintText: (!provider.isLocalLlmOnline && !provider.isUsingGemini)
-                          ? 'Please enter your Gemini API Key in the sidebar to continue...'
+                      hintText:
+                          (!provider.isLocalLlmOnline &&
+                              !provider.isUsingGemini)
+                          ? 'Please configure your Gemini API Key in Settings to continue...'
                           : provider.mode == AgentMode.personal
-                              ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
-                              : 'Ask about your files...',
-                      hintStyle: TextStyle(color: Colors.grey[600]),
-                      enabled: !provider.isSending && (provider.isLocalLlmOnline || provider.isUsingGemini),
+                          ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
+                          : 'Ask about your files...',
+                      hintStyle: TextStyle(color: theme.fgMuted, fontSize: 13),
+                      enabled:
+                          !provider.isSending &&
+                          (provider.isLocalLlmOnline || provider.isUsingGemini),
+                      fillColor: theme.bgCanvas,
                       filled: true,
-                      fillColor: Colors.grey[50],
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                FloatingActionButton(
-                  onPressed: provider.isSending || (!provider.isLocalLlmOnline && !provider.isUsingGemini)
-                      ? null
-                      : () {
-                          if (_messageController.text.isNotEmpty) {
-                            provider.sendMessage(_messageController.text);
-                            _messageController.clear();
-                          }
-                        },
-                  elevation: 0,
-                  backgroundColor: provider.isSending || (!provider.isLocalLlmOnline && !provider.isUsingGemini) ? Colors.grey : Colors.blue[700],
-                  child: provider.isSending
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                      : const Icon(Icons.send_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 40,
+                  width: 42,
+                  child: ElevatedButton(
+                    onPressed:
+                        provider.isSending ||
+                            (!provider.isLocalLlmOnline &&
+                                !provider.isUsingGemini)
+                        ? null
+                        : () {
+                            if (_messageController.text.isNotEmpty) {
+                              provider.sendMessage(_messageController.text);
+                              _messageController.clear();
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      backgroundColor: theme.accentEmphasis,
+                      disabledBackgroundColor: theme.bgEmphasis,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: provider.isSending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                  ),
                 ),
               ],
             ),
           const SizedBox(height: 8),
-          Text(
-            'Powered by DeskMate AI • Open Source Edition',
-            style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, color: theme.hintColor),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Powered by DeskMate AI • Open Source Edition',
+                style: TextStyle(fontSize: 10, color: theme.fgMuted),
+              ),
+            ],
           ),
         ],
       ),

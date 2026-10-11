@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 
@@ -38,7 +39,9 @@ class BackendManager {
   /// Launch backend executable silently in background on dynamic free port
   static Future<void> start() async {
     if (!Platform.isWindows && !Platform.isMacOS) {
-      print('Automated local background process spawning is only supported on Windows and macOS.');
+      debugPrint(
+        'Automated local background process spawning is only supported on Windows and macOS.',
+      );
       return;
     }
 
@@ -53,7 +56,7 @@ class BackendManager {
 
     try {
       final appDir = p.dirname(Platform.resolvedExecutable);
-      String exePath;
+      String exePath = '';
 
       if (Platform.isWindows) {
         exePath = p.join(
@@ -95,6 +98,10 @@ class BackendManager {
         return;
       }
 
+      _assignedPort = await findFreePort();
+      debugPrint('Assigned dynamic random port: $_assignedPort');
+      debugPrint('Starting backend from: $exePath on port $_assignedPort');
+
       // Ensure execution permissions on Unix/macOS
       if (Platform.isMacOS) {
         try {
@@ -115,15 +122,14 @@ class BackendManager {
 
       // Forward output to local Flutter debug log
       _process!.stdout.transform(utf8.decoder).listen((data) {
-        print('[Backend STDOUT]: $data');
+        debugPrint('[Backend STDOUT]: $data');
       });
 
       _process!.stderr.transform(utf8.decoder).listen((data) {
-        print('[Backend STDERR]: $data');
+        debugPrint('[Backend STDERR]: $data');
       });
-
     } catch (e) {
-      print('Failed to launch backend subprocess: $e');
+      debugPrint('Failed to launch backend subprocess: $e');
     }
   }
 

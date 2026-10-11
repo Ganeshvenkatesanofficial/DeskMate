@@ -23,13 +23,22 @@ class ChatProvider extends ChangeNotifier {
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Timer? _healthTimer;
 
+  // Local Ollama Models state
+  List<String> _availableLocalModels = [];
+  String _selectedLocalModel = '';
+  bool _showModelSelectionDialog = false;
+  bool _hasPromptedModelSelection = false;
+
   // Gemini API key – kept only in memory, never persisted.
   String _geminiApiKey = '';
 
-  List<ChatMessage> get messages => _mode == AgentMode.personal ? _personalMessages : _fileMessages;
+  List<ChatMessage> get messages =>
+      _mode == AgentMode.personal ? _personalMessages : _fileMessages;
   bool get isSending => _isSending;
   String get errorMessage => _errorMessage;
-  String get conversationId => _mode == AgentMode.personal ? _personalConversationId : _fileConversationId;
+  String get conversationId => _mode == AgentMode.personal
+      ? _personalConversationId
+      : _fileConversationId;
   String get backendUrl => _backendUrl;
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
@@ -39,6 +48,9 @@ class ChatProvider extends ChangeNotifier {
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
+  List<String> get availableLocalModels => _availableLocalModels;
+  String get selectedLocalModel => _selectedLocalModel;
+  bool get showModelSelectionDialog => _showModelSelectionDialog;
 
   late ApiService _apiService;
 
@@ -129,23 +141,43 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
     const int maxAttempts = 30;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      final health = await _apiService.checkHealth();
+      var health = await _apiService.checkHealth();
       if (health['status'] == 'ok') {
         _isBackendOnline = true;
         _isLocalLlmOnline = health['local_llm'] == 'online';
         _isConnecting = false;
         _errorMessage = '';
         checkPersonalAgentStatus();
+        fetchAvailableModels();
         notifyListeners();
         _startHealthPolling();
         return;
+      }
+      // Fallback check on default port 8080 if assigned port isn't responding yet
+      if (_backendUrl != 'http://127.0.0.1:8080') {
+        final fallbackService = ApiService(baseUrl: 'http://127.0.0.1:8080');
+        final fallbackHealth = await fallbackService.checkHealth();
+        if (fallbackHealth['status'] == 'ok') {
+          _backendUrl = 'http://127.0.0.1:8080';
+          _apiService = fallbackService;
+          _isBackendOnline = true;
+          _isLocalLlmOnline = fallbackHealth['local_llm'] == 'online';
+          _isConnecting = false;
+          _errorMessage = '';
+          checkPersonalAgentStatus();
+          fetchAvailableModels();
+          notifyListeners();
+          _startHealthPolling();
+          return;
+        }
       }
       await Future.delayed(const Duration(seconds: 1));
     }
     _isConnecting = false;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
-    _errorMessage = 'Failed to connect to local backend. Please ensure the backend server is running.';
+    _errorMessage =
+        'Failed to connect to local backend. Please ensure the backend server is running.';
     notifyListeners();
   }
 
@@ -155,10 +187,14 @@ class ChatProvider extends ChangeNotifier {
       final health = await _apiService.checkHealth();
       bool newBackendOnline = health['status'] == 'ok';
       bool newLocalLlmOnline = health['local_llm'] == 'online';
-      
-      if (_isBackendOnline != newBackendOnline || _isLocalLlmOnline != newLocalLlmOnline) {
+
+      if (_isBackendOnline != newBackendOnline ||
+          _isLocalLlmOnline != newLocalLlmOnline) {
         _isBackendOnline = newBackendOnline;
         _isLocalLlmOnline = newLocalLlmOnline;
+        if (_isBackendOnline && _availableLocalModels.isEmpty) {
+          fetchAvailableModels();
+        }
         notifyListeners();
       }
     });
@@ -193,7 +229,11 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || _isSending) return;
-    final userMsg = ChatMessage(id: DateTime.now().toString(), role: MessageRole.user, content: text);
+    final userMsg = ChatMessage(
+      id: DateTime.now().toString(),
+      role: MessageRole.user,
+      content: text,
+    );
     if (_mode == AgentMode.personal) {
       _personalMessages.add(userMsg);
     } else {
@@ -205,17 +245,19 @@ class ChatProvider extends ChangeNotifier {
     try {
       Map<String, dynamic> response;
       if (_mode == AgentMode.personal) {
-        // Use Gemini if key provided, otherwise local backend.
+        // Use Gemini if key provided, otherwise local backend with selected model.
         response = await _apiService.sendPersonalMessage(
           message: text,
           conversationId: _personalConversationId,
           geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+          model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
         );
       } else {
         response = await _apiService.sendMessage(
           message: text,
           conversationId: _fileConversationId,
           geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+          model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
         );
       }
       final newId = response['conversation_id'] as String? ?? '';
@@ -223,23 +265,33 @@ class ChatProvider extends ChangeNotifier {
       if (_mode == AgentMode.personal) {
         if (newId.isNotEmpty && newId != _personalConversationId) {
           _personalConversationId = newId;
-          await prefs.setString('deskmate_personal_conversation_id', _personalConversationId);
+          await prefs.setString(
+            'deskmate_personal_conversation_id',
+            _personalConversationId,
+          );
         }
-        _personalMessages.add(ChatMessage(
-          id: DateTime.now().toString(),
-          role: MessageRole.assistant,
-          content: response['reply'] as String? ?? '',
-        ));
+        _personalMessages.add(
+          ChatMessage(
+            id: DateTime.now().toString(),
+            role: MessageRole.assistant,
+            content: response['reply'] as String? ?? '',
+          ),
+        );
       } else {
         if (newId.isNotEmpty && newId != _fileConversationId) {
           _fileConversationId = newId;
-          await prefs.setString('deskmate_conversation_id', _fileConversationId);
+          await prefs.setString(
+            'deskmate_conversation_id',
+            _fileConversationId,
+          );
         }
-        _fileMessages.add(ChatMessage(
-          id: DateTime.now().toString(),
-          role: MessageRole.assistant,
-          content: response['reply'] as String? ?? '',
-        ));
+        _fileMessages.add(
+          ChatMessage(
+            id: DateTime.now().toString(),
+            role: MessageRole.assistant,
+            content: response['reply'] as String? ?? '',
+          ),
+        );
       }
     } catch (e) {
       _errorMessage = e.toString();
