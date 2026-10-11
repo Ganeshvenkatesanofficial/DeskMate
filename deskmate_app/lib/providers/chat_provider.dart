@@ -69,54 +69,20 @@ class ChatProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
-    _personalConversationId =
-        prefs.getString('deskmate_personal_conversation_id') ?? '';
+    _personalConversationId = prefs.getString('deskmate_personal_conversation_id') ?? '';
     final savedUrl = prefs.getString('deskmate_backend_url');
-    if (savedUrl == null || savedUrl.isEmpty) {
+    if (savedUrl == null || savedUrl.isEmpty || savedUrl.contains('8080')) {
       _backendUrl = BackendManager.backendUrl;
     } else {
       _backendUrl = savedUrl;
     }
-    _selectedLocalModel = prefs.getString('deskmate_selected_model') ?? '';
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
     final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
       _themeMode = ThemeMode.values[themeIndex];
     }
+    // Gemini key not persisted; asked each session.
     _apiService = ApiService(baseUrl: _backendUrl);
-    notifyListeners();
-  }
-
-  Future<void> fetchAvailableModels() async {
-    if (!_isBackendOnline) return;
-    try {
-      final models = await _apiService.getAvailableModels();
-      _availableLocalModels = models;
-      if (_availableLocalModels.isNotEmpty) {
-        if (_selectedLocalModel.isEmpty ||
-            !_availableLocalModels.contains(_selectedLocalModel)) {
-          _selectedLocalModel = _availableLocalModels.first;
-        }
-        if (_availableLocalModels.length > 1 && !_hasPromptedModelSelection) {
-          _showModelSelectionDialog = true;
-        }
-      }
-      notifyListeners();
-    } catch (_) {}
-  }
-
-  Future<void> setSelectedLocalModel(String model) async {
-    _selectedLocalModel = model;
-    _showModelSelectionDialog = false;
-    _hasPromptedModelSelection = true;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('deskmate_selected_model', model);
-    notifyListeners();
-  }
-
-  void dismissModelSelectionDialog() {
-    _showModelSelectionDialog = false;
-    _hasPromptedModelSelection = true;
     notifyListeners();
   }
 
@@ -168,10 +134,10 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
-    if (_backendUrl.isEmpty) {
+    if (_backendUrl.isEmpty || _backendUrl.contains('8080')) {
       _backendUrl = BackendManager.backendUrl;
+      _apiService = ApiService(baseUrl: _backendUrl);
     }
-    _apiService = ApiService(baseUrl: _backendUrl);
     notifyListeners();
     const int maxAttempts = 30;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {

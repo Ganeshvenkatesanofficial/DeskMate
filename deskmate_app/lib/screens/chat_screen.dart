@@ -81,144 +81,27 @@ class _ChatScreenState extends State<ChatScreen> {
     // Auto-scroll on new messages
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
-    return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
-      onKeyEvent: (event) {
-        if (event.logicalKey.keyLabel == 'Escape' && _isSettingsOpen) {
-          _closeSettings();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: theme.bgCanvas,
-        appBar: isDesktop
-            ? null
-            : AppBar(
-                backgroundColor: theme.bgSubtle,
-                elevation: 0,
-                title: Text(
-                  'DeskMate',
-                  style: TextStyle(
-                    color: theme.fgDefault,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                actions: [
-                  IconButton(
-                    onPressed: _openSettings,
-                    icon: Icon(Icons.settings_outlined, color: theme.fgMuted),
-                  ),
-                  IconButton(
-                    onPressed: () => provider.resetChat(),
-                    icon: Icon(Icons.refresh, color: theme.fgMuted),
-                  ),
-                ],
-              ),
-        drawer: isDesktop
-            ? null
-            : Drawer(child: Sidebar(onOpenSettings: _openSettings)),
-        body: Stack(
-          children: [
-            Row(
-              children: [
-                if (isDesktop) Sidebar(onOpenSettings: _openSettings),
-                Expanded(
-                  child: Container(
-                    color: theme.bgCanvas,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: provider.messages.isEmpty
-                              ? _buildEmptyState(theme)
-                              : ListView.builder(
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 24,
-                                  ),
-                                  itemCount:
-                                      provider.messages.length +
-                                      (provider.isSending ? 1 : 0),
-                                  itemBuilder: (context, index) {
-                                    if (index == provider.messages.length) {
-                                      return _buildTypingIndicator(theme);
-                                    }
-                                    return ChatBubble(
-                                      message: provider.messages[index],
-                                    );
-                                  },
-                                ),
-                        ),
-                        _buildInputArea(provider, theme),
-                      ],
-                    ),
-                  ),
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              title: const Text('DeskMate'),
+              actions: [
+                IconButton(
+                  onPressed: () => provider.resetChat(),
+                  icon: const Icon(Icons.refresh),
                 ),
               ],
             ),
-            if (provider.showModelSelectionDialog &&
-                provider.availableLocalModels.length > 1)
-              Positioned.fill(
-                child: Container(
-                  color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
-                  child: Center(
-                    child: _buildModelSelectionPopup(context, provider, theme),
-                  ),
-                ).animate().fadeIn(duration: 200.ms),
-              ),
-            if (_isSettingsOpen) ...[
-              // Solid Overlay
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: _closeSettings,
-                  child: Container(
-                    color: theme.isDark
-                        ? const Color(0x73010409)
-                        : const Color(0x1A1F2328),
-                  ),
-                ).animate().fadeIn(duration: 150.ms),
-              ),
-              // Right Settings Drawer Panel
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 0,
-                width: 420,
-                child: _buildSettingsPanel(provider, theme).animate().slideX(
-                  begin: 1.0,
-                  end: 0.0,
-                  duration: 200.ms,
-                  curve: Curves.easeOut,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingsPanel(ChatProvider provider, ThemeData theme) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
-        border: Border(left: BorderSide(color: theme.borderDefault, width: 1)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x40010409),
-            blurRadius: 24,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Panel Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      drawer: isDesktop ? null : const Drawer(child: Sidebar()),
+      body: Row(
+        children: [
+          if (isDesktop) const Sidebar(),
+          Expanded(
+            child: Container(
+              color: theme.scaffoldBackgroundColor,
+              child: Column(
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

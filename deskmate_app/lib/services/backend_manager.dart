@@ -29,7 +29,7 @@ class BackendManager {
     try {
       final response = await http
           .get(Uri.parse('http://127.0.0.1:$checkPort/api/health'))
-          .timeout(const Duration(milliseconds: 1500));
+          .timeout(const Duration(milliseconds: 500));
       return response.statusCode == 200;
     } catch (_) {
       return false;
@@ -47,11 +47,12 @@ class BackendManager {
 
     if (await isBackendRunning(8080)) {
       _assignedPort = 8080;
-      debugPrint(
-        'Backend is already running on port 8080. Reusing existing instance.',
-      );
+      print('Backend is already running on port 8080. Reusing existing instance.');
       return;
     }
+
+    _assignedPort = await findFreePort();
+    print('Assigned dynamic random port: $_assignedPort');
 
     try {
       final appDir = p.dirname(Platform.resolvedExecutable);
@@ -68,63 +69,32 @@ class BackendManager {
         );
       } else if (Platform.isMacOS) {
         final candidatePaths = [
-          p.join(
-            appDir,
-            '..',
-            'Resources',
-            'flutter_assets',
-            'assets',
-            'backend',
-            'deskmate_backend',
-          ),
-          p.join(
-            appDir,
-            '..',
-            'Frameworks',
-            'App.framework',
-            'Resources',
-            'flutter_assets',
-            'assets',
-            'backend',
-            'deskmate_backend',
-          ),
-          p.join(
-            appDir,
-            '..',
-            'Frameworks',
-            'App.framework',
-            'Versions',
-            'A',
-            'Resources',
-            'flutter_assets',
-            'assets',
-            'backend',
-            'deskmate_backend',
-          ),
-          p.join(
-            appDir,
-            'flutter_assets',
-            'assets',
-            'backend',
-            'deskmate_backend',
-          ),
+          p.join(appDir, '..', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, '..', 'Frameworks', 'App.framework', 'Versions', 'A', 'Resources', 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, 'flutter_assets', 'assets', 'backend', 'deskmate_backend'),
         ];
-
+        
+        exePath = '';
         for (final candidate in candidatePaths) {
           if (await File(candidate).exists()) {
             exePath = candidate;
             break;
           }
         }
+        if (exePath.isEmpty) {
+          exePath = candidatePaths.first;
+        }
       } else {
         return;
       }
 
-      if (exePath.isEmpty || !await File(exePath).exists()) {
-        _assignedPort = 8080;
-        debugPrint(
-          'Backend executable not found at $exePath. Defaulting to port 8080 for development.',
-        );
+      print('Starting backend from: $exePath on port $_assignedPort');
+
+      final file = File(exePath);
+      if (!await file.exists()) {
+        print('Error: Backend executable not found at $exePath.');
+        print('Please make sure backend is compiled and placed in assets/backend/');
         return;
       }
 
@@ -142,14 +112,13 @@ class BackendManager {
       }
 
       // Spawn process silently with dynamic port argument
-      _process = await Process.start(exePath, [
-        '--port',
-        '$_assignedPort',
-      ], runInShell: false);
-
-      debugPrint(
-        'Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort',
+      _process = await Process.start(
+        exePath,
+        ['--port', '$_assignedPort'],
+        runInShell: false,
       );
+
+      print('Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort');
 
       // Forward output to local Flutter debug log
       _process!.stdout.transform(utf8.decoder).listen((data) {
@@ -167,21 +136,19 @@ class BackendManager {
   /// Stop the backend subprocess
   static Future<void> stop() async {
     if (!Platform.isWindows && !Platform.isMacOS) return;
-    if (_process == null) return;
+    if (_process != null) {
+      try {
+        _process!.kill(ProcessSignal.sigkill);
+      } catch (_) {}
+      _process = null;
+      print('Backend subprocess killed.');
+    }
     try {
-      _process!.kill(ProcessSignal.sigkill);
       if (Platform.isWindows) {
-        await Process.run('taskkill', [
-          '/F',
-          '/IM',
-          'deskmate_backend.exe',
-          '/T',
-        ]);
+        await Process.run('taskkill', ['/F', '/IM', 'deskmate_backend.exe', '/T']);
       } else if (Platform.isMacOS) {
         await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
       }
     } catch (_) {}
-    _process = null;
-    debugPrint('Backend subprocess killed.');
   }
 }
