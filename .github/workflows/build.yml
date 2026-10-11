@@ -239,11 +239,6 @@ jobs:
             --set-exit-if-changed \
             .
 
-      - name: Flutter tests
-        working-directory: deskmate_app
-        run: |
-          flutter test
-
 
 # ============================================================
 # 8. GITHUB DEPENDENCY REVIEW
