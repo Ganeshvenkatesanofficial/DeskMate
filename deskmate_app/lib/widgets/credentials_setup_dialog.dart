@@ -545,7 +545,11 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         const SizedBox(width: 6),
                         _buildTabButton(3, '⚙️ .env Configuration', theme),
                         const SizedBox(width: 6),
-                        _buildTabButton(4, '📖 Personal Assistant Guide', theme),
+                        _buildTabButton(
+                          4,
+                          '📖 Personal Assistant Guide',
+                          theme,
+                        ),
                       ] else ...[
                         _buildTabButton(0, '🦙 Ollama & Model Setup', theme),
                         const SizedBox(width: 6),
@@ -553,7 +557,11 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         const SizedBox(width: 6),
                         _buildTabButton(2, '📁 File Copilot Tools', theme),
                         const SizedBox(width: 6),
-                        _buildTabButton(3, '⚙️ File Agent Configuration', theme),
+                        _buildTabButton(
+                          3,
+                          '⚙️ File Agent Configuration',
+                          theme,
+                        ),
                         const SizedBox(width: 6),
                         _buildTabButton(4, '📖 File Copilot Guide', theme),
                       ],

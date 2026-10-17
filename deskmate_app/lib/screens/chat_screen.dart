@@ -282,11 +282,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     Center(
                       child: CredentialsSetupDialog(
                         mode: _guideOverrideMode ?? provider.mode,
-                        onClose: () =>
-                            setState(() {
-                              _isSetupGuideOpen = false;
-                              _guideOverrideMode = null;
-                            }),
+                        onClose: () => setState(() {
+                          _isSetupGuideOpen = false;
+                          _guideOverrideMode = null;
+                        }),
                       ),
                     ).animate().scale(
                       begin: const Offset(0.95, 0.95),
@@ -308,11 +307,7 @@ class _ChatScreenState extends State<ChatScreen> {
         color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
         border: Border(left: BorderSide(color: theme.borderDefault, width: 1)),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x40010409),
-            blurRadius: 24,
-            spreadRadius: 0,
-          ),
+          BoxShadow(color: Color(0x40010409), blurRadius: 24, spreadRadius: 0),
         ],
       ),
       child: SafeArea(
@@ -361,10 +356,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         Text(
                           'Preferences & Engine Configuration',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.fgMuted,
-                          ),
+                          style: TextStyle(fontSize: 11, color: theme.fgMuted),
                         ),
                       ],
                     ),
@@ -717,10 +709,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Text(
               '(or leave empty for offline)',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10,
-                color: theme.fgMuted,
-              ),
+              style: TextStyle(fontSize: 10, color: theme.fgMuted),
             ),
           ),
         ],
@@ -1013,7 +1002,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _isSavingAllSettings = true;
     });
 
-    final modelToSave = _settingsSelectedModel ??
+    final modelToSave =
+        _settingsSelectedModel ??
         (provider.availableLocalModels.contains(provider.selectedLocalModel)
             ? provider.selectedLocalModel
             : (provider.availableLocalModels.isNotEmpty
@@ -1066,7 +1056,8 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           setState(() {
             _googleCredsError =
-                credResult['message'] ?? 'Failed to activate OAuth credentials.';
+                credResult['message'] ??
+                'Failed to activate OAuth credentials.';
             _isSavingAllSettings = false;
           });
         }
@@ -1695,10 +1686,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   decoration: BoxDecoration(
                     color: theme.isDark ? theme.bgEmphasis : theme.bgCanvas,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: theme.borderDefault,
-                      width: 1,
-                    ),
+                    border: Border.all(color: theme.borderDefault, width: 1),
                   ),
                   child: Icon(
                     Icons.auto_awesome_rounded,

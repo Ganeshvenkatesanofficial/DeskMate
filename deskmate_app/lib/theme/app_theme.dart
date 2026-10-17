@@ -271,11 +271,9 @@ extension GitHubPrimerTheme on ThemeData {
   Color get borderStrong =>
       isDark ? AppTheme.darkBorderStrong : AppTheme.lightBorderMuted;
 
-  Color get accentFg =>
-      isDark ? AppTheme.purpleLight : AppTheme.purplePrimary;
+  Color get accentFg => isDark ? AppTheme.purpleLight : AppTheme.purplePrimary;
   Color get accentEmphasis => AppTheme.purplePrimary;
-  Color get accentHover =>
-      isDark ? AppTheme.purpleLight : AppTheme.purpleHover;
+  Color get accentHover => isDark ? AppTheme.purpleLight : AppTheme.purpleHover;
   Color get accentActive => AppTheme.purpleActive;
   Color get accentHighlight => AppTheme.purpleHighlight;
   Color get accentMuted =>
