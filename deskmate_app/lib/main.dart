@@ -6,7 +6,7 @@ import 'screens/chat_screen.dart';
 import 'theme/app_theme.dart';
 import 'services/backend_manager.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Discover and verify running backend instance before UI initialization
