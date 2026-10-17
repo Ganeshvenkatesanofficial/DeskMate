@@ -771,7 +771,7 @@ class RunSQLQueryTool(Tool):
             if url.startswith("sqlite:///"):
                 db_name = url.split("sqlite:///")[-1]
                 if not os.path.isabs(db_name):
-                    url = f"sqlite:///{str(_BASE_DIR / db_name)}"
+                    url = f"sqlite:///{str(get_user_data_dir() / db_name)}"
             
             engine = create_engine(url)
             with engine.connect() as conn:
