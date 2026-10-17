@@ -58,7 +58,7 @@ class BackendManager {
       String exePath = '';
 
       if (Platform.isWindows) {
-        exePath = p.join(
+        final candidate = p.join(
           appDir,
           'data',
           'flutter_assets',
@@ -66,6 +66,10 @@ class BackendManager {
           'backend',
           'deskmate_backend.exe',
         );
+        final file = File(candidate);
+        if (await file.exists() && await file.length() > 1000) {
+          exePath = candidate;
+        }
       } else if (Platform.isMacOS) {
         final candidatePaths = [
           p.join(
@@ -111,7 +115,8 @@ class BackendManager {
         ];
 
         for (final candidate in candidatePaths) {
-          if (await File(candidate).exists()) {
+          final file = File(candidate);
+          if (await file.exists() && await file.length() > 1000) {
             exePath = candidate;
             break;
           }
@@ -123,7 +128,7 @@ class BackendManager {
       if (exePath.isEmpty || !await File(exePath).exists()) {
         _assignedPort = 8080;
         debugPrint(
-          'Backend executable not found at $exePath. Defaulting to port 8080 for development.',
+          'Backend executable not found or placeholder at $exePath. Defaulting to port 8080 for development.',
         );
         return;
       }
@@ -132,12 +137,21 @@ class BackendManager {
       debugPrint('Assigned dynamic random port: $_assignedPort');
       debugPrint('Starting backend from: $exePath on port $_assignedPort');
 
-      // Ensure execution permissions on Unix/macOS
+      // Ensure execution permissions and remove quarantine on Unix/macOS
       if (Platform.isMacOS) {
+        try {
+          await Process.run('/usr/bin/xattr', [
+            '-d',
+            'com.apple.quarantine',
+            exePath,
+          ]);
+        } catch (_) {}
         try {
           await Process.run('/bin/chmod', ['+x', exePath]);
         } catch (_) {
-          await Process.run('chmod', ['+x', exePath]);
+          try {
+            await Process.run('chmod', ['+x', exePath]);
+          } catch (_) {}
         }
       }
 

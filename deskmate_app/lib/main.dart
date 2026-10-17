@@ -6,18 +6,21 @@ import 'screens/chat_screen.dart';
 import 'theme/app_theme.dart';
 import 'services/backend_manager.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Start the background python backend silently
-  await BackendManager.start();
-
+  // Launch app window immediately so the macOS dock icon stops bouncing and UI displays
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => ChatProvider())],
       child: const DeskMateApp(),
     ),
   );
+
+  // Start the background python backend asynchronously without blocking window rendering
+  BackendManager.start().catchError((e) {
+    debugPrint('Failed to start backend on launch: $e');
+  });
 }
 
 class DeskMateApp extends StatefulWidget {

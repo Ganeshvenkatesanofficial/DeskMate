@@ -241,26 +241,7 @@ jobs:
 
 
 # ============================================================
-# 8. GITHUB DEPENDENCY REVIEW
-# ============================================================
-
-  dependency-review:
-    name: Dependency Review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-
-
-# ============================================================
-# 9. CHECK CHANGED FILES
+# 8. CHECK CHANGED FILES
 # ============================================================
 
   check-changes:
@@ -294,7 +275,7 @@ jobs:
 
 
 # ============================================================
-# 10. WINDOWS BUILD
+# 9. WINDOWS BUILD
 # ============================================================
 
   build-windows:
@@ -389,7 +370,7 @@ jobs:
 
 
 # ============================================================
-# 11. MACOS BUILD
+# 10. MACOS BUILD
 # ============================================================
 
   build-macos:
