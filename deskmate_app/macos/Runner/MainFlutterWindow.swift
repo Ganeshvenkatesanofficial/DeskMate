@@ -11,5 +11,9 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
+
+    // Make the window key and visible immediately so macOS knows
+    // the window is ready — this prevents indefinite Dock bouncing.
+    self.makeKeyAndOrderFront(nil)
   }
 }
