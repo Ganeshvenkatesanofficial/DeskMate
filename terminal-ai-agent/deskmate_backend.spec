@@ -3,27 +3,55 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = []
-tmp_ret = collect_all('uvicorn')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('fastapi')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('smolagents')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('litellm')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('langfuse')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('qdrant_client')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('fastembed')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = [
+    'tiktoken_ext.openai_public',
+    'tiktoken_ext',
+    'core',
+    'core.config',
+    'core.models',
+    'core.telemetry',
+    'routers',
+    'routers.ws_common',
+    'routers.ws_file_agent',
+    'routers.ws_personal_agent',
+    'routers.api_routes',
+    'services',
+    'services.file_copilot',
+    'services.file_copilot.agent',
+    'services.file_copilot.tools',
+    'services.file_copilot.rag_tools',
+    'services.personal_assistant',
+    'services.personal_assistant.agent',
+    'services.personal_assistant.tools',
+    'sqlite3',
+    'duckduckgo_search',
+    'sqlalchemy',
+]
 
-# Add tiktoken hidden imports for tokenization
-tmp_ret = collect_all('tiktoken')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-hiddenimports += ['tiktoken_ext.openai_public', 'tiktoken_ext']
+packages_to_collect = [
+    'uvicorn',
+    'websockets',
+    'fastapi',
+    'smolagents',
+    'litellm',
+    'langfuse',
+    'qdrant_client',
+    'fastembed',
+    'tiktoken',
+    'googleapiclient',
+    'google_auth_oauthlib',
+    'duckduckgo_search',
+    'sqlalchemy',
+]
 
+for pkg in packages_to_collect:
+    try:
+        tmp_ret = collect_all(pkg)
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+    except Exception:
+        pass
 
 a = Analysis(
     ['backend.py'],

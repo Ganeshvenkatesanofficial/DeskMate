@@ -2,16 +2,72 @@ import 'package:intl/intl.dart';
 
 enum MessageRole { user, assistant }
 
+class AgentStepTelemetry {
+  final int step;
+  final String
+  phase; // 'tool_call', 'observation', 'thought', 'reasoning', 'status'
+  final String? tool;
+  final Map<String, dynamic>? arguments;
+  final String? summary;
+  final String? rawOutput;
+  final String? title;
+  final int? durationMs;
+  final DateTime timestamp;
+
+  AgentStepTelemetry({
+    required this.step,
+    required this.phase,
+    this.tool,
+    this.arguments,
+    this.summary,
+    this.rawOutput,
+    this.title,
+    this.durationMs,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+    'step': step,
+    'phase': phase,
+    'tool': tool,
+    'arguments': arguments,
+    'summary': summary,
+    'raw_output': rawOutput,
+    'title': title,
+    'duration_ms': durationMs,
+    'timestamp': timestamp.toIso8601String(),
+  };
+
+  factory AgentStepTelemetry.fromJson(Map<String, dynamic> json) =>
+      AgentStepTelemetry(
+        step: json['step'] as int? ?? 1,
+        phase: json['phase'] as String? ?? 'status',
+        tool: json['tool'] as String?,
+        arguments: json['arguments'] != null
+            ? Map<String, dynamic>.from(json['arguments'] as Map)
+            : null,
+        summary: json['summary'] as String?,
+        rawOutput: json['raw_output'] as String?,
+        title: json['title'] as String?,
+        durationMs: json['duration_ms'] as int?,
+        timestamp: json['timestamp'] != null
+            ? DateTime.tryParse(json['timestamp'].toString())
+            : null,
+      );
+}
+
 class ChatMessage {
   final String id;
   final MessageRole role;
   final String content;
+  final List<AgentStepTelemetry> telemetry;
   final DateTime timestamp;
 
   ChatMessage({
     required this.id,
     required this.role,
     required this.content,
+    this.telemetry = const [],
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -19,15 +75,25 @@ class ChatMessage {
     'id': id,
     'role': role.name,
     'content': content,
+    'telemetry': telemetry.map((t) => t.toJson()).toList(),
     'timestamp': timestamp.toIso8601String(),
   };
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-    id: json['id'],
-    role: json['role'] == 'user' ? MessageRole.user : MessageRole.assistant,
-    content: json['content'],
-    timestamp: DateTime.parse(json['timestamp']),
-  );
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    var rawTelemetry = json['telemetry'] as List<dynamic>? ?? [];
+    return ChatMessage(
+      id: json['id'] as String? ?? '',
+      role: json['role'] == 'user' ? MessageRole.user : MessageRole.assistant,
+      content: json['content'] as String? ?? '',
+      telemetry: rawTelemetry
+          .whereType<Map<String, dynamic>>()
+          .map((t) => AgentStepTelemetry.fromJson(t))
+          .toList(),
+      timestamp: json['timestamp'] != null
+          ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
 
   String get formattedTime => DateFormat('HH:mm').format(timestamp);
 }

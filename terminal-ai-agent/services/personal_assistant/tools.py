@@ -23,6 +23,8 @@ load_dotenv(dotenv_path=_env_path, override=True)
 
 from smolagents import Tool
 
+from core.config import get_user_data_dir
+
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
 _CREDS = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
@@ -35,8 +37,16 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
 
+    # Always write tokens in user data directory
+    resolved_token_path = str(get_user_data_dir() / Path(token_path).name)
+
     # Dynamically generate credentials.json if absent but GOOGLE_CLIENT_ID/SECRET exist in .env
-    if not Path(_CREDS).exists():
+    resolved_creds = get_user_data_dir() / "credentials.json"
+    if Path(_CREDS).exists():
+        actual_creds = _CREDS
+    elif resolved_creds.exists():
+        actual_creds = str(resolved_creds)
+    else:
         client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("CI")
         client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or os.getenv("CS")
         if client_id and client_secret:
@@ -52,19 +62,22 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                 }
             }
             try:
-                Path(_CREDS).write_text(json.dumps(creds_data), encoding="utf-8")
+                resolved_creds.write_text(json.dumps(creds_data), encoding="utf-8")
+                actual_creds = str(resolved_creds)
             except Exception:
-                pass
+                actual_creds = _CREDS
+        else:
+            actual_creds = _CREDS
 
     creds = None
-    if Path(token_path).exists():
+    if Path(resolved_token_path).exists():
         try:
             # Read the raw JSON scopes to find the actual authorized permissions
-            with open(token_path, "r", encoding="utf-8") as f:
+            with open(resolved_token_path, "r", encoding="utf-8") as f:
                 token_data = json.load(f)
             authorized_scopes = token_data.get("scopes", [])
             if all(s in authorized_scopes for s in scopes):
-                creds = Credentials.from_authorized_user_file(token_path, scopes)
+                creds = Credentials.from_authorized_user_file(resolved_token_path, scopes)
             else:
                 creds = None # Force re-auth due to missing scopes
         except Exception:
@@ -79,9 +92,9 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
         if not creds:
             # Merge requested scopes with any already authorized in the token file to avoid scope thrashing
             req_scopes = scopes
-            if Path(token_path).exists():
+            if Path(resolved_token_path).exists():
                 try:
-                    with open(token_path, "r", encoding="utf-8") as f:
+                    with open(resolved_token_path, "r", encoding="utf-8") as f:
                         existing_data = json.load(f)
                     existing_scopes = existing_data.get("scopes", [])
                     if existing_scopes:
@@ -110,17 +123,16 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                 webbrowser._original_open = webbrowser.open
             webbrowser.open = _robust_open
 
-            flow = InstalledAppFlow.from_client_secrets_file(_CREDS, req_scopes)
+            flow = InstalledAppFlow.from_client_secrets_file(actual_creds, req_scopes)
             creds = flow.run_local_server(port=0)
         
-        Path(token_path).write_text(creds.to_json(), encoding="utf-8")
+        Path(resolved_token_path).write_text(creds.to_json(), encoding="utf-8")
     return build(api, version, credentials=creds)
 
 
 # ─── local SQLite store for Tasks & Notes ────────────────────────────────────
 
-_BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
-_DEFAULT_DB = str(_BASE_DIR / "deskmate_agent.db")
+_DEFAULT_DB = str(get_user_data_dir() / "deskmate_agent.db")
 _DB_PATH = os.getenv("LOCAL_AGENT_DB", _DEFAULT_DB)
 
 
@@ -167,7 +179,6 @@ def _embed_batch(texts: list[str]) -> Any:
     global _model_cache
     if '_model_cache' not in globals():
         _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
-    import numpy as np
     return _model_cache.encode(texts, normalize_embeddings=True).astype("float32")
 
 

@@ -1,10 +1,14 @@
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/telemetry_accordion.dart';
 import '../widgets/sidebar.dart';
+import '../widgets/credentials_setup_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -18,8 +22,19 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
 
   bool _isSettingsOpen = false;
+  bool _isSetupGuideOpen = false;
+  AgentMode? _guideOverrideMode;
+  bool _isGeminiKeyObscured = true;
+  String? _settingsSelectedModel;
   final TextEditingController _geminiKeyController = TextEditingController();
   final FocusNode _geminiKeyFocusNode = FocusNode();
+  final TextEditingController _googleClientIdController =
+      TextEditingController();
+  final TextEditingController _googleClientSecretController =
+      TextEditingController();
+  bool _isGoogleClientSecretObscured = true;
+  bool _isSavingAllSettings = false;
+  String? _googleCredsError;
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
@@ -35,6 +50,12 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController = TextEditingController(text: provider.backendUrl);
+    _geminiKeyController.text = provider.geminiApiKey;
+    final creds = provider.personalCredentials;
+    if (creds['client_id'] != null &&
+        (creds['client_id'] as String).isNotEmpty) {
+      _googleClientIdController.text = creds['client_id'] as String;
+    }
   }
 
   @override
@@ -43,6 +64,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _geminiKeyController.dispose();
     _geminiKeyFocusNode.dispose();
+    _googleClientIdController.dispose();
+    _googleClientSecretController.dispose();
     _backendUrlController.dispose();
     _backendUrlFocusNode.dispose();
     super.dispose();
@@ -52,15 +75,37 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
+      Future.delayed(const Duration(milliseconds: 60), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+          );
+        }
+      });
     }
   }
 
   void _openSettings() {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController.text = provider.backendUrl;
+    _geminiKeyController.text = provider.geminiApiKey;
+    _settingsSelectedModel = provider.selectedLocalModel.isNotEmpty
+        ? provider.selectedLocalModel
+        : (provider.availableLocalModels.isNotEmpty
+              ? provider.availableLocalModels.first
+              : null);
+    final creds = provider.personalCredentials;
+    if (creds['client_id'] != null &&
+        (creds['client_id'] as String).isNotEmpty) {
+      _googleClientIdController.text = creds['client_id'] as String;
+    }
+    _googleCredsError = null;
+    provider.fetchPersonalCredentials();
     setState(() {
       _isSettingsOpen = true;
     });
@@ -84,8 +129,12 @@ class _ChatScreenState extends State<ChatScreen> {
     return KeyboardListener(
       focusNode: FocusNode()..requestFocus(),
       onKeyEvent: (event) {
-        if (event.logicalKey.keyLabel == 'Escape' && _isSettingsOpen) {
-          _closeSettings();
+        if (event.logicalKey.keyLabel == 'Escape') {
+          if (_isSetupGuideOpen) {
+            setState(() => _isSetupGuideOpen = false);
+          } else if (_isSettingsOpen) {
+            _closeSettings();
+          }
         }
       },
       child: Scaffold(
@@ -116,12 +165,31 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
         drawer: isDesktop
             ? null
-            : Drawer(child: Sidebar(onOpenSettings: _openSettings)),
+            : Drawer(
+                child: Sidebar(
+                  onOpenSettings: _openSettings,
+                  onOpenSetupGuide: ([mode]) {
+                    setState(() {
+                      if (mode != null) _guideOverrideMode = mode;
+                      _isSetupGuideOpen = true;
+                    });
+                  },
+                ),
+              ),
         body: Stack(
           children: [
             Row(
               children: [
-                if (isDesktop) Sidebar(onOpenSettings: _openSettings),
+                if (isDesktop)
+                  Sidebar(
+                    onOpenSettings: _openSettings,
+                    onOpenSetupGuide: ([mode]) {
+                      setState(() {
+                        if (mode != null) _guideOverrideMode = mode;
+                        _isSetupGuideOpen = true;
+                      });
+                    },
+                  ),
                 Expanded(
                   child: Container(
                     color: theme.bgCanvas,
@@ -141,7 +209,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                       (provider.isSending ? 1 : 0),
                                   itemBuilder: (context, index) {
                                     if (index == provider.messages.length) {
-                                      return _buildTypingIndicator(theme);
+                                      return _buildTypingIndicator(
+                                        provider,
+                                        theme,
+                                      );
                                     }
                                     return ChatBubble(
                                       message: provider.messages[index],
@@ -156,8 +227,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ],
             ),
-            if (provider.showModelSelectionDialog &&
-                provider.availableLocalModels.length > 1)
+            if (provider.showModelSelectionDialog)
               Positioned.fill(
                 child: Container(
                   color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
@@ -183,13 +253,47 @@ class _ChatScreenState extends State<ChatScreen> {
                 top: 0,
                 bottom: 0,
                 right: 0,
-                width: 420,
+                width: 320,
                 child: _buildSettingsPanel(provider, theme).animate().slideX(
                   begin: 1.0,
                   end: 0.0,
                   duration: 200.ms,
                   curve: Curves.easeOut,
                 ),
+              ),
+            ],
+            // Centered High-Tech Personal Agent Setup Guide Modal
+            if (_isSetupGuideOpen) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _isSetupGuideOpen = false),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(
+                      color: theme.isDark
+                          ? const Color(0x99010409)
+                          : const Color(0x661F2328),
+                    ),
+                  ),
+                ).animate().fadeIn(duration: 150.ms),
+              ),
+              Positioned.fill(
+                child:
+                    Center(
+                      child: CredentialsSetupDialog(
+                        mode: _guideOverrideMode ?? provider.mode,
+                        onClose: () =>
+                            setState(() {
+                              _isSetupGuideOpen = false;
+                              _guideOverrideMode = null;
+                            }),
+                      ),
+                    ).animate().scale(
+                      begin: const Offset(0.95, 0.95),
+                      end: const Offset(1.0, 1.0),
+                      duration: 200.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
               ),
             ],
           ],
@@ -203,9 +307,9 @@ class _ChatScreenState extends State<ChatScreen> {
       decoration: BoxDecoration(
         color: theme.isDark ? theme.bgSubtle : theme.bgCanvas,
         border: Border(left: BorderSide(color: theme.borderDefault, width: 1)),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color(0x40010409),
+            color: Color(0x40010409),
             blurRadius: 24,
             spreadRadius: 0,
           ),
@@ -214,246 +318,801 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SafeArea(
         child: Column(
           children: [
-            // Panel Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            // ─── Compact, Modern Header ──────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+              decoration: BoxDecoration(
+                color: theme.isDark ? theme.bgCanvas : Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: theme.borderDefault, width: 1),
+                ),
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Settings',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: theme.fgDefault,
-                          letterSpacing: -0.3,
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: theme.accentFg.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: theme.accentFg.withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.settings_rounded,
+                      color: theme.accentFg,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: theme.fgDefault,
+                            letterSpacing: -0.2,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Manage your DeskMate preferences',
-                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      ),
-                    ],
+                        Text(
+                          'Preferences & Engine Configuration',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.fgMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     onPressed: _closeSettings,
-                    icon: Icon(Icons.close, color: theme.fgMuted, size: 20),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: theme.fgMuted,
+                      size: 18,
+                    ),
                     hoverColor: theme.bgEmphasis,
-                    splashRadius: 20,
+                    splashRadius: 16,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                   ),
                 ],
               ),
             ),
-            Divider(color: theme.borderDefault, height: 1),
 
-            // Scrollable Content
+            // ─── Content ────────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // --- SECTION 1: APPEARANCE ---
-                    Text(
-                      'Appearance',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
+                    // ─── SECTION 1: AI ENGINE & LOCAL MODEL ────────────────
+                    _buildSettingsSectionHeader(
+                      theme: theme,
+                      icon: Icons.memory_rounded,
+                      title: 'AI ENGINE & LOCAL MODEL',
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Choose how DeskMate looks.',
-                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                    ),
+                    const SizedBox(height: 7),
+                    _buildAiEngineCard(provider, theme),
+
                     const SizedBox(height: 14),
-                    Text(
-                      'Theme Mode',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
+
+                    // ─── SECTION 2: GOOGLE WORKSPACE OAUTH ─────────────────
+                    _buildSettingsSectionHeader(
+                      theme: theme,
+                      icon: Icons.vpn_key_rounded,
+                      title: 'GOOGLE WORKSPACE OAUTH 2.0',
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 7),
+                    _buildOAuthCard(provider, theme),
+
+                    const SizedBox(height: 14),
+
+                    // ─── SECTION 3: BACKEND SERVER ─────────────────────────
+                    _buildSettingsSectionHeader(
+                      theme: theme,
+                      icon: Icons.dns_rounded,
+                      title: 'BACKEND SERVER',
+                    ),
+                    const SizedBox(height: 7),
+                    _buildBackendAndSaveCard(provider, theme),
+
+                    const SizedBox(height: 14),
+
+                    // ─── SECTION 4: APPEARANCE ─────────────────────────────
+                    _buildSettingsSectionHeader(
+                      theme: theme,
+                      icon: Icons.palette_outlined,
+                      title: 'APPEARANCE',
+                    ),
+                    const SizedBox(height: 7),
                     _buildThemeSelectorInSettings(provider, theme),
-
-                    const SizedBox(height: 28),
-                    Divider(color: theme.borderDefault, height: 1),
-                    const SizedBox(height: 28),
-
-                    // --- SECTION 2: AI CONFIGURATION ---
-                    Text(
-                      'AI Configuration',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Configure your AI provider.',
-                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Gemini API Key',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 38,
-                      child: TextField(
-                        controller: _geminiKeyController,
-                        obscureText: !_geminiKeyFocusNode.hasFocus,
-                        focusNode: _geminiKeyFocusNode,
-                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(
-                            Icons.vpn_key_outlined,
-                            size: 16,
-                            color: theme.fgMuted,
-                          ),
-                          hintText: 'Enter Gemini API Key',
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 38,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          provider.setGeminiApiKey(_geminiKeyController.text);
-                          _geminiKeyController.clear();
-                          FocusScope.of(context).unfocus();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                'Gemini API Key loaded for this session.',
-                              ),
-                              duration: const Duration(seconds: 2),
-                              backgroundColor: theme.successFg,
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.accentEmphasis,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        icon: const Icon(Icons.vpn_key, size: 15),
-                        label: const Text('Load Gemini API'),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-                    Divider(color: theme.borderDefault, height: 1),
-                    const SizedBox(height: 28),
-
-                    // --- SECTION 3: BACKEND ---
-                    Text(
-                      'Backend',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Connect DeskMate to your backend.',
-                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Backend URL',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 38,
-                      child: TextField(
-                        controller: _backendUrlController,
-                        focusNode: _backendUrlFocusNode,
-                        style: TextStyle(fontSize: 13, color: theme.fgDefault),
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(
-                            Icons.link,
-                            size: 16,
-                            color: theme.fgMuted,
-                          ),
-                          hintText: 'Enter Backend URL',
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                        ),
-                        onSubmitted: (value) {
-                          provider.setBackendUrl(value);
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 38,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          provider.setBackendUrl(_backendUrlController.text);
-                          FocusScope.of(context).unfocus();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('Backend URL saved.'),
-                              duration: const Duration(seconds: 2),
-                              backgroundColor: theme.accentEmphasis,
-                            ),
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: theme.isDark
-                              ? theme.bgEmphasis
-                              : theme.bgSubtle,
-                          side: BorderSide(
-                            color: theme.borderDefault,
-                            width: 1,
-                          ),
-                          foregroundColor: theme.fgDefault,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        icon: const Icon(Icons.save, size: 15),
-                        label: const Text('Save URL'),
-                      ),
-                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
+              ),
+            ),
+
+            // ─── PINNED FOOTER: SYSTEM & BUILD INFO (AT THE BOTTOM) ───────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: theme.isDark ? theme.bgCanvas : Colors.white,
+                border: Border(
+                  top: BorderSide(color: theme.borderDefault, width: 0.8),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'DeskMate AI • v1.0.0',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgMuted.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Open Source AI Copilot & Personal Agent',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      color: theme.fgMuted.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSettingsInputField({
+    required ThemeData theme,
+    required TextEditingController controller,
+    required String hintText,
+    required IconData prefixIcon,
+    FocusNode? focusNode,
+    bool isMonospace = false,
+    bool obscureText = false,
+    Widget? suffixIcon,
+  }) {
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        obscureText: obscureText,
+        style: TextStyle(
+          fontFamily: isMonospace ? 'monospace' : null,
+          fontSize: 12,
+          color: theme.fgDefault,
+        ),
+        decoration: InputDecoration(
+          prefixIcon: Icon(prefixIcon, size: 15, color: theme.fgMuted),
+          suffixIcon: suffixIcon,
+          hintText: hintText,
+          hintStyle: TextStyle(fontSize: 11, color: theme.fgMuted),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiEngineCard(ChatProvider provider, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: theme.isDark ? theme.bgCanvas : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Active status badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.isDark ? theme.bgSubtle : const Color(0xFFF6F8FA),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  provider.isUsingGemini
+                      ? Icons.cloud_done_rounded
+                      : Icons.memory_rounded,
+                  size: 14,
+                  color: provider.isUsingGemini
+                      ? theme.accentFg
+                      : (provider.isLocalLlmOnline
+                            ? const Color(0xFF2DA44E)
+                            : theme.dangerFg),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    provider.isUsingGemini
+                        ? 'Active: Gemini 2.5 Flash Cloud'
+                        : (provider.selectedLocalModel.isNotEmpty
+                              ? 'Active: ${provider.selectedLocalModel} (Offline)'
+                              : (provider.isLocalLlmOnline
+                                    ? 'Active: Local Ollama Model'
+                                    : 'Local Ollama: Offline')),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgDefault,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 11),
+
+          // Local Model label
+          Text(
+            'Local Model (Ollama)',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: theme.fgDefault,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Container(
+            width: double.infinity,
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: theme.isDark ? theme.bgSubtle : Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value:
+                    (_settingsSelectedModel != null &&
+                        provider.availableLocalModels.contains(
+                          _settingsSelectedModel,
+                        ))
+                    ? _settingsSelectedModel
+                    : (provider.availableLocalModels.isNotEmpty
+                          ? (provider.availableLocalModels.contains(
+                                  provider.selectedLocalModel,
+                                )
+                                ? provider.selectedLocalModel
+                                : provider.availableLocalModels.first)
+                          : null),
+                hint: Text(
+                  provider.isLocalLlmOnline
+                      ? 'No models detected'
+                      : 'Ollama Offline (127.0.0.1:11434)',
+                  style: TextStyle(fontSize: 11, color: theme.fgMuted),
+                ),
+                isExpanded: true,
+                dropdownColor: theme.bgOverlay,
+                icon: Icon(
+                  Icons.arrow_drop_down,
+                  size: 18,
+                  color: theme.fgMuted,
+                ),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: theme.fgDefault,
+                ),
+                onChanged: (newVal) {
+                  if (newVal != null) {
+                    setState(() => _settingsSelectedModel = newVal);
+                  }
+                },
+                items: provider.availableLocalModels.map((m) {
+                  final isSel =
+                      (m ==
+                      (_settingsSelectedModel ?? provider.selectedLocalModel));
+                  return DropdownMenuItem<String>(
+                    value: m,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.memory_rounded,
+                          size: 13,
+                          color: isSel ? theme.accentFg : theme.fgMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            m,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              fontWeight: isSel
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: theme.fgDefault,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 11),
+
+          // Gemini Key
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Gemini API Key (Optional BYOK)',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: theme.fgDefault,
+                ),
+              ),
+              if (_geminiKeyController.text.isNotEmpty)
+                InkWell(
+                  onTap: () => setState(() => _geminiKeyController.clear()),
+                  child: Text(
+                    'Clear',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: theme.dangerFg,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          _buildSettingsInputField(
+            theme: theme,
+            controller: _geminiKeyController,
+            hintText: 'Enter Gemini key',
+            prefixIcon: Icons.vpn_key_outlined,
+            obscureText: _isGeminiKeyObscured,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isGeminiKeyObscured
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 14,
+                color: theme.fgMuted,
+              ),
+              onPressed: () =>
+                  setState(() => _isGeminiKeyObscured = !_isGeminiKeyObscured),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Center(
+            child: Text(
+              '(or leave empty for offline)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: theme.fgMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOAuthCard(ChatProvider provider, ThemeData theme) {
+    final health = provider.personalAgentHealth;
+    final checks = health['checks'] as Map<String, dynamic>? ?? {};
+    final isOAuthConfigured =
+        (checks['google_credentials_file'] == true) ||
+        (provider.personalCredentials['configured'] == true);
+
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: theme.isDark ? theme.bgCanvas : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Security badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.accentFg.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: theme.accentFg.withValues(alpha: 0.25),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.shield_outlined, size: 13, color: theme.accentFg),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Saved locally in .env & credentials.json',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: theme.fgMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          Text(
+            'Client ID',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: theme.fgDefault,
+            ),
+          ),
+          const SizedBox(height: 5),
+          _buildSettingsInputField(
+            theme: theme,
+            controller: _googleClientIdController,
+            hintText: 'Google Client ID',
+            prefixIcon: Icons.badge_outlined,
+            isMonospace: true,
+          ),
+          const SizedBox(height: 9),
+
+          Text(
+            'Client Secret',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: theme.fgDefault,
+            ),
+          ),
+          const SizedBox(height: 5),
+          _buildSettingsInputField(
+            theme: theme,
+            controller: _googleClientSecretController,
+            hintText: 'Google Client Secret',
+            prefixIcon: Icons.key_outlined,
+            isMonospace: true,
+            obscureText: _isGoogleClientSecretObscured,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isGoogleClientSecretObscured
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                size: 14,
+                color: theme.fgMuted,
+              ),
+              onPressed: () => setState(
+                () => _isGoogleClientSecretObscured =
+                    !_isGoogleClientSecretObscured,
+              ),
+            ),
+          ),
+
+          if (_googleCredsError != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.dangerFg.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: theme.dangerFg.withValues(alpha: 0.3),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 13,
+                    color: theme.dangerFg,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _googleCredsError!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: theme.dangerFg,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          if (isOAuthConfigured) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2DA44E).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: const Color(0xFF2DA44E).withValues(alpha: 0.35),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 11,
+                    color: Color(0xFF2DA44E),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Active in .env',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: theme.isDark
+                          ? const Color(0xFF7EE787)
+                          : const Color(0xFF1A7F37),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackendAndSaveCard(ChatProvider provider, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: theme.isDark ? theme.bgCanvas : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'FastAPI Server URL',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: theme.fgDefault,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: provider.isBackendOnline
+                          ? const Color(0xFF2DA44E)
+                          : theme.dangerFg,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    provider.isBackendOnline ? 'Online' : 'Offline',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: provider.isBackendOnline
+                          ? (theme.isDark
+                                ? const Color(0xFF7EE787)
+                                : const Color(0xFF1A7F37))
+                          : theme.dangerFg,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          _buildSettingsInputField(
+            theme: theme,
+            controller: _backendUrlController,
+            focusNode: _backendUrlFocusNode,
+            hintText: 'http://127.0.0.1:8000',
+            prefixIcon: Icons.link,
+            isMonospace: true,
+          ),
+          const SizedBox(height: 12),
+
+          // Unified Save Button
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: ElevatedButton.icon(
+              onPressed: _isSavingAllSettings
+                  ? null
+                  : () => _handleSaveAllSettings(provider, theme),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.accentEmphasis,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              icon: _isSavingAllSettings
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_rounded, size: 16),
+              label: Text(
+                _isSavingAllSettings
+                    ? 'Validating & Saving...'
+                    : 'Save Configuration',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSaveAllSettings(
+    ChatProvider provider,
+    ThemeData theme,
+  ) async {
+    setState(() {
+      _googleCredsError = null;
+      _isSavingAllSettings = true;
+    });
+
+    final modelToSave = _settingsSelectedModel ??
+        (provider.availableLocalModels.contains(provider.selectedLocalModel)
+            ? provider.selectedLocalModel
+            : (provider.availableLocalModels.isNotEmpty
+                  ? provider.availableLocalModels.first
+                  : ''));
+
+    // 1. Save AI Configuration (Model & Gemini Key)
+    await provider.saveAiConfiguration(
+      model: modelToSave,
+      geminiApiKey: _geminiKeyController.text,
+    );
+
+    // 2. Save Backend URL if modified
+    final backendUrl = _backendUrlController.text.trim();
+    if (backendUrl.isNotEmpty && backendUrl != provider.backendUrl) {
+      provider.setBackendUrl(backendUrl);
+    }
+
+    // 3. Save Google OAuth Credentials if provided
+    final cid = _googleClientIdController.text.trim();
+    final sec = _googleClientSecretController.text.trim();
+
+    String? oauthMessage;
+    if (cid.isNotEmpty && sec.isNotEmpty) {
+      if (!cid.endsWith('.apps.googleusercontent.com') || cid.length < 25) {
+        if (mounted) {
+          setState(() {
+            _googleCredsError =
+                'Client ID must end with .apps.googleusercontent.com';
+            _isSavingAllSettings = false;
+          });
+        }
+        return;
+      }
+      if (sec.length < 8) {
+        if (mounted) {
+          setState(() {
+            _googleCredsError =
+                'Client Secret must be at least 8 characters long.';
+            _isSavingAllSettings = false;
+          });
+        }
+        return;
+      }
+      final credResult = await provider.saveGoogleCredentials(cid, sec);
+      if (credResult['success'] == true) {
+        _googleClientSecretController.clear();
+        oauthMessage = 'Google OAuth credentials activated';
+      } else {
+        if (mounted) {
+          setState(() {
+            _googleCredsError =
+                credResult['message'] ?? 'Failed to activate OAuth credentials.';
+            _isSavingAllSettings = false;
+          });
+        }
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSavingAllSettings = false;
+      });
+      FocusScope.of(context).unfocus();
+      final summary = oauthMessage != null
+          ? 'Configuration saved: AI Model ($modelToSave) + $oauthMessage!'
+          : (_geminiKeyController.text.isNotEmpty
+                ? 'Configuration saved: Gemini Cloud + Model ($modelToSave)!'
+                : 'Configuration saved: 100% Offline with Model ($modelToSave)!');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(summary),
+          backgroundColor: const Color(0xFF2DA44E),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Widget _buildSettingsSectionHeader({
+    required ThemeData theme,
+    required IconData icon,
+    required String title,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: theme.fgMuted),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+            color: theme.fgMuted,
+          ),
+        ),
+      ],
     );
   }
 
@@ -505,7 +1164,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: GestureDetector(
         onTap: () => provider.setThemeMode(mode),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: isSelected
                 ? (theme.isDark ? theme.bgEmphasis : Colors.white)
@@ -546,175 +1205,408 @@ class _ChatScreenState extends State<ChatScreen> {
   ) {
     String tempSelected = provider.selectedLocalModel.isNotEmpty
         ? provider.selectedLocalModel
-        : provider.availableLocalModels.first;
+        : (provider.availableLocalModels.isNotEmpty
+              ? provider.availableLocalModels.first
+              : '');
+    final tempGeminiCtrl = TextEditingController(text: provider.geminiApiKey);
+    bool obscureGemini = true;
 
     return StatefulBuilder(
       builder: (context, setPopupState) {
+        final hasModels = provider.availableLocalModels.isNotEmpty;
+        final screenWidth = MediaQuery.of(context).size.width;
+
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(10),
             side: BorderSide(color: theme.borderDefault, width: 1),
           ),
-          elevation: 8,
+          elevation: 12,
           backgroundColor: theme.bgOverlay,
           child: Container(
-            width: 480,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
+            width: math.min(540.0, screenWidth * 0.94),
+            padding: const EdgeInsets.all(22),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Dialog Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: theme.accentFg.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.accentFg.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.tune_rounded,
+                          color: theme.accentFg,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DeskMate AI & Model Configuration',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: theme.fgDefault,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Select your local model and optionally set your Gemini cloud key.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: theme.borderDefault, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Section 1: Local Model Selection
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.memory_rounded,
+                        size: 15,
+                        color: theme.accentFg,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '1. LOCAL LLM MODEL (OFFLINE & AIR-GAPPED)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: theme.fgMuted,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              (provider.isLocalLlmOnline
+                                      ? const Color(0xFF2DA44E)
+                                      : theme.dangerFg)
+                                  .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color:
+                                (provider.isLocalLlmOnline
+                                        ? const Color(0xFF2DA44E)
+                                        : theme.dangerFg)
+                                    .withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          provider.isLocalLlmOnline
+                              ? '${provider.availableLocalModels.length} Models Found'
+                              : 'Ollama Offline',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: provider.isLocalLlmOnline
+                                ? (theme.isDark
+                                      ? const Color(0xFF7EE787)
+                                      : const Color(0xFF1A7F37))
+                                : theme.dangerFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (hasModels) ...[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: provider.availableLocalModels.map((
+                            modelName,
+                          ) {
+                            final isSelected = tempSelected == modelName;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? (theme.isDark
+                                          ? theme.bgEmphasis
+                                          : const Color(0xFFEAEEF2))
+                                    : (theme.isDark
+                                          ? theme.bgCanvas
+                                          : Colors.white),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? theme.accentFg
+                                      : theme.borderDefault,
+                                  width: isSelected ? 1.4 : 0.8,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: RadioListTile<String>(
+                                  value: modelName,
+                                  // ignore: deprecated_member_use
+                                  groupValue: tempSelected,
+                                  dense: true,
+                                  activeColor: theme.accentFg,
+                                  title: Text(
+                                    modelName,
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 12,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.normal,
+                                      color: theme.fgDefault,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    isSelected
+                                        ? 'Active Model'
+                                        : 'Click to select',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: isSelected
+                                          ? theme.accentFg
+                                          : theme.fgMuted,
+                                    ),
+                                  ),
+                                  // ignore: deprecated_member_use
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setPopupState(() {
+                                        tempSelected = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: theme.isDark ? theme.bgEmphasis : theme.bgSubtle,
+                        color: theme.isDark
+                            ? const Color(0xFF0D1117)
+                            : const Color(0xFFF6F8FA),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
                           color: theme.borderDefault,
-                          width: 1,
+                          width: 0.8,
                         ),
                       ),
-                      child: Icon(
-                        Icons.memory_rounded,
-                        color: theme.accentFg,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Multiple Local Models Detected',
+                            'No local Ollama models detected on http://127.0.0.1:11434.',
                             style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 11.5,
                               color: theme.fgDefault,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(
-                            'Select which Ollama model to use for your AI queries:',
+                            'To run completely offline, install Ollama and run:',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: theme.fgMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.isDark
+                                  ? Colors.black
+                                  : const Color(0xFFEAEEF2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'ollama run llama3.2',
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                color: theme.isDark
+                                    ? const Color(0xFF7EE787)
+                                    : const Color(0xFF116329),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                Divider(color: theme.borderDefault, height: 1),
-                const SizedBox(height: 14),
-                Text(
-                  'AVAILABLE MODELS ON THIS LAPTOP (${provider.availableLocalModels.length}):',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.08,
-                    color: theme.fgMuted,
+
+                  const SizedBox(height: 16),
+
+                  // Section 2: Gemini Cloud Key
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_outlined,
+                        size: 15,
+                        color: theme.accentFg,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '2. GEMINI CLOUD API KEY (OPTIONAL BYOK)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: theme.fgMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: provider.availableLocalModels.map((modelName) {
-                        final isSelected = tempSelected == modelName;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? (theme.isDark
-                                      ? theme.bgEmphasis
-                                      : theme.bgSubtle)
-                                : theme.bgCanvas,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Optional cloud reasoning key for personal assistant. Leave blank for 100% offline mode:',
+                    style: TextStyle(fontSize: 11, color: theme.fgMuted),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: tempGeminiCtrl,
+                      obscureText: obscureGemini,
+                      style: TextStyle(fontSize: 12.5, color: theme.fgDefault),
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(
+                          Icons.vpn_key_outlined,
+                          size: 15,
+                          color: theme.fgMuted,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureGemini
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 15,
+                            color: theme.fgMuted,
+                          ),
+                          onPressed: () {
+                            setPopupState(() {
+                              obscureGemini = !obscureGemini;
+                            });
+                          },
+                        ),
+                        hintText: 'Enter Gemini API Key (e.g. AIzaSy...)',
+                        hintStyle: TextStyle(
+                          fontSize: 11.5,
+                          color: theme.fgMuted,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                  Divider(color: theme.borderDefault, height: 1),
+                  const SizedBox(height: 14),
+
+                  // Action Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          provider.dismissModelSelectionDialog();
+                        },
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: theme.isDark
+                              ? theme.bgEmphasis
+                              : theme.bgSubtle,
+                          side: BorderSide(
+                            color: theme.borderDefault,
+                            width: 1,
+                          ),
+                          foregroundColor: theme.fgDefault,
+                          shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: isSelected
-                                  ? theme.accentFg
-                                  : theme.borderDefault,
-                              width: 1,
-                            ),
                           ),
-                          child: RadioListTile<String>(
-                            value: modelName,
-                            // ignore: deprecated_member_use
-                            groupValue: tempSelected,
-                            activeColor: theme.accentFg,
-                            title: Text(
-                              modelName,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: theme.fgDefault,
+                        ),
+                        child: const Text('Use Defaults / Offline'),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final modelToSave = tempSelected.isNotEmpty
+                              ? tempSelected
+                              : (hasModels
+                                    ? provider.availableLocalModels.first
+                                    : '');
+                          await provider.saveAiConfiguration(
+                            model: modelToSave,
+                            geminiApiKey: tempGeminiCtrl.text,
+                          );
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                tempGeminiCtrl.text.isNotEmpty
+                                    ? 'AI Config Saved: Gemini Cloud + Model: $modelToSave'
+                                    : 'AI Config Saved: 100% Offline with Model: $modelToSave',
                               ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: theme.successFg,
                             ),
-                            subtitle: Text(
-                              isSelected
-                                  ? 'Active Selection'
-                                  : 'Click to select',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isSelected
-                                    ? theme.accentFg
-                                    : theme.fgMuted,
-                              ),
-                            ),
-                            // ignore: deprecated_member_use
-                            onChanged: (val) {
-                              if (val != null) {
-                                setPopupState(() {
-                                  tempSelected = val;
-                                });
-                              }
-                            },
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.accentEmphasis,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        );
-                      }).toList(),
-                    ),
+                        ),
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 15,
+                        ),
+                        label: const Text('Save & Continue'),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () {
-                        provider.dismissModelSelectionDialog();
-                      },
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: theme.isDark
-                            ? theme.bgEmphasis
-                            : theme.bgSubtle,
-                        side: BorderSide(color: theme.borderDefault, width: 1),
-                        foregroundColor: theme.fgDefault,
-                      ),
-                      child: const Text('Use Default'),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        provider.setSelectedLocalModel(tempSelected);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.accentEmphasis,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Proceed with Selected Model'),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -788,17 +1680,31 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.isDark ? theme.bgSubtle : theme.bgSubtle,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: theme.borderDefault, width: 1),
-                ),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 32,
-                  color: theme.accentFg,
+              Image.asset(
+                theme.isDark
+                    ? 'assets/app_icon.png'
+                    : 'assets/app_icon_light.png',
+                key: ValueKey(theme.isDark),
+                width: 68,
+                height: 68,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 68,
+                  height: 68,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.isDark ? theme.bgEmphasis : theme.bgCanvas,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: theme.borderDefault,
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: theme.accentFg,
+                    size: 32,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -820,6 +1726,109 @@ class _ChatScreenState extends State<ChatScreen> {
                   height: 1.5,
                 ),
               ),
+              if (isPersonal) ...[
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () => setState(() {
+                    _guideOverrideMode = AgentMode.personal;
+                    _isSetupGuideOpen = true;
+                  }),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.accentFg.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.accentFg.withValues(alpha: 0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.vpn_key_rounded,
+                          size: 15,
+                          color: theme.accentFg,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Setting up Personal Assistant? View Credentials & Setup Guide',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: theme.fgDefault,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Open Guide ➔',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.accentFg,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () => setState(() {
+                    _guideOverrideMode = AgentMode.deskMate;
+                    _isSetupGuideOpen = true;
+                  }),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.accentFg.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: theme.accentFg.withValues(alpha: 0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.menu_book_rounded,
+                          size: 15,
+                          color: theme.accentFg,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Need help setting up Local LLM or Ollama? View File Agent & LLM Guide',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: theme.fgDefault,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Open Guide ➔',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.accentFg,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 28),
               Row(
                 children: [
@@ -925,30 +1934,40 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildTypingIndicator(ThemeData theme) {
+  Widget _buildTypingIndicator(ChatProvider provider, ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: theme.accentFg,
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: theme.bgSubtle,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: theme.borderDefault, width: 1),
             ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'Assistant is thinking...',
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.fgMuted,
-              fontStyle: FontStyle.italic,
+            child: Icon(
+              Icons.smart_toy_outlined,
+              color: theme.accentFg,
+              size: 16,
+            ),
+          ).animate().scale(duration: 200.ms, curve: Curves.easeOut),
+          const SizedBox(width: 12),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: TelemetryAccordion(
+                steps: provider.activeTelemetry,
+                isActive: true,
+                activeTitle: provider.activeStatusTitle,
+                initiallyExpanded: true,
+              ),
             ),
           ),
         ],
-      ).animate().fadeIn(duration: 150.ms),
+      ),
     );
   }
 
@@ -1136,16 +2155,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ],
             ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Powered by DeskMate AI • Open Source Edition',
-                style: TextStyle(fontSize: 10, color: theme.fgMuted),
-              ),
-            ],
-          ),
         ],
       ),
     );

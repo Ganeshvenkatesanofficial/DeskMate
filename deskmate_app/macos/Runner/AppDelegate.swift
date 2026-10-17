@@ -11,6 +11,12 @@ class AppDelegate: FlutterAppDelegate {
     // Bring app window to front and make it active immediately.
     NSApp.activate(ignoringOtherApps: true)
 
+    // Explicitly set dock icon from AppIcon.icns to ensure Dock updates immediately
+    if let iconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
+       let iconImage = NSImage(contentsOfFile: iconPath) {
+      NSApp.applicationIconImage = iconImage
+    }
+
     // Cancel any pending Dock icon attention request.
     NSApp.requestUserAttention(.informationalRequest)
   }

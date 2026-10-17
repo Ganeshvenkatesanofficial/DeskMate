@@ -9,7 +9,13 @@ import 'services/backend_manager.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Launch app window immediately so the macOS dock icon stops bouncing and UI displays
+  // Discover and verify running backend instance before UI initialization
+  try {
+    await BackendManager.start();
+  } catch (e) {
+    debugPrint('Failed to initialize backend on launch: $e');
+  }
+
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => ChatProvider())],
