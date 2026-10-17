@@ -5,11 +5,13 @@ on:
     branches:
       - main
       - test
+      - dev
 
   pull_request:
     branches:
       - main
       - test
+      - dev
 
   workflow_dispatch:
     inputs:
