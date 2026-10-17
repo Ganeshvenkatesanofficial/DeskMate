@@ -459,6 +459,12 @@ jobs:
             deskmate_app/build/macos/Build/Products/Release/*.app \
             dmg/
 
+          # Add standard drag-and-drop Applications shortcut
+          ln -s /Applications dmg/Applications
+
+          # Ensure global executable and read permissions
+          chmod -R u+rwX,go+rX dmg/*.app
+
           hdiutil create \
             -volname "DeskMate" \
             -srcfolder dmg \

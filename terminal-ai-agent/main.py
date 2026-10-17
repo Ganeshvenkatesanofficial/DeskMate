@@ -1,7 +1,7 @@
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from agent import run_agent, flush_traces
+from services.file_copilot.agent import run_file_copilot as run_agent
 
 app = typer.Typer(help="Autonomous Terminal AI Assistant")
 console = Console()
@@ -25,14 +25,13 @@ def chat():
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
-                    response = f"**Error:** {str(e)}\n\n*Make sure Ollama is running and gemma:2b model is pulled.*"
+                    response = f"**Error:** {str(e)}\n\n*Make sure Ollama is running with an installed chat model (`ollama list`).*"
             
             console.print("\n[bold blue]Assistant:[/bold blue]")
             console.print(Markdown(response))
             console.print()
     finally:
-        # Best Practice: Always flush traces on shutdown
-        flush_traces()
+        pass
 
 if __name__ == "__main__":
     app()

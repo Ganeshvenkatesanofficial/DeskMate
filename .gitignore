@@ -27,3 +27,9 @@ dist/
 # PyInstaller
 terminal-ai-agent/build/
 terminal-ai-agent/dist/
+
+# IDE & OS
+.vscode/
+.DS_Store
+*.swp
+

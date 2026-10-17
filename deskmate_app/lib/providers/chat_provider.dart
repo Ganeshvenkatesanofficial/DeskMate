@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
+import '../services/agent_websocket_client.dart';
 import '../services/backend_manager.dart';
 
 enum AgentMode { deskMate, personal }
@@ -21,15 +22,20 @@ class ChatProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
+  Map<String, dynamic> _personalCredentials = {'configured': false};
   Timer? _healthTimer;
+
+  // Real-time telemetry streaming state
+  List<AgentStepTelemetry> _activeTelemetry = [];
+  String _activeStatusTitle = 'Thinking...';
 
   // Local Ollama Models state
   List<String> _availableLocalModels = [];
   String _selectedLocalModel = '';
   bool _showModelSelectionDialog = false;
-  bool _hasPromptedModelSelection = false;
+  bool _hasConfiguredAi = false;
 
-  // Gemini API key – kept only in memory, never persisted.
+  // Gemini API key – persisted in SharedPreferences so it survives app restarts.
   String _geminiApiKey = '';
 
   List<ChatMessage> get messages =>
@@ -46,18 +52,29 @@ class ChatProvider extends ChangeNotifier {
   AgentMode get mode => _mode;
   ThemeMode get themeMode => _themeMode;
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
+  Map<String, dynamic> get personalCredentials => _personalCredentials;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
   List<String> get availableLocalModels => _availableLocalModels;
   String get selectedLocalModel => _selectedLocalModel;
   bool get showModelSelectionDialog => _showModelSelectionDialog;
+  bool get hasConfiguredAi => _hasConfiguredAi;
+  List<AgentStepTelemetry> get activeTelemetry => _activeTelemetry;
+  String get activeStatusTitle => _activeStatusTitle;
 
   late ApiService _apiService;
+  late AgentWebSocketClient _wsClient;
 
   ChatProvider() {
+    _backendUrl = BackendManager.backendUrl;
     _apiService = ApiService(baseUrl: _backendUrl);
-    _loadPreferences();
-    _startStartupHealthCheck();
+    _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadPreferences();
+    await _startStartupHealthCheck();
   }
 
   @override
@@ -72,18 +89,23 @@ class ChatProvider extends ChangeNotifier {
     _personalConversationId =
         prefs.getString('deskmate_personal_conversation_id') ?? '';
     final savedUrl = prefs.getString('deskmate_backend_url');
-    if (savedUrl == null || savedUrl.isEmpty) {
+    if (savedUrl == null ||
+        savedUrl.isEmpty ||
+        savedUrl == 'http://127.0.0.1:8080') {
       _backendUrl = BackendManager.backendUrl;
     } else {
       _backendUrl = savedUrl;
     }
     _selectedLocalModel = prefs.getString('deskmate_selected_model') ?? '';
+    _geminiApiKey = prefs.getString('deskmate_gemini_api_key') ?? '';
+    _hasConfiguredAi = prefs.getBool('deskmate_has_configured_ai') ?? false;
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
     final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
       _themeMode = ThemeMode.values[themeIndex];
     }
     _apiService = ApiService(baseUrl: _backendUrl);
+    _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
     notifyListeners();
   }
 
@@ -97,26 +119,51 @@ class ChatProvider extends ChangeNotifier {
             !_availableLocalModels.contains(_selectedLocalModel)) {
           _selectedLocalModel = _availableLocalModels.first;
         }
-        if (_availableLocalModels.length > 1 && !_hasPromptedModelSelection) {
-          _showModelSelectionDialog = true;
-        }
+      }
+      // If user hasn't configured AI yet, show the AI configuration dialog on initial run
+      if (!_hasConfiguredAi) {
+        _showModelSelectionDialog = true;
       }
       notifyListeners();
     } catch (_) {}
   }
 
+  Future<void> saveAiConfiguration({
+    required String model,
+    required String geminiApiKey,
+  }) async {
+    _selectedLocalModel = model.trim();
+    _geminiApiKey = geminiApiKey.trim();
+    _hasConfiguredAi = true;
+    _showModelSelectionDialog = false;
+    final prefs = await SharedPreferences.getInstance();
+    if (_selectedLocalModel.isNotEmpty) {
+      await prefs.setString('deskmate_selected_model', _selectedLocalModel);
+    }
+    await prefs.setString('deskmate_gemini_api_key', _geminiApiKey);
+    await prefs.setBool('deskmate_has_configured_ai', true);
+    notifyListeners();
+  }
+
   Future<void> setSelectedLocalModel(String model) async {
     _selectedLocalModel = model;
     _showModelSelectionDialog = false;
-    _hasPromptedModelSelection = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('deskmate_selected_model', model);
     notifyListeners();
   }
 
+  void openModelSelectionDialog() {
+    _showModelSelectionDialog = true;
+    notifyListeners();
+  }
+
   void dismissModelSelectionDialog() {
     _showModelSelectionDialog = false;
-    _hasPromptedModelSelection = true;
+    _hasConfiguredAi = true;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('deskmate_has_configured_ai', true);
+    });
     notifyListeners();
   }
 
@@ -128,9 +175,11 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets the Gemini API key for this session only (not persisted).
-  void setGeminiApiKey(String key) {
+  /// Sets and saves the Gemini API key into persistent storage.
+  Future<void> setGeminiApiKey(String key) async {
     _geminiApiKey = key.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('deskmate_gemini_api_key', _geminiApiKey);
     notifyListeners();
   }
 
@@ -148,6 +197,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> setBackendUrl(String url) async {
     _backendUrl = url.trim();
     _apiService = ApiService(baseUrl: _backendUrl);
+    _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('deskmate_backend_url', _backendUrl);
     _startStartupHealthCheck();
@@ -164,70 +214,130 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> fetchPersonalCredentials() async {
+    try {
+      final creds = await _apiService.getGoogleCredentials();
+      _personalCredentials = creds;
+    } catch (_) {
+      _personalCredentials = {'status': 'offline', 'configured': false};
+    }
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> saveGoogleCredentials(
+    String clientId,
+    String clientSecret,
+  ) async {
+    final result = await _apiService.saveGoogleCredentials(
+      clientId: clientId,
+      clientSecret: clientSecret,
+    );
+    if (result['success'] == true) {
+      await fetchPersonalCredentials();
+      await checkPersonalAgentStatus();
+    }
+    return result;
+  }
+
   Future<void> _startStartupHealthCheck() async {
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
-    if (_backendUrl.isEmpty) {
-      _backendUrl = BackendManager.backendUrl;
+
+    // Use BackendManager.backendUrl if valid, otherwise fallback candidates
+    final primaryCandidate = BackendManager.backendUrl;
+    if (_backendUrl.isEmpty || _backendUrl == 'http://127.0.0.1:8080') {
+      _backendUrl = primaryCandidate;
     }
     _apiService = ApiService(baseUrl: _backendUrl);
+    _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
     notifyListeners();
-    const int maxAttempts = 30;
+
+    final candidates = [
+      primaryCandidate,
+      'http://127.0.0.1:8000',
+      'http://127.0.0.1:8080',
+    ];
+
+    const int maxAttempts = 15;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      var health = await _apiService.checkHealth();
-      if (health['status'] == 'ok') {
-        _isBackendOnline = true;
-        _isLocalLlmOnline = health['local_llm'] == 'online';
-        _isConnecting = false;
-        _errorMessage = '';
-        checkPersonalAgentStatus();
-        fetchAvailableModels();
-        notifyListeners();
-        _startHealthPolling();
-        return;
+      for (final candidateUrl in candidates) {
+        try {
+          final testService = ApiService(baseUrl: candidateUrl);
+          final health = await testService.checkHealth();
+          if (health['status'] == 'ok') {
+            _backendUrl = candidateUrl;
+            _apiService = testService;
+            _wsClient = AgentWebSocketClient(baseUrl: candidateUrl);
+            _isBackendOnline = true;
+            _isLocalLlmOnline = health['local_llm'] == 'online';
+            _isConnecting = false;
+            _errorMessage = '';
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('deskmate_backend_url', _backendUrl);
+            checkPersonalAgentStatus();
+            fetchAvailableModels();
+            notifyListeners();
+            _startHealthPolling();
+            return;
+          }
+        } catch (_) {}
       }
-      // Fallback check on default port 8080 if assigned port isn't responding yet
-      if (_backendUrl != 'http://127.0.0.1:8080') {
-        final fallbackService = ApiService(baseUrl: 'http://127.0.0.1:8080');
-        final fallbackHealth = await fallbackService.checkHealth();
-        if (fallbackHealth['status'] == 'ok') {
-          _backendUrl = 'http://127.0.0.1:8080';
-          _apiService = fallbackService;
-          _isBackendOnline = true;
-          _isLocalLlmOnline = fallbackHealth['local_llm'] == 'online';
-          _isConnecting = false;
-          _errorMessage = '';
-          checkPersonalAgentStatus();
-          fetchAvailableModels();
-          notifyListeners();
-          _startHealthPolling();
-          return;
-        }
-      }
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 500));
     }
+
     _isConnecting = false;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
     _errorMessage =
         'Failed to connect to local backend. Please ensure the backend server is running.';
     notifyListeners();
+    _startHealthPolling();
   }
 
   void _startHealthPolling() {
     _healthTimer?.cancel();
-    _healthTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      final health = await _apiService.checkHealth();
+    _healthTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      var health = await _apiService.checkHealth();
+      if (health['status'] != 'ok') {
+        for (final candidate in [
+          BackendManager.backendUrl,
+          'http://127.0.0.1:8000',
+          'http://127.0.0.1:8080',
+        ]) {
+          if (candidate != _backendUrl) {
+            try {
+              final fbService = ApiService(baseUrl: candidate);
+              final fbHealth = await fbService.checkHealth();
+              if (fbHealth['status'] == 'ok') {
+                _backendUrl = candidate;
+                _apiService = fbService;
+                _wsClient = AgentWebSocketClient(baseUrl: candidate);
+                health = fbHealth;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('deskmate_backend_url', _backendUrl);
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
       bool newBackendOnline = health['status'] == 'ok';
       bool newLocalLlmOnline = health['local_llm'] == 'online';
 
       if (_isBackendOnline != newBackendOnline ||
-          _isLocalLlmOnline != newLocalLlmOnline) {
+          _isLocalLlmOnline != newLocalLlmOnline ||
+          _isConnecting) {
         _isBackendOnline = newBackendOnline;
         _isLocalLlmOnline = newLocalLlmOnline;
-        if (_isBackendOnline && _availableLocalModels.isEmpty) {
-          fetchAvailableModels();
+        _isConnecting = false;
+        if (_isBackendOnline) {
+          _errorMessage = '';
+          if (_availableLocalModels.isEmpty) {
+            fetchAvailableModels();
+          }
+          checkPersonalAgentStatus();
         }
         notifyListeners();
       }
@@ -238,25 +348,55 @@ class ChatProvider extends ChangeNotifier {
     await _startStartupHealthCheck();
   }
 
-  Future<void> resetChat() async {
-    _errorMessage = '';
-    final prefs = await SharedPreferences.getInstance();
+  void _addMessage(ChatMessage msg) {
     if (_mode == AgentMode.personal) {
-      final prevId = _personalConversationId;
-      _personalMessages = [];
-      _personalConversationId = '';
-      await prefs.remove('deskmate_personal_conversation_id');
-      if (prevId.isNotEmpty) {
-        await _apiService.resetChat(prevId);
+      _personalMessages.add(msg);
+    } else {
+      _fileMessages.add(msg);
+    }
+  }
+
+  Future<void> _updateConversationId(
+    String newId,
+    SharedPreferences prefs,
+  ) async {
+    if (newId.isEmpty) return;
+    if (_mode == AgentMode.personal) {
+      if (newId != _personalConversationId) {
+        _personalConversationId = newId;
+        await prefs.setString(
+          'deskmate_personal_conversation_id',
+          _personalConversationId,
+        );
       }
     } else {
-      final prevId = _fileConversationId;
+      if (newId != _fileConversationId) {
+        _fileConversationId = newId;
+        await prefs.setString('deskmate_conversation_id', _fileConversationId);
+      }
+    }
+  }
+
+  Future<void> resetChat() async {
+    _errorMessage = '';
+    _activeTelemetry = [];
+    final isPersonal = _mode == AgentMode.personal;
+    final prevId = isPersonal ? _personalConversationId : _fileConversationId;
+    if (isPersonal) {
+      _personalMessages = [];
+      _personalConversationId = '';
+    } else {
       _fileMessages = [];
       _fileConversationId = '';
-      await prefs.remove('deskmate_conversation_id');
-      if (prevId.isNotEmpty) {
-        await _apiService.resetChat(prevId);
-      }
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(
+      isPersonal
+          ? 'deskmate_personal_conversation_id'
+          : 'deskmate_conversation_id',
+    );
+    if (prevId.isNotEmpty) {
+      await _apiService.resetChat(prevId);
     }
     notifyListeners();
   }
@@ -268,79 +408,97 @@ class ChatProvider extends ChangeNotifier {
       role: MessageRole.user,
       content: text,
     );
-    if (_mode == AgentMode.personal) {
-      _personalMessages.add(userMsg);
-    } else {
-      _fileMessages.add(userMsg);
-    }
+    _addMessage(userMsg);
+
     _isSending = true;
     _errorMessage = '';
+    _activeTelemetry = [];
+    _activeStatusTitle = 'Thinking...';
     notifyListeners();
+
     try {
+      final currentList = _mode == AgentMode.personal
+          ? _personalMessages
+          : _fileMessages;
+      // Extract recent history context
+      final history = currentList
+          .take(currentList.length - 1)
+          .map((m) => {'role': m.role.name, 'content': m.content})
+          .toList();
+
       Map<String, dynamic> response;
-      if (_mode == AgentMode.personal) {
-        // Use Gemini if key provided, otherwise local backend with selected model.
-        response = await _apiService.sendPersonalMessage(
+      try {
+        // Preferred: Real-time bidirectional WebSocket streaming
+        response = await _wsClient.sendMessageStream(
+          agentType: _mode == AgentMode.personal
+              ? WebSocketAgentType.personalAssistant
+              : WebSocketAgentType.fileCopilot,
           message: text,
-          conversationId: _personalConversationId,
+          history: history,
+          conversationId: _mode == AgentMode.personal
+              ? _personalConversationId
+              : _fileConversationId,
           geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
           model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
+          onStatus: (title, message) {
+            _activeStatusTitle = title;
+            notifyListeners();
+          },
+          onTelemetry: (step) {
+            _activeTelemetry.add(step);
+            notifyListeners();
+          },
         );
-      } else {
-        response = await _apiService.sendMessage(
-          message: text,
-          conversationId: _fileConversationId,
-          geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
-          model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
-        );
+      } catch (wsErr) {
+        // Fallback: Synchronous REST API
+        if (_mode == AgentMode.personal) {
+          response = await _apiService.sendPersonalMessage(
+            message: text,
+            conversationId: _personalConversationId,
+            geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+            model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
+          );
+        } else {
+          response = await _apiService.sendMessage(
+            message: text,
+            conversationId: _fileConversationId,
+            geminiApiKey: _geminiApiKey.isNotEmpty ? _geminiApiKey : null,
+            model: _selectedLocalModel.isNotEmpty ? _selectedLocalModel : null,
+          );
+        }
       }
+
       final newId = response['conversation_id'] as String? ?? '';
+      final rawTelemetry =
+          response['telemetry'] as List<dynamic>? ?? _activeTelemetry;
+      final finalTelemetry = rawTelemetry
+          .whereType<AgentStepTelemetry>()
+          .toList();
+
       final prefs = await SharedPreferences.getInstance();
-      if (_mode == AgentMode.personal) {
-        if (newId.isNotEmpty && newId != _personalConversationId) {
-          _personalConversationId = newId;
-          await prefs.setString(
-            'deskmate_personal_conversation_id',
-            _personalConversationId,
-          );
-        }
-        _personalMessages.add(
-          ChatMessage(
-            id: DateTime.now().toString(),
-            role: MessageRole.assistant,
-            content: response['reply'] as String? ?? '',
-          ),
-        );
-      } else {
-        if (newId.isNotEmpty && newId != _fileConversationId) {
-          _fileConversationId = newId;
-          await prefs.setString(
-            'deskmate_conversation_id',
-            _fileConversationId,
-          );
-        }
-        _fileMessages.add(
-          ChatMessage(
-            id: DateTime.now().toString(),
-            role: MessageRole.assistant,
-            content: response['reply'] as String? ?? '',
-          ),
-        );
-      }
+      final assistantMsg = ChatMessage(
+        id: DateTime.now().toString(),
+        role: MessageRole.assistant,
+        content: response['reply'] as String? ?? '',
+        telemetry: finalTelemetry.isNotEmpty
+            ? finalTelemetry
+            : List.from(_activeTelemetry),
+      );
+
+      await _updateConversationId(newId, prefs);
+      _addMessage(assistantMsg);
     } catch (e) {
       _errorMessage = e.toString();
       final errReply = ChatMessage(
         id: DateTime.now().toString(),
         role: MessageRole.assistant,
         content: 'Sorry, I encountered an error: $e',
+        telemetry: List.from(_activeTelemetry),
       );
-      if (_mode == AgentMode.personal) {
-        _personalMessages.add(errReply);
-      } else {
-        _fileMessages.add(errReply);
-      }
+      _addMessage(errReply);
     } finally {
       _isSending = false;
+      _activeTelemetry = [];
       if (_mode == AgentMode.personal) {
         checkPersonalAgentStatus();
       }

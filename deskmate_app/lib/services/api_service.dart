@@ -7,21 +7,14 @@ class ApiService {
 
   ApiService({required this.baseUrl});
 
-  // Send personal message, using Gemini if API key provided, otherwise local backend.
-  Future<Map<String, dynamic>> sendPersonalMessage({
+  /// Helper to build chat payload dictionary
+  Map<String, dynamic> _buildChatPayload({
     required String message,
     String? conversationId,
     String? geminiApiKey,
     String? model,
-  }) async {
-    // If Gemini API key is provided, use Gemini service; otherwise fallback to local backend.
-    if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
-      final gemini = GeminiService(apiKey: geminiApiKey);
-      final reply = await gemini.generateContent(message);
-      return {'reply': reply, 'conversation_id': conversationId ?? ''};
-    }
-    final url = Uri.parse('$baseUrl/api/personal');
-    final body = {
+  }) {
+    return {
       'message': message,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversation_id': conversationId,
@@ -29,22 +22,99 @@ class ApiService {
         'api_key': geminiApiKey,
       if (model != null && model.isNotEmpty) 'model': model,
     };
+  }
+
+  /// Helper to perform JSON POST requests with unified decoding and error handling
+  Future<Map<String, dynamic>> _postJson(
+    Uri url,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(minutes: 10),
+  }) async {
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(timeout);
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      final errorMsg = (data is Map)
+          ? (data['detail'] ??
+                'Request failed with status: ${response.statusCode}')
+          : 'Request failed with status: ${response.statusCode}';
+      throw Exception(errorMsg);
+    }
+    return data as Map<String, dynamic>;
+  }
+
+  /// Helper to perform GET requests with status check and fallback on failure
+  Future<Map<String, dynamic>> _getJson(
+    String path, {
+    Duration timeout = const Duration(seconds: 5),
+    required Map<String, dynamic> fallback,
+  }) async {
     try {
       final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(minutes: 10));
-      final data = jsonDecode(response.body);
-      if (response.statusCode != 200) {
-        throw Exception(
-          data['detail'] ??
-              'Request failed with status: ${response.statusCode}',
-        );
+          .get(Uri.parse('$baseUrl$path'))
+          .timeout(timeout);
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
       }
-      return data;
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  // Send personal message, using Gemini key with backend tools, or direct Gemini if backend unavailable.
+  Future<Map<String, dynamic>> sendPersonalMessage({
+    required String message,
+    String? conversationId,
+    String? geminiApiKey,
+    String? model,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/personal');
+    final body = _buildChatPayload(
+      message: message,
+      conversationId: conversationId,
+      geminiApiKey: geminiApiKey,
+      model: model,
+    );
+
+    try {
+      return await _postJson(url, body);
+    } catch (e) {
+      // If backend is unavailable or fails, fallback to direct Gemini client
+      if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
+        try {
+          final gemini = GeminiService(apiKey: geminiApiKey);
+          final reply = await gemini.generateContent(message);
+          return {'reply': reply, 'conversation_id': conversationId ?? ''};
+        } catch (_) {}
+      }
+      throw Exception('Failed to connect to backend: $e');
+    }
+  }
+
+  // Send file-lens (code) message using local backend.
+  Future<Map<String, dynamic>> sendMessage({
+    required String message,
+    String? conversationId,
+    String? geminiApiKey,
+    String? model,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/chat');
+    final body = _buildChatPayload(
+      message: message,
+      conversationId: conversationId,
+      geminiApiKey: geminiApiKey,
+      model: model,
+    );
+
+    try {
+      return await _postJson(url, body);
     } catch (e) {
       throw Exception('Failed to connect to backend: $e');
     }
@@ -54,23 +124,17 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/reset/$conversationId');
     try {
       await http.post(url).timeout(const Duration(seconds: 5));
-    } catch (e) {
+    } catch (_) {
       // Ignore reset errors in production
     }
   }
 
   Future<Map<String, dynamic>> checkHealth() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/api/health'))
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-      return {'status': 'offline', 'local_llm': 'offline'};
-    } catch (_) {
-      return {'status': 'offline', 'local_llm': 'offline'};
-    }
+    return _getJson(
+      '/api/health',
+      timeout: const Duration(seconds: 2),
+      fallback: {'status': 'offline', 'local_llm': 'offline'},
+    );
   }
 
   /// Fetch list of available local models from backend
@@ -93,54 +157,41 @@ class ApiService {
     }
   }
 
-  // Send file-lens (code) message using local backend.
-  Future<Map<String, dynamic>> sendMessage({
-    required String message,
-    String? conversationId,
-    String? geminiApiKey,
-    String? model,
-  }) async {
-    final url = Uri.parse('$baseUrl/api/chat');
-    final body = {
-      'message': message,
-      if (conversationId != null && conversationId.isNotEmpty)
-        'conversation_id': conversationId,
-      if (geminiApiKey != null && geminiApiKey.isNotEmpty)
-        'api_key': geminiApiKey,
-      if (model != null && model.isNotEmpty) 'model': model,
-    };
-    try {
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(minutes: 10));
-      final data = jsonDecode(response.body);
-      if (response.statusCode != 200) {
-        throw Exception(
-          data['detail'] ??
-              'Request failed with status: ${response.statusCode}',
-        );
-      }
-      return data;
-    } catch (e) {
-      throw Exception('Failed to connect to backend: $e');
-    }
+  Future<Map<String, dynamic>> checkPersonalHealth() async {
+    return _getJson('/api/personal/health', fallback: {'status': 'offline'});
   }
 
-  Future<Map<String, dynamic>> checkPersonalHealth() async {
+  Future<Map<String, dynamic>> getGoogleCredentials() async {
+    return _getJson(
+      '/api/personal/credentials',
+      timeout: const Duration(seconds: 6),
+      fallback: {'status': 'offline', 'configured': false},
+    );
+  }
+
+  Future<Map<String, dynamic>> saveGoogleCredentials({
+    required String clientId,
+    required String clientSecret,
+  }) async {
     try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/api/personal/health'))
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-      return {'status': 'offline'};
-    } catch (_) {
-      return {'status': 'offline'};
+      final body = await _postJson(
+        Uri.parse('$baseUrl/api/personal/credentials'),
+        {'client_id': clientId.trim(), 'client_secret': clientSecret.trim()},
+        timeout: const Duration(seconds: 10),
+      );
+
+      return {
+        'success': true,
+        'message':
+            body['message'] ?? 'Credentials saved and activated successfully.',
+        'data': body,
+      };
+    } catch (e) {
+      final errStr = e.toString().replaceFirst('Exception: ', '');
+      return {
+        'success': false,
+        'message': errStr.isNotEmpty ? errStr : 'Failed to save credentials.',
+      };
     }
   }
 }

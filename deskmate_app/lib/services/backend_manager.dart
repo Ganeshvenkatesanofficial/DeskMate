@@ -30,7 +30,13 @@ class BackendManager {
       final response = await http
           .get(Uri.parse('http://127.0.0.1:$checkPort/api/health'))
           .timeout(const Duration(milliseconds: 1500));
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map &&
+            data['status'] == 'ok' &&
+            data.containsKey('local_llm');
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -45,12 +51,14 @@ class BackendManager {
       return;
     }
 
-    if (await isBackendRunning(8080)) {
-      _assignedPort = 8080;
-      debugPrint(
-        'Backend is already running on port 8080. Reusing existing instance.',
-      );
-      return;
+    for (final port in [8080, 8000]) {
+      if (await isBackendRunning(port)) {
+        _assignedPort = port;
+        debugPrint(
+          'Backend is already running on port $port. Reusing existing instance.',
+        );
+        return;
+      }
     }
 
     try {
@@ -135,31 +143,65 @@ class BackendManager {
 
       _assignedPort = await findFreePort();
       debugPrint('Assigned dynamic random port: $_assignedPort');
-      debugPrint('Starting backend from: $exePath on port $_assignedPort');
 
-      // Ensure execution permissions and remove quarantine on Unix/macOS
+      String workingDir = '';
+
       if (Platform.isMacOS) {
-        try {
-          await Process.run('/usr/bin/xattr', [
-            '-d',
-            'com.apple.quarantine',
-            exePath,
-          ]);
-        } catch (_) {}
-        try {
-          await Process.run('/bin/chmod', ['+x', exePath]);
-        } catch (_) {
+        final home = Platform.environment['HOME'] ?? '';
+        if (home.isNotEmpty) {
+          final supportDir = Directory(
+            p.join(home, 'Library', 'Application Support', 'DeskMate'),
+          );
+          final binDir = Directory(p.join(supportDir.path, 'bin'));
+          await binDir.create(recursive: true);
+          workingDir = supportDir.path;
+
+          final localExe = File(p.join(binDir.path, 'deskmate_backend'));
+          final sourceFile = File(exePath);
+
+          // Copy to local user directory to guarantee write permissions and bypass read-only DMG volume restrictions
           try {
-            await Process.run('chmod', ['+x', exePath]);
+            final sourceLen = await sourceFile.length();
+            final targetLen = await localExe.exists()
+                ? await localExe.length()
+                : -1;
+            if (!await localExe.exists() || sourceLen != targetLen) {
+              await sourceFile.copy(localExe.path);
+            }
+            exePath = localExe.path;
           } catch (_) {}
+
+          try {
+            await Process.run('/usr/bin/xattr', [
+              '-d',
+              'com.apple.quarantine',
+              exePath,
+            ]);
+          } catch (_) {}
+          try {
+            await Process.run('/bin/chmod', ['+x', exePath]);
+          } catch (_) {}
+        }
+      } else if (Platform.isWindows) {
+        final appData = Platform.environment['APPDATA'] ?? '';
+        if (appData.isNotEmpty) {
+          final supportDir = Directory(p.join(appData, 'DeskMate'));
+          await supportDir.create(recursive: true);
+          workingDir = supportDir.path;
         }
       }
 
-      // Spawn process silently with dynamic port argument
-      _process = await Process.start(exePath, [
-        '--port',
-        '$_assignedPort',
-      ], runInShell: false);
+      debugPrint(
+        'Starting backend from: $exePath on port $_assignedPort (cwd: $workingDir)',
+      );
+
+      // Spawn process silently with dynamic port argument and guaranteed writable working directory
+      _process = await Process.start(
+        exePath,
+        ['--port', '$_assignedPort'],
+        runInShell: false,
+        workingDirectory: workingDir.isNotEmpty ? workingDir : null,
+      );
 
       debugPrint(
         'Backend subprocess started with PID: ${_process!.pid} on port $_assignedPort',

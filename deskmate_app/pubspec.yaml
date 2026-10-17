@@ -66,6 +66,8 @@ flutter:
   assets:
     - assets/backend/deskmate_backend.exe
     - assets/backend/deskmate_backend
+    - assets/app_icon.png
+    - assets/app_icon_light.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
