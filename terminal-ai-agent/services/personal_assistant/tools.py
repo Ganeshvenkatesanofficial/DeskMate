@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-import sys as _sys
+import sys
 import urllib.request
 import webbrowser
 from datetime import datetime, timedelta
@@ -30,7 +30,7 @@ from smolagents import Tool
 import faiss
 from sentence_transformers import SentenceTransformer
 
-_env_path = Path(_sys.executable).parent / ".env" if getattr(_sys, 'frozen', False) else Path(".env")
+_env_path = Path(sys.executable).parent / ".env" if getattr(sys, 'frozen', False) else Path(".env")
 load_dotenv(dotenv_path=_env_path, override=True)
 
 from core.config import get_user_data_dir
