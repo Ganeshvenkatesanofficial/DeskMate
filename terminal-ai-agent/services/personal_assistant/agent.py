@@ -42,6 +42,14 @@ Rules:
    final response — always summarise it in plain language.
 7. For web searches and GitHub references, cite the URL of the most relevant result.
 8. Never invent or hallucinate tool names. Only call tools that are explicitly provided in your tool list.
+9. CONVERSATIONAL CONTINUITY & FOLLOW-UP QUERIES:
+   Always maintain continuity with the ongoing conversation history.
+   When the user provides a short response, city name, date, or follow-up (e.g. "in chennai", "what about tomorrow?", "how about New York?"):
+   - Identify the active topic of discussion (e.g., weather forecast, scheduling events, search query).
+   - Apply that exact same intent to the new parameter or location (e.g., if previously discussing weather and user asks "in chennai", call get_weather for Chennai!).
+10. NEVER CREATE TASKS OR NOTES WITHOUT EXPLICIT USER COMMANDS:
+    Only call `add_task` or `save_note` if the user explicitly uses command words like "add a task to...", "remind me to...", "create a todo for...", or "save note:".
+    NEVER interpret random locations, questions, or conversation follow-ups as task creation.
 """)
 
 LOCAL_FILESYSTEM_GUIDANCE = (
@@ -117,7 +125,7 @@ def run_personal_assistant(
     if is_local_filesystem_query(user_input):
         return LOCAL_FILESYSTEM_GUIDANCE
 
-    prompt = build_chat_prompt(user_input, history)
+    prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_personal_assistant_agent(api_key=api_key, model_id=model_id)
     raw_result = agent.run(prompt)
     return clean_final_answer(str(raw_result))
@@ -132,17 +140,23 @@ def stream_personal_assistant(
 ) -> Generator[Dict[str, Any], None, None]:
     """Streaming execution of Personal Assistant yielding real-time telemetry steps."""
     if is_local_filesystem_query(user_input):
+        import uuid
+        conv_id = (
+            conversation_id.strip()
+            if conversation_id and str(conversation_id).strip()
+            else f"conv_{uuid.uuid4().hex[:12]}"
+        )
         yield {
             "type": "done",
             "reply": LOCAL_FILESYSTEM_GUIDANCE,
-            "conversation_id": conversation_id or "",
+            "conversation_id": conv_id,
             "telemetry": [],
             "duration_ms": 10,
             "timestamp": time.time(),
         }
         return
 
-    prompt = build_chat_prompt(user_input, history)
+    prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_personal_assistant_agent(api_key=api_key, model_id=model_id)
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id)
 

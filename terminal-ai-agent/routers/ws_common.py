@@ -86,6 +86,9 @@ async def handle_agent_websocket(
             api_key = data.get("api_key")
             model_id = data.get("model")
             conversation_id = data.get("conversation_id")
+            if not conversation_id or not str(conversation_id).strip():
+                import uuid
+                conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
 
             # Setup async queue and dispatch background execution
             queue: asyncio.Queue = asyncio.Queue()

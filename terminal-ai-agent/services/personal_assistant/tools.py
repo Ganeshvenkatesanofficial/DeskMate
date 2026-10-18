@@ -553,9 +553,14 @@ class ListTasksTool(Tool):
 
 class AddTaskTool(Tool):
     name = "add_task"
-    description = "Add a new personal task to local storage."
+    description = (
+        "Add a new personal task or to-do item to local storage. "
+        "CRITICAL: Only call this tool when the user EXPLICITLY asks to create, add, or track a task/todo/reminder "
+        "(e.g., 'add a task to buy groceries', 'create todo: submit report'). "
+        "NEVER call this tool for questions, locations (e.g. 'in chennai'), or conversational follow-ups."
+    )
     inputs = {
-        "title": {"type": "string", "description": "Task description"},
+        "title": {"type": "string", "description": "Explicit task description (e.g. 'Buy groceries')"},
         "priority": {"type": "string", "description": "'high', 'medium', or 'low' (default 'medium')", "nullable": True},
         "due_date": {"type": "string", "description": "Optional due date as YYYY-MM-DD", "nullable": True},
     }
@@ -600,7 +605,12 @@ class CompleteTaskTool(Tool):
 
 class SaveNoteTool(Tool):
     name = "save_note"
-    description = "Save a text note locally with optional tags for later retrieval."
+    description = (
+        "Save a text note locally with optional tags for later retrieval. "
+        "CRITICAL: Only call this tool when the user EXPLICITLY asks to save or take a note "
+        "(e.g., 'save a note: project ideas', 'note: call doctor'). "
+        "NEVER call this tool for questions, locations, or conversational follow-ups."
+    )
     inputs = {
         "content": {"type": "string", "description": "Note content"},
         "tags": {"type": "string", "description": "Optional comma-separated tags", "nullable": True},

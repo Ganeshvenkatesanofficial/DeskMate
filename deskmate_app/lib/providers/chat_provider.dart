@@ -19,7 +19,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
   Map<String, dynamic> _personalCredentials = {'configured': false};
@@ -106,9 +106,12 @@ class ChatProvider extends ChangeNotifier {
         prefs.getBool('deskmate_has_configured_ai') ??
         (_selectedLocalModel.isNotEmpty);
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
-    final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
+    final themeIndex =
+        prefs.getInt('deskmate_theme_mode') ?? ThemeMode.light.index;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
       _themeMode = ThemeMode.values[themeIndex];
+    } else {
+      _themeMode = ThemeMode.light;
     }
     _apiService = ApiService(baseUrl: _backendUrl);
     _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
@@ -417,10 +420,17 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  static int _msgCounter = 0;
+  String _generateMessageId() {
+    _msgCounter++;
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    return 'msg_${ts}_$_msgCounter';
+  }
+
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || _isSending) return;
     final userMsg = ChatMessage(
-      id: DateTime.now().toString(),
+      id: _generateMessageId(),
       role: MessageRole.user,
       content: text,
     );
@@ -493,7 +503,7 @@ class ChatProvider extends ChangeNotifier {
 
       final prefs = await SharedPreferences.getInstance();
       final assistantMsg = ChatMessage(
-        id: DateTime.now().toString(),
+        id: _generateMessageId(),
         role: MessageRole.assistant,
         content: response['reply'] as String? ?? '',
         telemetry: finalTelemetry.isNotEmpty
@@ -506,7 +516,7 @@ class ChatProvider extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       final errReply = ChatMessage(
-        id: DateTime.now().toString(),
+        id: _generateMessageId(),
         role: MessageRole.assistant,
         content: 'Sorry, I encountered an error: $e',
         telemetry: List.from(_activeTelemetry),

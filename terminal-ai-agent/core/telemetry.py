@@ -64,22 +64,174 @@ def summarize_observation(obs: Any, max_length: int = 300) -> str:
     return summary
 
 
-def build_chat_prompt(user_input: str, history: Optional[List[Dict[str, str]]] = None) -> str:
-    """Format previous conversation messages into the agent prompt context."""
-    history = history or []
+def resolve_contextual_query(
+    user_input: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    api_key: Optional[str] = None,
+    model_id: Optional[str] = None,
+) -> str:
+    """
+    Dynamically rewrite follow-up queries (e.g. 'in chennai', 'how about tomorrow?')
+    into self-contained standalone queries using a fast LLM.
+    If the query is already standalone or no history exists, returns user_input unchanged.
+    Safe with zero-crash fallbacks.
+    """
+    clean_input = user_input.strip()
+    if not clean_input:
+        return ""
+
     if not history:
-        return user_input
+        return clean_input
 
-    prompt_lines = ["Continue the conversation using the prior context.", ""]
-    for item in history[-12:]:
-        role = item.get("role", "user").strip().lower()
-        label = "Assistant" if role == "assistant" else "User"
-        content = item.get("content", "").strip()
-        if content:
-            prompt_lines.append(f"{label}: {content}")
+    # 1. Extract the immediate preceding turn (last user message & last assistant message)
+    last_user = ""
+    last_assistant = ""
+    for item in reversed(history):
+        role = str(item.get("role", "")).strip().lower()
+        content = str(item.get("content", "")).strip()
+        if not content:
+            continue
+        if role == "assistant" and not last_assistant:
+            # Keep concise to minimize rewriter prompt length
+            last_assistant = content[:250].replace("\n", " ").strip()
+        elif role == "user" and not last_user:
+            last_user = content[:250].replace("\n", " ").strip()
+        if last_user and last_assistant:
+            break
 
-    prompt_lines.extend([f"User: {user_input}", "Assistant:"])
-    return "\n".join(prompt_lines)
+    # If there is no previous user turn, nothing to contextualize against
+    if not last_user:
+        return clean_input
+
+    # 2. Build lean few-shot contextualizer prompt covering both personal & file operations
+    prompt = (
+        "You are an expert query contextualizer. Rewrite follow-up queries into self-contained standalone requests.\n\n"
+        "Example 1:\n"
+        "Conversation:\n"
+        "User: What is the weather in San Francisco this weekend?\n"
+        "Assistant: It will be sunny and 18°C in San Francisco.\n"
+        'Latest query: "in chennai"\n'
+        "Standalone query: What is the weather in Chennai this weekend?\n\n"
+        "Example 2:\n"
+        "Conversation:\n"
+        "User: What files are in the core directory?\n"
+        "Assistant: Found models.py, telemetry.py, database.py.\n"
+        'Latest query: "and in services?"\n'
+        "Standalone query: What files are in the services directory?\n\n"
+        "Example 3:\n"
+        "Conversation:\n"
+        "User: Search for get_model\n"
+        "Assistant: Found get_model in core/models.py.\n"
+        'Latest query: "show its content"\n'
+        "Standalone query: Show the content of core/models.py\n\n"
+        "Example 4:\n"
+        "Conversation:\n"
+        "User: What files are in the core directory?\n"
+        "Assistant: Found models.py, telemetry.py.\n"
+        'Latest query: "create a note about meeting"\n'
+        "Standalone query: Create a note about meeting\n\n"
+        "Conversation:\n"
+        f"User: {last_user}\n"
+        f"Assistant: {last_assistant or 'None'}\n"
+        f'Latest query: "{clean_input}"\n'
+        "Standalone query:"
+    )
+
+    rewritten: Optional[str] = None
+
+    # Step A: Try fast local Ollama model via chat API
+    try:
+        from core.models import chat_local_llm, get_installed_chat_models, get_default_model
+        
+        installed = get_installed_chat_models()
+        chosen_local: Optional[str] = None
+        
+        # Priority 1: Known ultra-fast models (1B - 3B)
+        for cand in ["qwen2.5-coder:1.5b", "qwen2.5:1.5b", "llama3.2:1b", "llama3.2:3b", "phi3:mini"]:
+            if cand in installed:
+                chosen_local = cand
+                break
+        
+        # Priority 2: Any model with small size marker
+        if not chosen_local:
+            for m in installed:
+                ml = m.lower()
+                if any(tag in ml for tag in [":1b", ":1.5b", ":2b", ":3b"]):
+                    chosen_local = m
+                    break
+        
+        # Priority 3: Fall back to model_id if local, or default model
+        if not chosen_local:
+            if model_id and model_id in installed:
+                chosen_local = model_id
+            else:
+                chosen_local = get_default_model()
+
+        if chosen_local:
+            messages = [{"role": "user", "content": prompt}]
+            resp = chat_local_llm(
+                messages,
+                model=chosen_local,
+                temperature=0.0,
+            )
+            raw = resp.get("content", "").strip()
+            if raw:
+                rewritten = raw
+    except Exception as exc:
+        logger.debug(f"Local query rewriter attempt skipped/failed: {exc}")
+
+    # Step B: If local LLM was not available or failed, try Gemini Flash if API key provided
+    if not rewritten and api_key and api_key.strip():
+        try:
+            import litellm
+            resp = litellm.completion(
+                model="gemini/gemini-2.5-flash",
+                api_key=api_key.strip(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=48,
+                temperature=0.0,
+                timeout=2.0,
+            )
+            raw_text = resp.choices[0].message.content or ""
+            if raw_text.strip():
+                rewritten = raw_text.strip()
+        except Exception as exc:
+            logger.debug(f"Cloud query rewriter attempt skipped/failed: {exc}")
+
+    # Step C: Post-process rewritten text
+    if rewritten:
+        cleaned = rewritten
+        for prefix in ["Standalone Query:", "Rewritten Query:", "Query:", "Standalone request:", "Output:"]:
+            if cleaned.lower().startswith(prefix.lower()):
+                cleaned = cleaned[len(prefix):].strip()
+        cleaned = cleaned.strip('`"\'').strip()
+
+        # Sanity check: must be a reasonable length sentence (not a huge hallucination)
+        if cleaned and len(cleaned.split("\n")) <= 2 and len(cleaned) < 300:
+            if cleaned.lower() != clean_input.lower():
+                logger.info(f"Contextualized Query: '{clean_input}' -> '{cleaned}'")
+            return cleaned
+
+    # Fallback: Return original query unchanged
+    return clean_input
+
+
+def build_chat_prompt(
+    user_input: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    api_key: Optional[str] = None,
+    model_id: Optional[str] = None,
+) -> str:
+    """
+    Resolve and return a standalone, clean query for the agent.
+    Option 1: Uses dynamic query contextualization instead of polluting agent prompt history.
+    """
+    return resolve_contextual_query(
+        user_input=user_input,
+        history=history,
+        api_key=api_key,
+        model_id=model_id,
+    )
 
 
 def stream_agent_steps(
@@ -91,6 +243,12 @@ def stream_agent_steps(
     Generator that iterates through smolagents agent.run(prompt, stream=True)
     and yields structured telemetry events.
     """
+    import uuid
+    active_conv_id = (
+        conversation_id.strip()
+        if conversation_id and str(conversation_id).strip()
+        else f"conv_{uuid.uuid4().hex[:12]}"
+    )
     start_time = time.time()
     collected_steps: List[Dict[str, Any]] = []
     current_step_num = 1
@@ -228,7 +386,7 @@ def stream_agent_steps(
     yield {
         "type": "done",
         "reply": cleaned,
-        "conversation_id": conversation_id or "",
+        "conversation_id": active_conv_id,
         "telemetry": collected_steps,
         "duration_ms": total_duration_ms,
         "timestamp": time.time(),
