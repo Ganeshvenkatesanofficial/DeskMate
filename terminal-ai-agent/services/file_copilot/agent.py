@@ -8,7 +8,7 @@ and supports synchronous and streaming telemetry execution.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional
 from smolagents import ToolCallingAgent
 
 from core.models import get_model
@@ -64,7 +64,8 @@ def get_file_copilot_agent(
         "5. If you cannot find a file or if a tool errors out, report this fact honestly rather than making up fictional contents or structures.\n"
         "6. Do NOT try to solve the task yourself without tools if the task requires filesystem context. ALWAYS use tools to check the directory contents first.\n"
         "7. Never re-do a tool call that you previously did with the exact same parameters.\n"
-        "8. When presenting lists of files, folders, paths, or search results, ALWAYS format them as a clean, structured Markdown bulleted list (one item per line) instead of a single continuous line of text.\n\n"
+        "8. When presenting lists of files, folders, paths, or search results, ALWAYS format them as a clean, structured Markdown bulleted list (one item per line) instead of a single continuous line of text.\n"
+        "9. SEMANTIC VECTOR EMBEDDING SEARCH: When asked to search concepts across documents, find context semantically, or query vector embeddings, call `search_qdrant(query=...)`. To index and generate vector embeddings for a document, call `index_document(file_path=...)`.\n\n"
         "Now Begin!"
     )
     return agent
@@ -89,8 +90,9 @@ def stream_file_copilot(
     api_key: Optional[str] = None,
     model_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Generator[Dict[str, Any], None, None]:
     """Streaming execution of File Copilot yielding real-time telemetry steps."""
     prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_file_copilot_agent(api_key=api_key, model_id=model_id)
-    yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id)
+    yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id, on_event=on_event)

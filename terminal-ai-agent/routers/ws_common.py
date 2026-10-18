@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 from typing import Any, Callable, Dict, Generator, Optional
+import uuid
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger("deskmate.ws")
@@ -32,15 +33,19 @@ def _run_generator_in_thread(
     agent_name: str,
 ) -> None:
     """Run synchronous agent generator in worker thread and push events to async queue."""
+    def emit(event: Dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
     try:
-        for event in stream_fn(
+        for _ in stream_fn(
             user_input=user_input,
             history=history,
             api_key=api_key,
             model_id=model_id,
             conversation_id=conversation_id,
+            on_event=emit,
         ):
-            loop.call_soon_threadsafe(queue.put_nowait, event)
+            pass
     except Exception as exc:
         logger.error(f"Error in {agent_name} execution thread: {exc}", exc_info=True)
         loop.call_soon_threadsafe(
@@ -87,7 +92,6 @@ async def handle_agent_websocket(
             model_id = data.get("model")
             conversation_id = data.get("conversation_id")
             if not conversation_id or not str(conversation_id).strip():
-                import uuid
                 conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
 
             # Setup async queue and dispatch background execution

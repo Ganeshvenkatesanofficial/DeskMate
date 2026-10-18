@@ -5,22 +5,8 @@ Offline vector indexing and semantic retrieval powered by local Qdrant and FastE
 """
 
 from pathlib import Path
+from qdrant_client import QdrantClient
 from smolagents import Tool
-
-try:
-    from qdrant_client import QdrantClient
-except ImportError:
-    class _DummyQdrantClient:
-        def __init__(self, *args, **kwargs):
-            pass
-        def collection_exists(self, collection_name: str) -> bool:
-            return False
-        def add(self, *args, **kwargs):
-            pass
-        def query(self, *args, **kwargs):
-            return []
-    QdrantClient = _DummyQdrantClient
-
 from core.config import get_user_data_dir
 
 # Storage directory for Qdrant database (guaranteed-writable location)
@@ -33,7 +19,6 @@ def get_qdrant_client():
     """Lazy initializer for Qdrant client."""
     global _client
     if _client is None:
-        from qdrant_client import QdrantClient
         _client = QdrantClient(path=QDRANT_PATH)
     return _client
 

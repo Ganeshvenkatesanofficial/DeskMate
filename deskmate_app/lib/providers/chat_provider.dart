@@ -471,7 +471,14 @@ class ChatProvider extends ChangeNotifier {
             notifyListeners();
           },
           onTelemetry: (step) {
-            _activeTelemetry.add(step);
+            final existingIndex = _activeTelemetry.indexWhere(
+              (s) => s.step == step.step && s.phase == 'reasoning',
+            );
+            if (existingIndex != -1 && step.phase == 'reasoning') {
+              _activeTelemetry[existingIndex] = step;
+            } else {
+              _activeTelemetry.add(step);
+            }
             notifyListeners();
           },
         );
@@ -497,9 +504,18 @@ class ChatProvider extends ChangeNotifier {
       final newId = response['conversation_id'] as String? ?? '';
       final rawTelemetry =
           response['telemetry'] as List<dynamic>? ?? _activeTelemetry;
-      final finalTelemetry = rawTelemetry
-          .whereType<AgentStepTelemetry>()
-          .toList();
+      final List<AgentStepTelemetry> finalTelemetry = [];
+      for (final item in rawTelemetry) {
+        if (item is AgentStepTelemetry) {
+          finalTelemetry.add(item);
+        } else if (item is Map<String, dynamic>) {
+          finalTelemetry.add(AgentStepTelemetry.fromJson(item));
+        } else if (item is Map) {
+          finalTelemetry.add(
+            AgentStepTelemetry.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
 
       final prefs = await SharedPreferences.getInstance();
       final assistantMsg = ChatMessage(

@@ -1,3 +1,4 @@
+import traceback
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
@@ -23,7 +24,6 @@ def chat():
                 try:
                     response = run_agent(user_input)
                 except Exception as e:
-                    import traceback
                     traceback.print_exc()
                     response = f"**Error:** {str(e)}\n\n*Make sure Ollama is running with an installed chat model (`ollama list`).*"
             

@@ -7,17 +7,20 @@ SQLite, Web APIs) and supports streaming telemetry execution.
 
 from __future__ import annotations
 
+import json
+import os
+import re
 import textwrap
-from typing import Any, Dict, Generator, List, Optional
+import time
+import uuid
+from typing import Any, Callable, Dict, Generator, List, Optional
 from smolagents import ToolCallingAgent
 
+from core.config import base_dir, get_user_data_dir
+from core.database import check_database_health
 from core.models import get_model
-from core.telemetry import stream_agent_steps, clean_final_answer, build_chat_prompt
+from core.telemetry import build_chat_prompt, clean_final_answer, stream_agent_steps
 from services.personal_assistant.tools import ALL_PERSONAL_TOOLS
-
-
-import re
-import time
 
 PERSONAL_AGENT_SYSTEM_PROMPT = textwrap.dedent("""
 You are a smart personal assistant built into DeskMate, an AI desktop copilot.
@@ -50,6 +53,15 @@ Rules:
 10. NEVER CREATE TASKS OR NOTES WITHOUT EXPLICIT USER COMMANDS:
     Only call `add_task` or `save_note` if the user explicitly uses command words like "add a task to...", "remind me to...", "create a todo for...", or "save note:".
     NEVER interpret random locations, questions, or conversation follow-ups as task creation.
+11. SEMANTIC MEMORY & FAISS EMBEDDING RECALL:
+    You have long-term vector memory indexed with semantic embeddings (FAISS).
+    Whenever the user asks about past topics, their preferences, personal details, project notes, or previously discussed facts:
+    Call `recall_memory(query=...)` to search embedding memory and retrieve relevant past context.
+12. LOCAL SQLITE DATABASE OPERATIONS:
+    You have direct access to a local SQLite database storing tasks, notes, and custom structured data.
+    - When asked about stored notes or documentation, call `search_notes(query=...)`.
+    - When asked about to-do items or action items, call `list_tasks()`.
+    - When asked to run custom analytical or SQL queries, call `run_sql_query(query="SELECT ...")`.
 """)
 
 LOCAL_FILESYSTEM_GUIDANCE = (
@@ -137,16 +149,16 @@ def stream_personal_assistant(
     api_key: Optional[str] = None,
     model_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Generator[Dict[str, Any], None, None]:
     """Streaming execution of Personal Assistant yielding real-time telemetry steps."""
     if is_local_filesystem_query(user_input):
-        import uuid
         conv_id = (
             conversation_id.strip()
             if conversation_id and str(conversation_id).strip()
             else f"conv_{uuid.uuid4().hex[:12]}"
         )
-        yield {
+        done_event = {
             "type": "done",
             "reply": LOCAL_FILESYSTEM_GUIDANCE,
             "conversation_id": conv_id,
@@ -154,11 +166,14 @@ def stream_personal_assistant(
             "duration_ms": 10,
             "timestamp": time.time(),
         }
+        if on_event:
+            on_event(done_event)
+        yield done_event
         return
 
     prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_personal_assistant_agent(api_key=api_key, model_id=model_id)
-    yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id)
+    yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id, on_event=on_event)
 
 
 def is_genuine_credential(val: Optional[str]) -> bool:
@@ -172,16 +187,12 @@ def is_genuine_credential(val: Optional[str]) -> bool:
 
 def check_personal_health() -> Dict[str, Any]:
     """Check availability of Google OAuth tokens, credentials file, and database services."""
-    from core.config import get_user_data_dir, base_dir
-    import os
-
     user_data_dir = get_user_data_dir()
     has_env_creds = is_genuine_credential(os.getenv("GOOGLE_CLIENT_ID")) and is_genuine_credential(os.getenv("GOOGLE_CLIENT_SECRET"))
     has_creds_file = False
     for p in [user_data_dir / "credentials.json", base_dir.parent / "credentials.json", base_dir / "credentials.json"]:
         if p.exists():
             try:
-                import json
                 cdata = json.loads(p.read_text(encoding="utf-8"))
                 inst = cdata.get("installed") or cdata.get("web") or {}
                 if is_genuine_credential(inst.get("client_id")) and is_genuine_credential(inst.get("client_secret")):
@@ -214,6 +225,6 @@ def check_personal_health() -> Dict[str, Any]:
             "tasks": has_tasks,
         },
         "database": {
-            "sqlite": True,
+            "sqlite": check_database_health(),
         },
     }

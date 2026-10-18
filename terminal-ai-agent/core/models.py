@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import requests
 from smolagents import Model, ChatMessage, MessageRole, LiteLLMModel
 from smolagents.models import ChatMessageToolCall, ChatMessageToolCallFunction
@@ -113,6 +113,7 @@ def chat_local_llm(
     tools: list[dict[str, Any]] | None = None,
     stream: bool = False,
     temperature: float = 0.1,
+    on_reasoning_chunk: Optional[Callable[[str], None]] = None,
 ) -> dict[str, Any]:
     """Send message history to local Ollama chat API and return response message dict."""
     selected_model = model or get_default_model()
@@ -120,21 +121,80 @@ def chat_local_llm(
         raise RuntimeError(
             "No local LLM model found in Ollama. Please install a model (e.g. `ollama pull llama3`) or configure a Gemini API key."
         )
+    should_stream = stream or (on_reasoning_chunk is not None)
     payload: dict[str, Any] = {
         "model": selected_model,
         "messages": messages,
-        "stream": stream,
+        "stream": should_stream,
         "options": {"temperature": temperature},
     }
     if tools:
         payload["tools"] = tools
 
-    response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=600)
+    response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, stream=should_stream, timeout=600)
     if response.status_code != 200:
         logger.warning(f"Ollama API Error ({response.status_code}): {response.text}")
     response.raise_for_status()
-    data = response.json()
-    return data.get("message", {"role": "assistant", "content": ""})
+
+    if not should_stream:
+        data = response.json()
+        return data.get("message", {"role": "assistant", "content": ""})
+
+    full_content: list[str] = []
+    full_thinking: list[str] = []
+    accumulated_tool_calls: list[dict[str, Any]] = []
+    inside_think_tag = False
+
+    for line in response.iter_lines():
+        if not line:
+            continue
+        try:
+            chunk_data = json.loads(line)
+        except Exception:
+            continue
+
+        chunk_msg = chunk_data.get("message", {})
+        th = chunk_msg.get("thinking", "")
+        content = chunk_msg.get("content", "")
+        tc = chunk_msg.get("tool_calls", [])
+
+        if tc and isinstance(tc, list):
+            accumulated_tool_calls.extend(tc)
+
+        if th:
+            full_thinking.append(th)
+            if on_reasoning_chunk:
+                on_reasoning_chunk(th)
+
+        if content:
+            full_content.append(content)
+            if "<think>" in content:
+                inside_think_tag = True
+                part = content.split("<think>", 1)[-1]
+                if "</think>" in part:
+                    think_part, _ = part.split("</think>", 1)
+                    inside_think_tag = False
+                    if on_reasoning_chunk and think_part:
+                        on_reasoning_chunk(think_part)
+                else:
+                    if on_reasoning_chunk and part:
+                        on_reasoning_chunk(part)
+            elif inside_think_tag:
+                if "</think>" in content:
+                    think_part, _ = content.split("</think>", 1)
+                    inside_think_tag = False
+                    if on_reasoning_chunk and think_part:
+                        on_reasoning_chunk(think_part)
+                else:
+                    if on_reasoning_chunk:
+                        on_reasoning_chunk(content)
+
+    return {
+        "role": "assistant",
+        "content": "".join(full_content),
+        "thinking": "".join(full_thinking),
+        "tool_calls": accumulated_tool_calls,
+    }
 
 
 
@@ -304,6 +364,10 @@ class LocalLiteLLMModel(Model):
     def __init__(self, model_id: str | None = None, **kwargs):
         super().__init__(model_id=model_id, **kwargs)
         self.model_id = model_id or get_default_model()
+        self.on_reasoning_chunk: Optional[Callable[[str], None]] = None
+
+    def set_reasoning_callback(self, callback: Optional[Callable[[str], None]]) -> None:
+        self.on_reasoning_chunk = callback
 
     def generate(
         self,
@@ -393,6 +457,7 @@ class LocalLiteLLMModel(Model):
             clean_messages,
             model=self.model_id,
             tools=ollama_tools if ollama_tools else None,
+            on_reasoning_chunk=self.on_reasoning_chunk,
         )
 
         thinking = response_msg.get("thinking", "")

@@ -12,6 +12,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -126,7 +127,6 @@ def get_personal_credentials():
     # Fall back to environment variables or .env if credentials.json missing or incomplete
     if not client_id:
         try:
-            from dotenv import load_dotenv
             load_dotenv(override=True)
         except Exception:
             pass

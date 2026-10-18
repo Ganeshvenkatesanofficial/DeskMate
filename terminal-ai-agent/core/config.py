@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
 import threading
@@ -119,7 +120,6 @@ def _parent_process_watchdog() -> None:
         time.sleep(2)
         if sys.platform == "win32":
             try:
-                import ctypes
                 kernel32 = ctypes.windll.kernel32
                 handle = kernel32.OpenProcess(0x0010, False, parent_pid)
                 if not handle:
