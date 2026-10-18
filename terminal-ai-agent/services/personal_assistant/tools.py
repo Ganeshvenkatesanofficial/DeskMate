@@ -483,9 +483,8 @@ class SearchDriveTool(Tool):
                 }
                 for f in res.get("files", [])
             ]
-            return json.dumps(files, indent=2)
         except Exception as e:
-            return f"Drive search failed: {e}"
+            return f"Drive search failed: {e}. Note: If Google Drive is not connected, configure it under Personal Health. If you were searching for local computer files/folders, please use the File Explorer agent instead of Personal Agent."
 
 
 
