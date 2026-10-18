@@ -46,8 +46,16 @@ class IndexDocumentTool(Tool):
             if not path.is_file():
                 return f"Error: '{file_path}' is not a valid file."
 
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
+            if path.suffix.lower() == ".pdf":
+                import pypdf
+                reader = pypdf.PdfReader(str(path))
+                extracted_pages = [page.extract_text() or "" for page in reader.pages]
+                content = "\n\n".join(extracted_pages)
+                if not content.strip():
+                    return f"Error: PDF '{path.name}' has no readable text layer (scanned or image-only)."
+            else:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
 
             chunks = chunk_text(content)
             documents = [{"text": chunk, "source": str(path.name)} for chunk in chunks]

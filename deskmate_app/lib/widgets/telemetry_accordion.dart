@@ -239,7 +239,6 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         widget.steps.isNotEmpty && _expandedSteps.length == widget.steps.length;
 
     return Container(
-      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: theme.isDark ? theme.bgSubtle : const Color(0xFFF8FAFC),
@@ -326,7 +325,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                     const SizedBox(width: 6),
                   ],
 
-                  // "Hide / View process" toggle button with integrated chevron
+                  // "Hide / View process" toggle button
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -336,33 +335,25 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       color: theme.isDark
                           ? const Color(0xFF21262D)
                           : const Color(0xFFEAEEF2),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: theme.borderDefault,
-                        width: 0.8,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: theme.borderDefault, width: 1),
+                    ),
+                    child: Text(
+                      _isExpanded ? 'Hide process' : 'View process',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgMuted,
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _isExpanded ? 'Hide process' : 'View process',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.fgMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        Icon(
-                          _isExpanded
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          size: 14,
-                          color: theme.fgMuted,
-                        ),
-                      ],
-                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                    color: theme.fgMuted,
                   ),
                 ],
               ),
@@ -583,7 +574,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: EdgeInsets.symmetric(
-                          horizontal: isStepExpanded ? 8 : 0,
+                          horizontal: isStepExpanded ? 10 : 4,
                           vertical: 6,
                         ),
                         child: Row(
@@ -648,20 +639,14 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
+                                  horizontal: 5,
+                                  vertical: 1.5,
                                 ),
                                 decoration: BoxDecoration(
                                   color: theme.isDark
                                       ? const Color(0xFF21262D)
                                       : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: theme.borderDefault.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                    width: 0.8,
-                                  ),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   '${step.durationMs}ms',
@@ -679,8 +664,8 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                             // Expand / Inspect Chevron Pill
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
+                                horizontal: 5,
+                                vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
                                 color: isStepExpanded
@@ -688,13 +673,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                                     : (theme.isDark
                                           ? const Color(0xFF1E232B)
                                           : const Color(0xFFEAEEF2)),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: isStepExpanded
-                                      ? nodeColor.withValues(alpha: 0.4)
-                                      : theme.borderDefault,
-                                  width: 0.8,
-                                ),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,

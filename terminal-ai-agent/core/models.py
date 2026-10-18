@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from typing import Any, Callable, Optional
 import requests
@@ -288,17 +289,43 @@ def ensure_json_tool_call(content: str) -> str:
             if isinstance(parsed, dict):
                 # Valid tool call format
                 if "name" in parsed:
-                    return content_stripped
+                    tool_name = parsed["name"]
+                    args = parsed.get("arguments", {})
+                    if isinstance(args, dict):
+                        if tool_name == "list_directory":
+                            if "directory" in args and "directory_path" not in args:
+                                args["directory_path"] = args.pop("directory")
+                            elif "path" in args and "directory_path" not in args:
+                                args["directory_path"] = args.pop("path")
+                        elif tool_name == "read_file":
+                            if "path" in args and "file_path" not in args:
+                                args["file_path"] = args.pop("path")
+                            elif "file" in args and "file_path" not in args:
+                                args["file_path"] = args.pop("file")
+                            elif "filename" in args and "file_path" not in args:
+                                args["file_path"] = args.pop("filename")
+                        elif tool_name == "search_files":
+                            if "directory_path" in args and "directory" not in args:
+                                args["directory"] = args.pop("directory_path")
+                            elif "path" in args and "directory" not in args:
+                                args["directory"] = args.pop("path")
+                    return json.dumps(parsed, indent=2)
 
                 # Match parameter heuristics to known tools before falling back to final_answer!
-                if "directory_path" in parsed:
+                if "directory_path" in parsed or ("directory" in parsed and "pattern" not in parsed):
                     return json.dumps({"name": "list_directory", "arguments": parsed}, indent=2)
-                elif "file_path" in parsed:
+                elif "file_path" in parsed or "filename" in parsed:
                     return json.dumps({"name": "read_file", "arguments": parsed}, indent=2)
                 elif "pattern" in parsed:
                     return json.dumps({"name": "search_files", "arguments": parsed}, indent=2)
                 elif "query" in parsed:
                     return json.dumps({"name": "search_qdrant", "arguments": parsed}, indent=2)
+                elif "path" in parsed:
+                    p_val = str(parsed["path"])
+                    if "." in os.path.basename(p_val):
+                        return json.dumps({"name": "read_file", "arguments": {"file_path": p_val}}, indent=2)
+                    else:
+                        return json.dumps({"name": "list_directory", "arguments": {"directory_path": p_val}}, indent=2)
                 elif "answer" in parsed:
                     return json.dumps({"name": "final_answer", "arguments": parsed}, indent=2)
         except Exception:

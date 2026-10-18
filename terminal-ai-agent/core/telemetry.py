@@ -112,9 +112,18 @@ def resolve_contextual_query(
     # 2. Build lean few-shot contextualizer prompt with strict system & user separation
     system_instruction = (
         "You are a strict, ultra-concise query contextualizer. "
-        "Given previous turns and a follow-up query, output ONLY the self-contained standalone query. "
-        "NEVER output conversational filler, greetings, or explanations (e.g. NEVER say 'Sure', 'Please provide', 'Here is'). "
-        "If the follow-up query is already complete and clear, return it exactly as is."
+        "Given previous turns and a follow-up query, combine them into a single, self-contained standalone search or action query.\n"
+        "Examples:\n"
+        "- Previous User: Show details of requirements.txt\n"
+        "  Follow-up Query: in backend directory check?\n"
+        "  Standalone Query: Check and show details of requirements files in the backend directory and its subfolders\n"
+        "- Previous User: What is the weather in London?\n"
+        "  Follow-up Query: in New York?\n"
+        "  Standalone Query: What is the weather in New York?\n"
+        "- Previous User: Find PDF files larger than 10MB\n"
+        "  Follow-up Query: in Downloads\n"
+        "  Standalone Query: Find PDF files larger than 10MB in Downloads\n\n"
+        "NEVER output conversational filler, greetings, or explanations. Output ONLY the Standalone Query."
     )
     user_turn_content = (
         f"Previous User: {last_user}\n"

@@ -80,12 +80,13 @@ def is_local_filesystem_query(user_input: str) -> bool:
     """Detect if the user is asking about local computer files/directories instead of personal assistant tools."""
     text = user_input.strip().lower()
 
-    # Cloud / personal assistant explicit keywords bypass interception
-    cloud_keywords = [
+    # Personal assistant explicit keywords bypass interception
+    personal_keywords = [
         "drive", "google", "cloud", "gmail", "email", "calendar", "event",
-        "meeting", "schedule", "github", "repo", "weather", "forecast", "database", "sqlite"
+        "meeting", "schedule", "github", "repo", "weather", "forecast", "database", "sqlite",
+        "task", "tasks", "todo", "todos", "note", "notes", "memory", "memories", "reminder", "reminders"
     ]
-    if any(k in text for k in cloud_keywords):
+    if any(k in text for k in personal_keywords):
         return False
 
     # Check for direct file system paths
@@ -97,7 +98,8 @@ def is_local_filesystem_query(user_input: str) -> bool:
         r"(what|show|list|find|display|get)\s+(are\s+)?(the\s+)?(all\s+)?(files?|folders?|dirs?|directories)\s+in\b",
         r"(folders?|files?|directories)\s+in\s+([a-zA-Z0-9_\-\'\s]+)\s+(directory|folder)\b",
         r"\b(in|under)\s+([a-zA-Z0-9_\-\'\s]+)\s+(directory|folder)\b",
-        r"^(list|ls|dir)\s+([a-zA-Z0-9_\-/\.\s]+)$",
+        r"^(ls|dir)\b",
+        r"^list\s+([/~.]|[a-zA-Z]:|directory|folder|files?)\b",
         r"\b(current|working|local|root|parent)\s+(directory|folder|path)\b",
         r"\b(my\s+)?(desktop|downloads|documents)\s+(folder|directory|files?)\b",
         r"(what|show|list)\s+are\s+folder\'?s\b",

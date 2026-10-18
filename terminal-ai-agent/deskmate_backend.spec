@@ -8,6 +8,7 @@ hiddenimports = [
     'tiktoken_ext',
     'core',
     'core.config',
+    'core.database',
     'core.models',
     'core.telemetry',
     'routers',
@@ -26,6 +27,11 @@ hiddenimports = [
     'sqlite3',
     'duckduckgo_search',
     'sqlalchemy',
+    'pypdf',
+    'PIL',
+    'PIL.Image',
+    'faiss',
+    'sentence_transformers',
 ]
 
 packages_to_collect = [
@@ -42,6 +48,10 @@ packages_to_collect = [
     'google_auth_oauthlib',
     'duckduckgo_search',
     'sqlalchemy',
+    'pypdf',
+    'PIL',
+    'faiss',
+    'sentence_transformers',
 ]
 
 for pkg in packages_to_collect:
