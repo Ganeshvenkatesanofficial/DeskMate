@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -38,6 +39,49 @@ class _ChatScreenState extends State<ChatScreen> {
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
+  String? _topNotificationMessage;
+  Timer? _topNotificationTimer;
+
+  void _showTopNotification(String message) {
+    _topNotificationTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _topNotificationMessage = message;
+      });
+    }
+    _topNotificationTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _topNotificationMessage != null) {
+        setState(() {
+          _topNotificationMessage = null;
+        });
+      }
+    });
+  }
+
+  void _syncGoogleClientId(Map<String, dynamic> creds) {
+    if (creds['configured'] == true &&
+        creds['client_id'] != null &&
+        (creds['client_id'] as String).isNotEmpty) {
+      _googleClientIdController.text = creds['client_id'] as String;
+    } else {
+      _googleClientIdController.clear();
+    }
+  }
+
+  String _formatAiConfigSummary({
+    required String model,
+    required bool hasGeminiKey,
+    String? oauthMessage,
+  }) {
+    if (oauthMessage != null) {
+      return 'Configuration updated: AI Model ($model) + $oauthMessage';
+    }
+    if (hasGeminiKey) {
+      return 'Configuration updated: Gemini Cloud + Model ($model)';
+    }
+    return 'Configuration updated: 100% Offline with Model ($model)';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -51,15 +95,12 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController = TextEditingController(text: provider.backendUrl);
     _geminiKeyController.text = provider.geminiApiKey;
-    final creds = provider.personalCredentials;
-    if (creds['client_id'] != null &&
-        (creds['client_id'] as String).isNotEmpty) {
-      _googleClientIdController.text = creds['client_id'] as String;
-    }
+    _syncGoogleClientId(provider.personalCredentials);
   }
 
   @override
   void dispose() {
+    _topNotificationTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _geminiKeyController.dispose();
@@ -94,16 +135,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController.text = provider.backendUrl;
     _geminiKeyController.text = provider.geminiApiKey;
-    _settingsSelectedModel = provider.selectedLocalModel.isNotEmpty
-        ? provider.selectedLocalModel
-        : (provider.availableLocalModels.isNotEmpty
-              ? provider.availableLocalModels.first
-              : null);
-    final creds = provider.personalCredentials;
-    if (creds['client_id'] != null &&
-        (creds['client_id'] as String).isNotEmpty) {
-      _googleClientIdController.text = creds['client_id'] as String;
-    }
+    _settingsSelectedModel = provider.effectiveModel.isNotEmpty
+        ? provider.effectiveModel
+        : null;
+    _syncGoogleClientId(provider.personalCredentials);
     _googleCredsError = null;
     provider.fetchPersonalCredentials();
     setState(() {
@@ -181,61 +216,79 @@ class _ChatScreenState extends State<ChatScreen> {
             Row(
               children: [
                 if (isDesktop)
-                  Sidebar(
-                    onOpenSettings: _openSettings,
-                    onOpenSetupGuide: ([mode]) {
-                      setState(() {
-                        if (mode != null) _guideOverrideMode = mode;
-                        _isSetupGuideOpen = true;
-                      });
-                    },
+                  IgnorePointer(
+                    ignoring: provider.showModelSelectionDialog,
+                    child: Sidebar(
+                      onOpenSettings: _openSettings,
+                      onOpenSetupGuide: ([mode]) {
+                        setState(() {
+                          if (mode != null) _guideOverrideMode = mode;
+                          _isSetupGuideOpen = true;
+                        });
+                      },
+                    ),
                   ),
                 Expanded(
                   child: Container(
                     color: theme.bgCanvas,
-                    child: Column(
+                    child: Stack(
                       children: [
-                        Expanded(
-                          child: provider.messages.isEmpty
-                              ? _buildEmptyState(theme)
-                              : ListView.builder(
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 24,
-                                  ),
-                                  itemCount:
-                                      provider.messages.length +
-                                      (provider.isSending ? 1 : 0),
-                                  itemBuilder: (context, index) {
-                                    if (index == provider.messages.length) {
-                                      return _buildTypingIndicator(
-                                        provider,
-                                        theme,
-                                      );
-                                    }
-                                    return ChatBubble(
-                                      message: provider.messages[index],
-                                    );
-                                  },
-                                ),
+                        Column(
+                          children: [
+                            Expanded(
+                              child: provider.messages.isEmpty
+                                  ? _buildEmptyState(theme)
+                                  : ListView.builder(
+                                      controller: _scrollController,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                        vertical: 24,
+                                      ),
+                                      itemCount:
+                                          provider.messages.length +
+                                          (provider.isSending ? 1 : 0),
+                                      itemBuilder: (context, index) {
+                                        if (index == provider.messages.length) {
+                                          return _buildTypingIndicator(
+                                            provider,
+                                            theme,
+                                          );
+                                        }
+                                        return ChatBubble(
+                                          message: provider.messages[index],
+                                        );
+                                      },
+                                    ),
+                            ),
+                            _buildInputArea(provider, theme),
+                          ],
                         ),
-                        _buildInputArea(provider, theme),
+                        if (_topNotificationMessage != null)
+                          _buildTopNotificationBanner(
+                            theme,
+                            isDesktop: isDesktop,
+                          ),
+                        if (provider.showModelSelectionDialog)
+                          Positioned.fill(
+                            child: Container(
+                              color: const Color(
+                                0xB3010409,
+                              ), // rgba(1, 4, 9, 0.70)
+                              child: Center(
+                                child: _buildModelSelectionPopup(
+                                  context,
+                                  provider,
+                                  theme,
+                                ),
+                              ),
+                            ).animate().fadeIn(duration: 200.ms),
+                          ),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-            if (provider.showModelSelectionDialog)
-              Positioned.fill(
-                child: Container(
-                  color: const Color(0xB3010409), // rgba(1, 4, 9, 0.70)
-                  child: Center(
-                    child: _buildModelSelectionPopup(context, provider, theme),
-                  ),
-                ).animate().fadeIn(duration: 200.ms),
-              ),
             if (_isSettingsOpen) ...[
               // Solid Overlay
               Positioned.fill(
@@ -297,6 +350,110 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTopNotificationBanner(ThemeData theme, {bool isDesktop = true}) {
+    if (_topNotificationMessage == null) return const SizedBox.shrink();
+
+    return Positioned(
+      top: isDesktop ? 38 : 16,
+      left: 0,
+      right: 0,
+      child: Center(
+        child:
+            Container(
+                  margin: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 12),
+                  constraints: const BoxConstraints(maxWidth: 580),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.isDark
+                        ? const Color(0xFF0F2D1A)
+                        : const Color(0xFFEAFBF0),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.isDark
+                          ? const Color(0xFF1E6038)
+                          : const Color(0xFF8CE4AC),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: theme.isDark ? 0.35 : 0.08,
+                        ),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: theme.isDark
+                            ? const Color(0xFF3FB950)
+                            : const Color(0xFF1A7F37),
+                      ),
+                      const SizedBox(width: 9),
+                      Flexible(
+                        child: Text(
+                          _topNotificationMessage!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.isDark
+                                ? const Color(0xFF7EE787)
+                                : const Color(0xFF1A7F37),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _topNotificationMessage = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color:
+                                  (theme.isDark
+                                          ? const Color(0xFF7EE787)
+                                          : const Color(0xFF1A7F37))
+                                      .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: theme.isDark
+                                  ? const Color(0xFF7EE787)
+                                  : const Color(0xFF1A7F37),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                .animate()
+                .slideY(
+                  begin: -0.6,
+                  end: 0,
+                  duration: 220.ms,
+                  curve: Curves.easeOutCubic,
+                )
+                .fadeIn(duration: 180.ms),
       ),
     );
   }
@@ -512,6 +669,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildAiEngineCard(ChatProvider provider, ThemeData theme) {
+    final allModels = List<String>.from(provider.availableLocalModels);
+    if (provider.selectedLocalModel.isNotEmpty &&
+        !allModels.contains(provider.selectedLocalModel)) {
+      allModels.add(provider.selectedLocalModel);
+    }
+
+    final effectiveModel =
+        (_settingsSelectedModel != null &&
+            allModels.contains(_settingsSelectedModel))
+        ? _settingsSelectedModel
+        : (allModels.contains(provider.selectedLocalModel)
+              ? provider.selectedLocalModel
+              : (allModels.isNotEmpty ? allModels.first : null));
+
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
@@ -576,6 +747,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           const SizedBox(height: 5),
+
           Container(
             width: double.infinity,
             height: 38,
@@ -587,23 +759,13 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value:
-                    (_settingsSelectedModel != null &&
-                        provider.availableLocalModels.contains(
-                          _settingsSelectedModel,
-                        ))
-                    ? _settingsSelectedModel
-                    : (provider.availableLocalModels.isNotEmpty
-                          ? (provider.availableLocalModels.contains(
-                                  provider.selectedLocalModel,
-                                )
-                                ? provider.selectedLocalModel
-                                : provider.availableLocalModels.first)
-                          : null),
+                value: effectiveModel,
                 hint: Text(
                   provider.isLocalLlmOnline
                       ? 'No models detected'
-                      : 'Ollama Offline (127.0.0.1:11434)',
+                      : (provider.selectedLocalModel.isNotEmpty
+                            ? 'Active: ${provider.selectedLocalModel} (Offline)'
+                            : 'Ollama Offline (127.0.0.1:11434)'),
                   style: TextStyle(fontSize: 11, color: theme.fgMuted),
                 ),
                 isExpanded: true,
@@ -623,10 +785,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     setState(() => _settingsSelectedModel = newVal);
                   }
                 },
-                items: provider.availableLocalModels.map((m) {
+                items: allModels.map((m) {
+                  final isOfflineModel = !provider.availableLocalModels
+                      .contains(m);
                   final isSel =
-                      (m ==
-                      (_settingsSelectedModel ?? provider.selectedLocalModel));
+                      (m == (effectiveModel ?? provider.selectedLocalModel));
                   return DropdownMenuItem<String>(
                     value: m,
                     child: Row(
@@ -639,7 +802,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            m,
+                            isOfflineModel ? '$m (Saved / Offline)' : m,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 11,
@@ -721,8 +885,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final health = provider.personalAgentHealth;
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
     final isOAuthConfigured =
-        (checks['google_credentials_file'] == true) ||
-        (provider.personalCredentials['configured'] == true);
+        (provider.personalCredentials['configured'] == true) &&
+        (checks['google_credentials_file'] == true);
 
     return Container(
       padding: const EdgeInsets.all(13),
@@ -1002,13 +1166,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _isSavingAllSettings = true;
     });
 
-    final modelToSave =
-        _settingsSelectedModel ??
-        (provider.availableLocalModels.contains(provider.selectedLocalModel)
-            ? provider.selectedLocalModel
-            : (provider.availableLocalModels.isNotEmpty
-                  ? provider.availableLocalModels.first
-                  : ''));
+    final modelToSave = _settingsSelectedModel ?? provider.effectiveModel;
 
     // 1. Save AI Configuration (Model & Gemini Key)
     await provider.saveAiConfiguration(
@@ -1070,18 +1228,12 @@ class _ChatScreenState extends State<ChatScreen> {
         _isSavingAllSettings = false;
       });
       FocusScope.of(context).unfocus();
-      final summary = oauthMessage != null
-          ? 'Configuration saved: AI Model ($modelToSave) + $oauthMessage!'
-          : (_geminiKeyController.text.isNotEmpty
-                ? 'Configuration saved: Gemini Cloud + Model ($modelToSave)!'
-                : 'Configuration saved: 100% Offline with Model ($modelToSave)!');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(summary),
-          backgroundColor: const Color(0xFF2DA44E),
-          duration: const Duration(seconds: 2),
-        ),
+      final summary = _formatAiConfigSummary(
+        model: modelToSave,
+        hasGeminiKey: _geminiKeyController.text.isNotEmpty,
+        oauthMessage: oauthMessage,
       );
+      _showTopNotification(summary);
     }
   }
 
@@ -1194,11 +1346,7 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatProvider provider,
     ThemeData theme,
   ) {
-    String tempSelected = provider.selectedLocalModel.isNotEmpty
-        ? provider.selectedLocalModel
-        : (provider.availableLocalModels.isNotEmpty
-              ? provider.availableLocalModels.first
-              : '');
+    String tempSelected = provider.effectiveModel;
     final tempGeminiCtrl = TextEditingController(text: provider.geminiApiKey);
     bool obscureGemini = true;
 
@@ -1561,23 +1709,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         onPressed: () async {
                           final modelToSave = tempSelected.isNotEmpty
                               ? tempSelected
-                              : (hasModels
-                                    ? provider.availableLocalModels.first
-                                    : '');
+                              : provider.effectiveModel;
                           await provider.saveAiConfiguration(
                             model: modelToSave,
                             geminiApiKey: tempGeminiCtrl.text,
                           );
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                tempGeminiCtrl.text.isNotEmpty
-                                    ? 'AI Config Saved: Gemini Cloud + Model: $modelToSave'
-                                    : 'AI Config Saved: 100% Offline with Model: $modelToSave',
-                              ),
-                              duration: const Duration(seconds: 2),
-                              backgroundColor: theme.successFg,
+                          _showTopNotification(
+                            _formatAiConfigSummary(
+                              model: modelToSave,
+                              hasGeminiKey: tempGeminiCtrl.text.isNotEmpty,
                             ),
                           );
                         },
@@ -1608,6 +1748,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildEmptyState(ThemeData theme) {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     final isPersonal = provider.mode == AgentMode.personal;
+    final isCompact = MediaQuery.of(context).size.width < 620;
 
     final title = isPersonal
         ? 'DeskMate Personal Agent'
@@ -1835,11 +1976,11 @@ class _ChatScreenState extends State<ChatScreen> {
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isCompact ? 1 : 2,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 2.4,
+                  childAspectRatio: isCompact ? 4.2 : 2.4,
                 ),
                 itemCount: examples.length,
                 itemBuilder: (context, index) {

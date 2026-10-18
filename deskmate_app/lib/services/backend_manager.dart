@@ -6,10 +6,26 @@ import 'package:http/http.dart' as http;
 
 class BackendManager {
   static Process? _process;
-  static int _assignedPort = 8080;
+  static int _assignedPort = 2026;
+
+  static const int defaultPort = 2026;
 
   static int get assignedPort => _assignedPort;
   static String get backendUrl => 'http://127.0.0.1:$_assignedPort';
+
+  /// Check whether a specific port is available for binding
+  static Future<bool> isPortAvailable(int port) async {
+    try {
+      final socket = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        port,
+      );
+      await socket.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Find a free random port dynamically assigned by OS
   static Future<int> findFreePort() async {
@@ -19,7 +35,7 @@ class BackendManager {
       await socket.close();
       return port;
     } catch (_) {
-      return 8080;
+      return defaultPort;
     }
   }
 
@@ -51,7 +67,7 @@ class BackendManager {
       return;
     }
 
-    for (final port in [8080, 8000]) {
+    for (final port in [2026, 8080, 8000]) {
       if (await isBackendRunning(port)) {
         _assignedPort = port;
         debugPrint(
@@ -134,15 +150,22 @@ class BackendManager {
       }
 
       if (exePath.isEmpty || !await File(exePath).exists()) {
-        _assignedPort = 8080;
+        _assignedPort = defaultPort;
         debugPrint(
-          'Backend executable not found or placeholder at $exePath. Defaulting to port 8080 for development.',
+          'Backend executable not found or placeholder at $exePath. Defaulting to port $defaultPort for development.',
         );
         return;
       }
 
-      _assignedPort = await findFreePort();
-      debugPrint('Assigned dynamic random port: $_assignedPort');
+      if (await isPortAvailable(defaultPort)) {
+        _assignedPort = defaultPort;
+        debugPrint('Assigned default unique port: $_assignedPort');
+      } else {
+        _assignedPort = await findFreePort();
+        debugPrint(
+          'Default port $defaultPort is busy. Assigned dynamic port: $_assignedPort',
+        );
+      }
 
       String workingDir = '';
 

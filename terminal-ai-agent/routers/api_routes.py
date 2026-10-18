@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 from core.config import get_user_data_dir, persist_env_variables, base_dir
 from core.models import check_local_llm_status, get_installed_chat_models
 from services.file_copilot.agent import run_file_copilot
-from services.personal_assistant.agent import run_personal_assistant, check_personal_health
+from services.personal_assistant.agent import (
+    run_personal_assistant,
+    check_personal_health,
+    is_genuine_credential,
+)
 
 logger = logging.getLogger("deskmate.api_routes")
 router = APIRouter()
@@ -129,16 +133,31 @@ def get_personal_credentials():
         client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
         client_secret_exists = bool(os.environ.get("GOOGLE_CLIENT_SECRET", "").strip())
 
-    is_sample = any(placeholder in client_id.lower() for placeholder in ["sampleid", "your-client-id", "example", "placeholder"])
+    is_sample = not is_genuine_credential(client_id) or not is_genuine_credential(os.environ.get("GOOGLE_CLIENT_SECRET", ""))
     configured = bool(client_id and client_secret_exists and not is_sample)
 
-    # Compute preview masking
-    client_id_preview = ""
-    if client_id:
+    if not configured:
+        client_id = ""
+        client_id_preview = ""
+        client_secret_exists = False
+    else:
+        # Compute preview masking
         if len(client_id) > 28:
             client_id_preview = f"{client_id[:12]}...{client_id[-20:]}"
         else:
             client_id_preview = client_id
+
+    has_real_credentials_file = False
+    if creds_file.exists():
+        try:
+            cdata = json.loads(creds_file.read_text(encoding="utf-8"))
+            inst = cdata.get("installed") or cdata.get("web") or {}
+            cid = inst.get("client_id", "").strip()
+            csec = inst.get("client_secret", "").strip()
+            if is_genuine_credential(cid) and is_genuine_credential(csec):
+                has_real_credentials_file = True
+        except Exception:
+            pass
 
     tokens = {
         "gmail": (user_data_dir / "token_gmail.json").exists(),
@@ -153,7 +172,7 @@ def get_personal_credentials():
         "client_id": client_id,
         "client_id_preview": client_id_preview,
         "client_secret_masked": "••••••••••••••••" if client_secret_exists else "",
-        "has_credentials_file": creds_file.exists(),
+        "has_credentials_file": has_real_credentials_file,
         "credentials_path": str(creds_file),
         "tokens": tokens,
     }

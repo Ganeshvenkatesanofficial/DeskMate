@@ -79,18 +79,36 @@ def stream_personal_assistant(
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id)
 
 
+def is_genuine_credential(val: Optional[str]) -> bool:
+    """Return True if credential string is non-empty and not a placeholder/sample dummy."""
+    if not val:
+        return False
+    s = val.strip().lower()
+    placeholders = ["sample", "example", "placeholder", "your-client-id", "dummy", "test"]
+    return bool(s and not any(p in s for p in placeholders))
+
+
 def check_personal_health() -> Dict[str, Any]:
     """Check availability of Google OAuth tokens, credentials file, and database services."""
     from core.config import get_user_data_dir, base_dir
     import os
 
     user_data_dir = get_user_data_dir()
-    has_creds = (
-        (user_data_dir / "credentials.json").exists()
-        or (base_dir.parent / "credentials.json").exists()
-        or (base_dir / "credentials.json").exists()
-        or bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
-    )
+    has_env_creds = is_genuine_credential(os.getenv("GOOGLE_CLIENT_ID")) and is_genuine_credential(os.getenv("GOOGLE_CLIENT_SECRET"))
+    has_creds_file = False
+    for p in [user_data_dir / "credentials.json", base_dir.parent / "credentials.json", base_dir / "credentials.json"]:
+        if p.exists():
+            try:
+                import json
+                cdata = json.loads(p.read_text(encoding="utf-8"))
+                inst = cdata.get("installed") or cdata.get("web") or {}
+                if is_genuine_credential(inst.get("client_id")) and is_genuine_credential(inst.get("client_secret")):
+                    has_creds_file = True
+                    break
+            except Exception:
+                pass
+
+    has_creds = has_env_creds or has_creds_file
     has_gmail = (user_data_dir / "token_gmail.json").exists()
     has_cal = (user_data_dir / "token_gcal.json").exists() or (user_data_dir / "token_calendar.json").exists()
     has_drive = (user_data_dir / "token_drive.json").exists()

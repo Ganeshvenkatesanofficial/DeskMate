@@ -15,7 +15,7 @@ class ChatProvider extends ChangeNotifier {
   String _errorMessage = '';
   String _fileConversationId = '';
   String _personalConversationId = '';
-  String _backendUrl = 'http://127.0.0.1:8080';
+  String _backendUrl = 'http://127.0.0.1:2026';
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
@@ -57,6 +57,9 @@ class ChatProvider extends ChangeNotifier {
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
   List<String> get availableLocalModels => _availableLocalModels;
   String get selectedLocalModel => _selectedLocalModel;
+  String get effectiveModel => _selectedLocalModel.isNotEmpty
+      ? _selectedLocalModel
+      : (_availableLocalModels.isNotEmpty ? _availableLocalModels.first : '');
   bool get showModelSelectionDialog => _showModelSelectionDialog;
   bool get hasConfiguredAi => _hasConfiguredAi;
   List<AgentStepTelemetry> get activeTelemetry => _activeTelemetry;
@@ -91,6 +94,7 @@ class ChatProvider extends ChangeNotifier {
     final savedUrl = prefs.getString('deskmate_backend_url');
     if (savedUrl == null ||
         savedUrl.isEmpty ||
+        savedUrl == 'http://127.0.0.1:2026' ||
         savedUrl == 'http://127.0.0.1:8080') {
       _backendUrl = BackendManager.backendUrl;
     } else {
@@ -98,7 +102,9 @@ class ChatProvider extends ChangeNotifier {
     }
     _selectedLocalModel = prefs.getString('deskmate_selected_model') ?? '';
     _geminiApiKey = prefs.getString('deskmate_gemini_api_key') ?? '';
-    _hasConfiguredAi = prefs.getBool('deskmate_has_configured_ai') ?? false;
+    _hasConfiguredAi =
+        prefs.getBool('deskmate_has_configured_ai') ??
+        (_selectedLocalModel.isNotEmpty);
     _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
     final themeIndex = prefs.getInt('deskmate_theme_mode') ?? 0;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
@@ -115,13 +121,15 @@ class ChatProvider extends ChangeNotifier {
       final models = await _apiService.getAvailableModels();
       _availableLocalModels = models;
       if (_availableLocalModels.isNotEmpty) {
-        if (_selectedLocalModel.isEmpty ||
-            !_availableLocalModels.contains(_selectedLocalModel)) {
+        // If no model has ever been selected, set the first available one as initial default
+        if (_selectedLocalModel.isEmpty) {
           _selectedLocalModel = _availableLocalModels.first;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('deskmate_selected_model', _selectedLocalModel);
         }
       }
-      // If user hasn't configured AI yet, show the AI configuration dialog on initial run
-      if (!_hasConfiguredAi) {
+      // On the first time loading alone, only pop up in center if more than one model is available
+      if (!_hasConfiguredAi && _availableLocalModels.length > 1) {
         _showModelSelectionDialog = true;
       }
       notifyListeners();
@@ -146,10 +154,14 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> setSelectedLocalModel(String model) async {
-    _selectedLocalModel = model;
+    _selectedLocalModel = model.trim();
     _showModelSelectionDialog = false;
+    _hasConfiguredAi = true;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('deskmate_selected_model', model);
+    if (_selectedLocalModel.isNotEmpty) {
+      await prefs.setString('deskmate_selected_model', _selectedLocalModel);
+    }
+    await prefs.setBool('deskmate_has_configured_ai', true);
     notifyListeners();
   }
 
@@ -246,7 +258,9 @@ class ChatProvider extends ChangeNotifier {
 
     // Use BackendManager.backendUrl if valid, otherwise fallback candidates
     final primaryCandidate = BackendManager.backendUrl;
-    if (_backendUrl.isEmpty || _backendUrl == 'http://127.0.0.1:8080') {
+    if (_backendUrl.isEmpty ||
+        _backendUrl == 'http://127.0.0.1:2026' ||
+        _backendUrl == 'http://127.0.0.1:8080') {
       _backendUrl = primaryCandidate;
     }
     _apiService = ApiService(baseUrl: _backendUrl);
@@ -255,8 +269,9 @@ class ChatProvider extends ChangeNotifier {
 
     final candidates = [
       primaryCandidate,
-      'http://127.0.0.1:8000',
+      'http://127.0.0.1:2026',
       'http://127.0.0.1:8080',
+      'http://127.0.0.1:8000',
     ];
 
     const int maxAttempts = 15;
@@ -302,8 +317,9 @@ class ChatProvider extends ChangeNotifier {
       if (health['status'] != 'ok') {
         for (final candidate in [
           BackendManager.backendUrl,
-          'http://127.0.0.1:8000',
+          'http://127.0.0.1:2026',
           'http://127.0.0.1:8080',
+          'http://127.0.0.1:8000',
         ]) {
           if (candidate != _backendUrl) {
             try {
