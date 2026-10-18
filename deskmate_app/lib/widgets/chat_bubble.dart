@@ -84,21 +84,21 @@ class _ChatBubbleState extends State<ChatBubble> {
                 minWidth: isUser ? 110 : 160,
                 maxWidth: isUser ? 680 : 820,
               ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: isUser ? theme.bgEmphasis : theme.bgSubtle,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isUser ? theme.accentEmphasis : theme.borderDefault,
-                    width: 1,
-                  ),
-                ),
-                child: isUser
-                    ? IntrinsicWidth(
+              child: isUser
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.bgEmphasis,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.accentEmphasis,
+                          width: 1,
+                        ),
+                      ),
+                      child: IntrinsicWidth(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           mainAxisSize: MainAxisSize.min,
@@ -162,78 +162,106 @@ class _ChatBubbleState extends State<ChatBubble> {
                             ),
                           ],
                         ),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!isUser && widget.message.telemetry.isNotEmpty)
-                            TelemetryAccordion(steps: widget.message.telemetry),
-                          SelectionArea(
-                            child: MarkdownBody(
-                              data: widget.message.content.isNotEmpty
-                                  ? widget.message.content
-                                  : '*(No response received)*',
-                              selectable: false,
-                              styleSheet: MarkdownStyleSheet.fromTheme(theme)
-                                  .copyWith(
-                                    p: TextStyle(
-                                      color: theme.isDark
-                                          ? AppTheme.darkFgDefault
-                                          : AppTheme.lightFgDefault,
-                                      fontSize: 14,
-                                      height: 1.5,
-                                    ),
-                                    code: TextStyle(
-                                      backgroundColor: theme.bgInset,
-                                      fontFamily: 'monospace',
-                                      fontSize: 13,
-                                      color: theme.isDark
-                                          ? AppTheme.darkFgDefault
-                                          : AppTheme.lightFgDefault,
-                                    ),
-                                    codeblockDecoration: BoxDecoration(
-                                      color: theme.bgInset,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: theme.borderDefault,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    codeblockPadding: const EdgeInsets.all(12),
-                                  ),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.message.telemetry.isNotEmpty)
+                          TelemetryAccordion(steps: widget.message.telemetry),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.bgSubtle,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: theme.borderDefault,
+                              width: 1,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                widget.message.formattedTime,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: theme.isDark
-                                      ? AppTheme.darkFgMuted
-                                      : AppTheme.lightFgMuted,
+                              SelectionArea(
+                                child: MarkdownBody(
+                                  data: widget.message.content.isNotEmpty
+                                      ? widget.message.content
+                                      : '*(No response received)*',
+                                  selectable: false,
+                                  styleSheet:
+                                      MarkdownStyleSheet.fromTheme(
+                                        theme,
+                                      ).copyWith(
+                                        p: TextStyle(
+                                          color: theme.isDark
+                                              ? AppTheme.darkFgDefault
+                                              : AppTheme.lightFgDefault,
+                                          fontSize: 14,
+                                          height: 1.5,
+                                        ),
+                                        code: TextStyle(
+                                          backgroundColor: theme.bgInset,
+                                          fontFamily: 'monospace',
+                                          fontSize: 13,
+                                          color: theme.isDark
+                                              ? AppTheme.darkFgDefault
+                                              : AppTheme.lightFgDefault,
+                                        ),
+                                        codeblockDecoration: BoxDecoration(
+                                          color: theme.bgInset,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          border: Border.all(
+                                            color: theme.borderDefault,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        codeblockPadding: const EdgeInsets.all(
+                                          12,
+                                        ),
+                                      ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              _buildActionButton(
-                                icon: _isCopied
-                                    ? Icons.check_rounded
-                                    : Icons.copy_rounded,
-                                tooltip: _isCopied ? 'Copied' : 'Copy response',
-                                color: _isCopied
-                                    ? const Color(0xFF2DA44E)
-                                    : null,
-                                onTap: _copyToClipboard,
-                                theme: theme,
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    widget.message.formattedTime,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: theme.isDark
+                                          ? AppTheme.darkFgMuted
+                                          : AppTheme.lightFgMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildActionButton(
+                                    icon: _isCopied
+                                        ? Icons.check_rounded
+                                        : Icons.copy_rounded,
+                                    tooltip: _isCopied
+                                        ? 'Copied'
+                                        : 'Copy response',
+                                    color: _isCopied
+                                        ? const Color(0xFF2DA44E)
+                                        : null,
+                                    onTap: _copyToClipboard,
+                                    theme: theme,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-              ),
+                        ),
+                      ],
+                    ),
             ),
           ),
           if (isUser) ...[
