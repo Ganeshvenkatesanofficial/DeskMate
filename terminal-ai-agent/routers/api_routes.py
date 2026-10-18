@@ -12,6 +12,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -126,7 +127,6 @@ def get_personal_credentials():
     # Fall back to environment variables or .env if credentials.json missing or incomplete
     if not client_id:
         try:
-            from dotenv import load_dotenv
             load_dotenv(override=True)
         except Exception:
             pass
@@ -332,4 +332,52 @@ def chat_endpoint(request: ChatRequest):
 def personal_endpoint(request: ChatRequest):
     """Synchronous REST fallback for Personal Assistant."""
     return _handle_rest_chat(request, run_personal_assistant, "/api/personal")
+
+
+# ─── Database Explorer Endpoints ──────────────────────────────────────────────
+
+class DatabaseQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+
+
+@router.get("/api/database/overview")
+def database_overview():
+    """Retrieve SQLite database health, storage path, file size, and table summaries."""
+    from core.database import get_db_path, check_database_health, db_get_tables_overview
+    db_path = get_db_path()
+    size_bytes = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    return {
+        "status": "ok" if check_database_health() else "offline",
+        "path": db_path,
+        "size_bytes": size_bytes,
+        "size_kb": round(size_bytes / 1024, 1),
+        "tables": db_get_tables_overview(),
+    }
+
+
+@router.get("/api/database/table/{table_name}")
+def database_table_data(table_name: str, limit: int = 100, offset: int = 0):
+    """Retrieve column metadata and rows from a specific SQLite table."""
+    from core.database import db_get_table_data
+    try:
+        return {"status": "ok", **db_get_table_data(table_name, limit=limit, offset=offset)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/api/database/query")
+def database_execute_query(request: DatabaseQueryRequest):
+    """Safely execute a read-only SELECT SQL query."""
+    from core.database import db_run_sql_query
+    try:
+        rows = db_run_sql_query(request.query)
+        columns = list(rows[0].keys()) if rows else []
+        return {
+            "status": "ok",
+            "columns": columns,
+            "rows": rows,
+            "count": len(rows),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 

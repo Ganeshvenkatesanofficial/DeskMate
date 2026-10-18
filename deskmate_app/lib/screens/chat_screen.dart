@@ -10,6 +10,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/telemetry_accordion.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/credentials_setup_dialog.dart';
+import '../widgets/database_explorer_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -20,10 +21,13 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _messageFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  int? _editingMessageIndex;
 
   bool _isSettingsOpen = false;
   bool _isSetupGuideOpen = false;
+  bool _isDatabaseExplorerOpen = false;
   AgentMode? _guideOverrideMode;
   bool _isGeminiKeyObscured = true;
   String? _settingsSelectedModel;
@@ -103,6 +107,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _topNotificationTimer?.cancel();
     _messageController.dispose();
+    _messageFocusNode.dispose();
     _scrollController.dispose();
     _geminiKeyController.dispose();
     _geminiKeyFocusNode.dispose();
@@ -155,6 +160,39 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _onEditMessage(int index, String content) {
+    setState(() {
+      _editingMessageIndex = index;
+      _messageController.text = content;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length),
+      );
+    });
+    _messageFocusNode.requestFocus();
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingMessageIndex = null;
+      _messageController.clear();
+    });
+  }
+
+  void _handleSendMessage(ChatProvider provider) {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || provider.isSending) return;
+
+    if (_editingMessageIndex != null) {
+      final idx = _editingMessageIndex!;
+      setState(() => _editingMessageIndex = null);
+      _messageController.clear();
+      provider.editAndResendMessage(idx, text);
+    } else {
+      _messageController.clear();
+      provider.sendMessage(text);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ChatProvider>(context);
@@ -168,7 +206,11 @@ class _ChatScreenState extends State<ChatScreen> {
       focusNode: FocusNode()..requestFocus(),
       onKeyEvent: (event) {
         if (event.logicalKey.keyLabel == 'Escape') {
-          if (_isSetupGuideOpen) {
+          if (_editingMessageIndex != null) {
+            _cancelEditing();
+          } else if (_isDatabaseExplorerOpen) {
+            setState(() => _isDatabaseExplorerOpen = false);
+          } else if (_isSetupGuideOpen) {
             setState(() => _isSetupGuideOpen = false);
           } else if (_isSettingsOpen) {
             _closeSettings();
@@ -206,6 +248,9 @@ class _ChatScreenState extends State<ChatScreen> {
             : Drawer(
                 child: Sidebar(
                   onOpenSettings: _openSettings,
+                  onOpenDatabaseExplorer: () {
+                    setState(() => _isDatabaseExplorerOpen = true);
+                  },
                   onOpenSetupGuide: ([mode]) {
                     setState(() {
                       if (mode != null) _guideOverrideMode = mode;
@@ -223,6 +268,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     ignoring: provider.showModelSelectionDialog,
                     child: Sidebar(
                       onOpenSettings: _openSettings,
+                      onOpenDatabaseExplorer: () {
+                        setState(() => _isDatabaseExplorerOpen = true);
+                      },
                       onOpenSetupGuide: ([mode]) {
                         setState(() {
                           if (mode != null) _guideOverrideMode = mode;
@@ -259,6 +307,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                         }
                                         return ChatBubble(
                                           message: provider.messages[index],
+                                          index: index,
+                                          isSending: provider.isSending,
+                                          onEdit: () {
+                                            _onEditMessage(
+                                              index,
+                                              provider.messages[index].content,
+                                            );
+                                          },
                                         );
                                       },
                                     ),
@@ -327,6 +383,37 @@ class _ChatScreenState extends State<ChatScreen> {
                           _isSetupGuideOpen = false;
                           _guideOverrideMode = null;
                         }),
+                      ),
+                    ).animate().scale(
+                      begin: const Offset(0.95, 0.95),
+                      end: const Offset(1.0, 1.0),
+                      duration: 200.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
+              ),
+            ],
+
+            // Database Explorer Modal Overlay
+            if (_isDatabaseExplorerOpen) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _isDatabaseExplorerOpen = false),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                    child: Container(
+                      color: theme.isDark
+                          ? const Color(0x99010409)
+                          : const Color(0x661F2328),
+                    ),
+                  ),
+                ).animate().fadeIn(duration: 150.ms),
+              ),
+              Positioned.fill(
+                child:
+                    Center(
+                      child: DatabaseExplorerDialog(
+                        onClose: () =>
+                            setState(() => _isDatabaseExplorerOpen = false),
                       ),
                     ).animate().scale(
                       begin: const Offset(0.95, 0.95),
@@ -2417,26 +2504,70 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             )
-          else
+          else ...[
+            if (_editingMessageIndex != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.isDark
+                      ? AppTheme.darkBgCanvas
+                      : AppTheme.lightBgCanvas,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.accentEmphasis, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 14, color: theme.accentFg),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Editing query — update and press Enter to send & continue',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.accentFg,
+                        ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'Cancel editing (Esc)',
+                      child: InkWell(
+                        onTap: _cancelEditing,
+                        borderRadius: BorderRadius.circular(4),
+                        mouseCursor: SystemMouseCursors.click,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2.0),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: theme.fgMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    focusNode: _messageFocusNode,
                     maxLines: 4,
                     minLines: 1,
                     textInputAction: TextInputAction.send,
                     style: TextStyle(color: theme.fgDefault, fontSize: 13),
-                    onSubmitted: (val) {
-                      if (val.isNotEmpty) {
-                        provider.sendMessage(val);
-                        _messageController.clear();
-                      }
-                    },
+                    onSubmitted: (val) => _handleSendMessage(provider),
                     decoration: InputDecoration(
-                      hintText:
-                          (!provider.isLocalLlmOnline &&
-                              !provider.isUsingGemini)
+                      hintText: _editingMessageIndex != null
+                          ? 'Edit your message...'
+                          : (!provider.isLocalLlmOnline &&
+                                !provider.isUsingGemini)
                           ? 'Please configure your Gemini API Key in Settings to continue...'
                           : provider.mode == AgentMode.personal
                           ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
@@ -2467,12 +2598,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               (!provider.isLocalLlmOnline &&
                                   !provider.isUsingGemini)
                           ? null
-                          : () {
-                              if (_messageController.text.isNotEmpty) {
-                                provider.sendMessage(_messageController.text);
-                                _messageController.clear();
-                              }
-                            },
+                          : () => _handleSendMessage(provider),
                       style: ButtonStyle(
                         padding: WidgetStateProperty.all(EdgeInsets.zero),
                         elevation: WidgetStateProperty.resolveWith((states) {
@@ -2526,6 +2652,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ],
             ),
+          ],
         ],
       ),
     );

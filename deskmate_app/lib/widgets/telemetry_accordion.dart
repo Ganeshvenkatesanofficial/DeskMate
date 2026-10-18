@@ -102,45 +102,77 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       case 'search_files':
         return 'File Search';
       case 'index_document':
-        return 'Document Indexer';
+        return 'Index Document Embeddings (Qdrant)';
       case 'search_qdrant':
-        return 'Knowledge Search';
+        return 'Vector Search (Qdrant Embeddings)';
       case 'get_datetime':
         return 'System Clock';
       case 'save_to_memory':
-        return 'Memory Storage';
+        return 'Store Embedding Memory (FAISS)';
+      case 'recall_memory':
       case 'search_memory':
-        return 'Memory Recall';
+        return 'Vector Search (FAISS Embeddings)';
       case 'duckduckgo_search':
         return 'Web Research';
+      case 'web_search':
+        return 'Web Search (DuckDuckGo)';
       case 'get_unread_emails':
         return 'Gmail Inbox (Unread)';
       case 'search_emails':
         return 'Gmail Search';
       case 'send_email':
         return 'Send Email';
+      case 'reply_email':
+        return 'Reply Email';
+      case 'delete_email':
+        return 'Delete Email';
+      case 'mark_email_read':
+        return 'Mark Email Read';
       case 'create_draft_email':
         return 'Draft Email';
       case 'list_calendar_events':
+      case 'list_events':
         return 'Google Calendar Agenda';
       case 'create_calendar_event':
+      case 'create_event':
         return 'Schedule Calendar Event';
+      case 'delete_calendar_event':
+        return 'Delete Calendar Event';
+      case 'update_calendar_event':
+        return 'Update Calendar Event';
       case 'search_drive_files':
+      case 'search_drive':
         return 'Google Drive Search';
       case 'read_drive_file':
         return 'Google Drive Reader';
+      case 'create_drive_file':
+        return 'Create Drive File';
+      case 'delete_drive_file':
+        return 'Delete Drive File';
+      case 'list_google_tasks':
+        return 'Google Tasks List';
+      case 'create_google_task':
+        return 'Create Google Task';
+      case 'complete_google_task':
+        return 'Complete Google Task';
+      case 'run_sql_query':
+        return 'SQL Database Query (SQLite)';
       case 'list_tasks':
-        return 'To-Do Task List';
+        return 'List Tasks (SQLite DB)';
       case 'add_task':
-        return 'Add To-Do Task';
+        return 'Add Task (SQLite DB)';
       case 'complete_task':
-        return 'Complete To-Do Task';
+        return 'Complete Task (SQLite DB)';
       case 'save_note':
-        return 'Save Note (Local DB)';
+        return 'Save Note (SQLite DB)';
       case 'search_notes':
-        return 'Search Notes (Local DB)';
+        return 'Search Notes (SQLite DB)';
       case 'get_weather':
         return 'Live Weather Forecast';
+      case 'search_github_issues':
+        return 'Search GitHub Issues';
+      case 'create_github_issue':
+        return 'Create GitHub Issue';
       default:
         return tool
             .split('_')
@@ -207,6 +239,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         widget.steps.isNotEmpty && _expandedSteps.length == widget.steps.length;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: theme.isDark ? theme.bgSubtle : const Color(0xFFF8FAFC),
@@ -363,6 +396,21 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     final isReasoning = step.phase == 'reasoning' || (!isTool && !isObs);
     final isStepExpanded = _expandedSteps.contains(index);
 
+    final rawTool = (step.tool ?? '').toLowerCase();
+    final isVectorTool =
+        rawTool == 'recall_memory' ||
+        rawTool == 'save_to_memory' ||
+        rawTool == 'search_memory' ||
+        rawTool == 'search_qdrant' ||
+        rawTool == 'index_document';
+    final isDbTool =
+        rawTool == 'run_sql_query' ||
+        rawTool == 'search_notes' ||
+        rawTool == 'save_note' ||
+        rawTool == 'list_tasks' ||
+        rawTool == 'add_task' ||
+        rawTool == 'complete_task';
+
     IconData icon;
     Color nodeColor;
     String stageBadge;
@@ -370,11 +418,26 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     String inlineMeta = '';
 
     if (isTool) {
-      icon = Icons.terminal_rounded;
-      nodeColor = const Color(0xFF0969DA); // GitHub Blue
-      stageBadge = 'TOOL CALL';
+      if (isVectorTool) {
+        icon = Icons.hub_rounded;
+        nodeColor = const Color(0xFF8250DF); // GitHub Purple
+        stageBadge =
+            (rawTool == 'save_to_memory' || rawTool == 'index_document')
+            ? 'VECTOR EMBEDDING STORE'
+            : 'VECTOR EMBEDDING SEARCH';
+      } else if (isDbTool) {
+        icon = Icons.storage_rounded;
+        nodeColor = const Color(0xFFD29922); // GitHub Amber
+        stageBadge = rawTool == 'run_sql_query'
+            ? 'DATABASE QUERY (SQL)'
+            : 'DATABASE TRANSACTION';
+      } else {
+        icon = Icons.terminal_rounded;
+        nodeColor = const Color(0xFF0969DA); // GitHub Blue
+        stageBadge = 'TOOL CALL';
+      }
       final toolLabel = _friendlyToolName(step.tool);
-      final rawTool = step.tool ?? 'tool';
+      final displayTool = step.tool ?? 'tool';
       // Inline argument preview
       String argPreview = '';
       if (step.arguments != null && step.arguments is Map) {
@@ -384,32 +447,60 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         argPreview = entries.join(', ');
       }
       primaryTitle = toolLabel;
-      inlineMeta = argPreview.isNotEmpty ? '$rawTool($argPreview)' : rawTool;
+      inlineMeta = argPreview.isNotEmpty
+          ? '$displayTool($argPreview)'
+          : displayTool;
     } else if (isObs) {
       final summary = step.summary ?? '';
       final isWarning =
           summary.contains("is not a valid directory") ||
           summary.contains("Error:");
-      icon = isWarning
-          ? Icons.info_outline_rounded
-          : Icons.check_circle_rounded;
-      nodeColor = isWarning
-          ? const Color(0xFFD29922)
-          : const Color(0xFF2DA44E); // Green / Amber
-      stageBadge = isWarning ? 'SYSTEM NOTICE' : 'OBSERVATION';
-      primaryTitle = isWarning ? 'Path Adjustment' : 'Findings Received';
 
-      // Smart concise summary for the preview row
-      final dirCount = RegExp(r'\[DIR\]').allMatches(summary).length;
-      final fileCount = RegExp(r'\[FILE\]').allMatches(summary).length;
-      if (dirCount > 0 || fileCount > 0) {
-        inlineMeta = '$dirCount folders, $fileCount files discovered';
-      } else if (summary.contains("is not a valid directory")) {
-        inlineMeta = 'Adjusted to absolute path';
+      if (isWarning) {
+        icon = Icons.info_outline_rounded;
+        nodeColor = const Color(0xFFD29922);
+        stageBadge = 'SYSTEM NOTICE';
+        primaryTitle = 'Path Adjustment';
+      } else if (isVectorTool) {
+        icon = Icons.grain_rounded;
+        nodeColor = const Color(0xFF8250DF);
+        stageBadge = 'EMBEDDING RESULTS';
+        primaryTitle =
+            (rawTool == 'index_document' || rawTool == 'save_to_memory')
+            ? 'Vector Index Updated'
+            : 'Semantic Embeddings Retrieved';
+      } else if (isDbTool) {
+        icon = Icons.dns_rounded;
+        nodeColor = const Color(0xFF2DA44E); // Green
+        stageBadge = 'DATABASE RESULTS';
+        primaryTitle = rawTool == 'run_sql_query'
+            ? 'SQL Query Results'
+            : 'Database Records Found';
       } else {
-        inlineMeta = summary.split('\n').first.trim();
-        if (inlineMeta.length > 55) {
-          inlineMeta = '${inlineMeta.substring(0, 52)}...';
+        icon = Icons.check_circle_rounded;
+        nodeColor = const Color(0xFF2DA44E); // Green
+        stageBadge = 'OBSERVATION';
+        primaryTitle = 'Findings Received';
+      }
+
+      if (isVectorTool || isDbTool) {
+        final firstLine = summary.split('\n').first.trim();
+        inlineMeta = firstLine.length > 55
+            ? '${firstLine.substring(0, 52)}...'
+            : firstLine;
+      } else {
+        // Smart concise summary for the preview row
+        final dirCount = RegExp(r'\[DIR\]').allMatches(summary).length;
+        final fileCount = RegExp(r'\[FILE\]').allMatches(summary).length;
+        if (dirCount > 0 || fileCount > 0) {
+          inlineMeta = '$dirCount folders, $fileCount files discovered';
+        } else if (summary.contains("is not a valid directory")) {
+          inlineMeta = 'Adjusted to absolute path';
+        } else {
+          inlineMeta = summary.split('\n').first.trim();
+          if (inlineMeta.length > 55) {
+            inlineMeta = '${inlineMeta.substring(0, 52)}...';
+          }
         }
       }
     } else {
@@ -659,6 +750,28 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     int stepIndex,
     ThemeData theme,
   ) {
+    final rawTool = (step.tool ?? '').toLowerCase();
+    final isVectorTool =
+        rawTool == 'recall_memory' ||
+        rawTool == 'save_to_memory' ||
+        rawTool == 'search_memory' ||
+        rawTool == 'search_qdrant' ||
+        rawTool == 'index_document';
+    final isDbTool =
+        rawTool == 'run_sql_query' ||
+        rawTool == 'search_notes' ||
+        rawTool == 'save_note' ||
+        rawTool == 'list_tasks' ||
+        rawTool == 'add_task' ||
+        rawTool == 'complete_task';
+
+    final panelTitle = isVectorTool
+        ? 'Vector Search Parameters'
+        : (isDbTool ? 'Database Query Parameters' : 'Input Arguments Payload');
+    final panelIcon = isVectorTool
+        ? Icons.hub_rounded
+        : (isDbTool ? Icons.storage_rounded : Icons.input_rounded);
+
     final args = step.arguments ?? {};
     final jsonStr = _formatJson(args);
     final isCopied = _copiedStepIndex == stepIndex;
@@ -668,10 +781,10 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       children: [
         Row(
           children: [
-            Icon(Icons.input_rounded, size: 12, color: theme.fgMuted),
+            Icon(panelIcon, size: 12, color: theme.fgMuted),
             const SizedBox(width: 5),
             Text(
-              'Input Arguments Payload',
+              panelTitle,
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
@@ -749,6 +862,30 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     int stepIndex,
     ThemeData theme,
   ) {
+    final rawTool = (step.tool ?? '').toLowerCase();
+    final isVectorTool =
+        rawTool == 'recall_memory' ||
+        rawTool == 'save_to_memory' ||
+        rawTool == 'search_memory' ||
+        rawTool == 'search_qdrant' ||
+        rawTool == 'index_document';
+    final isDbTool =
+        rawTool == 'run_sql_query' ||
+        rawTool == 'search_notes' ||
+        rawTool == 'save_note' ||
+        rawTool == 'list_tasks' ||
+        rawTool == 'add_task' ||
+        rawTool == 'complete_task';
+
+    final panelTitle = isVectorTool
+        ? 'Semantic Vector Findings (Embeddings)'
+        : (isDbTool
+              ? 'Database Records (SQLite Data)'
+              : 'Observation & Findings Data');
+    final panelIcon = isVectorTool
+        ? Icons.grain_rounded
+        : (isDbTool ? Icons.dns_rounded : Icons.output_rounded);
+
     // Show full raw output if available, else summary
     final fullText = (step.rawOutput != null && step.rawOutput!.isNotEmpty)
         ? step.rawOutput!
@@ -761,10 +898,10 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       children: [
         Row(
           children: [
-            Icon(Icons.output_rounded, size: 12, color: theme.fgMuted),
+            Icon(panelIcon, size: 12, color: theme.fgMuted),
             const SizedBox(width: 5),
             Text(
-              'Observation & Findings Data',
+              panelTitle,
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,

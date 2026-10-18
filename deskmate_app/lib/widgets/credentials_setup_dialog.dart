@@ -14,7 +14,7 @@ class CredentialsSetupDialog extends StatefulWidget {
   const CredentialsSetupDialog({
     super.key,
     required this.onClose,
-    this.mode = AgentMode.personal,
+    this.mode = AgentMode.deskMate,
   });
 
   @override
@@ -364,13 +364,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         children: [
                           _buildDialogModeButton(
                             theme: theme,
-                            title: 'Personal Guide',
-                            icon: Icons.person_rounded,
-                            isSelected: isPersonal,
+                            title: 'File Copilot & LLM',
+                            icon: Icons.folder_open_rounded,
+                            isSelected: !isPersonal,
                             onTap: () {
-                              if (_currentMode != AgentMode.personal) {
+                              if (_currentMode != AgentMode.deskMate) {
                                 setState(() {
-                                  _currentMode = AgentMode.personal;
+                                  _currentMode = AgentMode.deskMate;
                                   _selectedTabIndex = 0;
                                 });
                               }
@@ -379,13 +379,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           const SizedBox(width: 3),
                           _buildDialogModeButton(
                             theme: theme,
-                            title: 'File Copilot & LLM',
-                            icon: Icons.folder_open_rounded,
-                            isSelected: !isPersonal,
+                            title: 'Personal Guide',
+                            icon: Icons.person_rounded,
+                            isSelected: isPersonal,
                             onTap: () {
-                              if (_currentMode != AgentMode.deskMate) {
+                              if (_currentMode != AgentMode.personal) {
                                 setState(() {
-                                  _currentMode = AgentMode.deskMate;
+                                  _currentMode = AgentMode.personal;
                                   _selectedTabIndex = 0;
                                 });
                               }
@@ -531,9 +531,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
 
               // ─── Navigation Tabs ─────────────────────────────────────────
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
-                  vertical: 6,
+                  vertical: 7,
                 ),
                 decoration: BoxDecoration(
                   color: theme.isDark ? theme.bgCanvas : Colors.white,
@@ -541,41 +542,108 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     bottom: BorderSide(color: theme.borderDefault, width: 1),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      if (isPersonal) ...[
-                        _buildTabButton(0, '🚀 Quick Setup', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(1, '🔑 GCP OAuth Guide', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(2, '🔒 Offline Tools & SQLite', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(3, '⚙️ .env Configuration', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(
-                          4,
-                          '📖 Personal Assistant Guide',
-                          theme,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth,
                         ),
-                      ] else ...[
-                        _buildTabButton(0, '🦙 Ollama & Model Setup', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(1, '🧠 Vector DB & RAG Flow', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(2, '📁 File Copilot Tools', theme),
-                        const SizedBox(width: 6),
-                        _buildTabButton(
-                          3,
-                          '⚙️ File Agent Configuration',
-                          theme,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: theme.isDark
+                                  ? const Color(0xFF161B22)
+                                  : const Color(0xFFF1F3F5),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: theme.borderDefault,
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isPersonal) ...[
+                                  _buildTabButton(
+                                    0,
+                                    'Quick Setup',
+                                    Icons.rocket_launch_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    1,
+                                    'GCP OAuth Guide',
+                                    Icons.key_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    2,
+                                    'Offline Tools & SQLite',
+                                    Icons.lock_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    3,
+                                    '.env Configuration',
+                                    Icons.settings_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    4,
+                                    'Personal Assistant Guide',
+                                    Icons.menu_book_rounded,
+                                    theme,
+                                  ),
+                                ] else ...[
+                                  _buildTabButton(
+                                    0,
+                                    'Ollama & Model Setup',
+                                    Icons.smart_toy_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    1,
+                                    'Vector DB & RAG Flow',
+                                    Icons.hub_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    2,
+                                    'File Copilot Tools',
+                                    Icons.folder_copy_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    3,
+                                    'File Agent Configuration',
+                                    Icons.tune_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    4,
+                                    'File Copilot Guide',
+                                    Icons.menu_book_rounded,
+                                    theme,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 6),
-                        _buildTabButton(4, '📖 File Copilot Guide', theme),
-                      ],
-                    ],
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
 
@@ -740,33 +808,54 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     );
   }
 
-  Widget _buildTabButton(int index, String title, ThemeData theme) {
+  Widget _buildTabButton(
+    int index,
+    String title,
+    IconData icon,
+    ThemeData theme,
+  ) {
     final isSelected = _selectedTabIndex == index;
     return InkWell(
       mouseCursor: SystemMouseCursors.click,
       onTap: () => setState(() => _selectedTabIndex = index),
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? theme.accentFg.withValues(alpha: 0.12)
+              ? (theme.isDark ? theme.bgCanvas : Colors.white)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
-          border: isSelected
-              ? Border.all(
-                  color: theme.accentFg.withValues(alpha: 0.4),
-                  width: 1,
-                )
-              : Border.all(color: Colors.transparent, width: 1),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: theme.isDark ? 0.35 : 0.08,
+                    ),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
         ),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected ? theme.accentFg : theme.fgMuted,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? theme.accentFg : theme.fgMuted,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? theme.fgDefault : theme.fgMuted,
+              ),
+            ),
+          ],
         ),
       ),
     );

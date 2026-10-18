@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
+import 'database_explorer_dialog.dart';
 
 class Sidebar extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final void Function([AgentMode? mode])? onOpenSetupGuide;
-  const Sidebar({super.key, this.onOpenSettings, this.onOpenSetupGuide});
+  final VoidCallback? onOpenDatabaseExplorer;
+  const Sidebar({
+    super.key,
+    this.onOpenSettings,
+    this.onOpenSetupGuide,
+    this.onOpenDatabaseExplorer,
+  });
 
   @override
   State<Sidebar> createState() => _SidebarState();
@@ -131,8 +138,10 @@ class _SidebarState extends State<Sidebar> {
 
                   const Spacer(),
 
-                  // --- SETTINGS BUTTON AT BOTTOM ---
+                  // --- DATABASE EXPLORER & SETTINGS ---
                   const SizedBox(height: 12),
+                  _buildDatabaseExplorerButton(theme),
+                  const SizedBox(height: 8),
                   _buildSettingsButton(theme),
                   const SizedBox(height: 10),
                   Center(
@@ -297,42 +306,47 @@ class _SidebarState extends State<Sidebar> {
               color: theme.fgMuted,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           // Backend Server Row with DNS/Server Icon
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3.5),
-                decoration: BoxDecoration(
-                  color: (isOnline ? theme.successFg : theme.dangerFg)
-                      .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
                     color: (isOnline ? theme.successFg : theme.dangerFg)
-                        .withValues(alpha: 0.35),
-                    width: 0.8,
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: (isOnline ? theme.successFg : theme.dangerFg)
+                          .withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.dns_rounded,
+                    size: 13,
+                    color: isOnline ? theme.successFg : theme.dangerFg,
                   ),
                 ),
-                child: Icon(
-                  Icons.dns_rounded,
-                  size: 13,
-                  color: isOnline ? theme.successFg : theme.dangerFg,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isOnline ? 'Backend Online' : 'Backend Offline',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.fgDefault,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isOnline ? 'Backend Online' : 'Backend Offline',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgDefault,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 2),
 
           // Processor / Chip Icon for Local LLM or Cloud Icon for Gemini (Clickable to open Model Configuration)
           Builder(
@@ -363,17 +377,16 @@ class _SidebarState extends State<Sidebar> {
                     onTap: () {
                       provider.openModelSelectionDialog();
                     },
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(5),
                     hoverColor: theme.accentFg.withValues(alpha: 0.08),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 3,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(3.5),
+                            width: 22,
+                            height: 22,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: llmColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
@@ -471,18 +484,6 @@ class _SidebarState extends State<Sidebar> {
         ),
         const SizedBox(height: 8),
 
-        // Personal Agent Setup Guide
-        _buildSidebarGuideCard(
-          theme: theme,
-          icon: Icons.person_rounded,
-          title: 'Personal Agent Guide',
-          subtitle: 'Google OAuth, Gmail, Calendar, Drive',
-          badge: 'Workspace',
-          onTap: () => widget.onOpenSetupGuide?.call(AgentMode.personal),
-        ),
-
-        const SizedBox(height: 9),
-
         // File Explorer & Local LLM Guide
         _buildSidebarGuideCard(
           theme: theme,
@@ -491,6 +492,18 @@ class _SidebarState extends State<Sidebar> {
           subtitle: 'Local models, RAG vector DB & Ollama',
           badge: '100% Offline',
           onTap: () => widget.onOpenSetupGuide?.call(AgentMode.deskMate),
+        ),
+
+        const SizedBox(height: 9),
+
+        // Personal Agent Setup Guide
+        _buildSidebarGuideCard(
+          theme: theme,
+          icon: Icons.person_rounded,
+          title: 'Personal Agent Guide',
+          subtitle: 'Google OAuth, Gmail, Calendar, Drive',
+          badge: 'Workspace',
+          onTap: () => widget.onOpenSetupGuide?.call(AgentMode.personal),
         ),
       ],
     );
@@ -740,6 +753,72 @@ class _SidebarState extends State<Sidebar> {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: theme.fgDefault,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatabaseExplorerButton(ThemeData theme) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
+        onTap: () {
+          if (widget.onOpenDatabaseExplorer != null) {
+            widget.onOpenDatabaseExplorer!();
+          } else {
+            showDialog(
+              context: context,
+              builder: (ctx) => DatabaseExplorerDialog(
+                onClose: () => Navigator.of(ctx).pop(),
+              ),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(6),
+        hoverColor: theme.bgEmphasis,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: theme.isDark ? theme.bgCanvas : Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: theme.borderDefault, width: 1),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.storage_rounded, size: 16, color: theme.accentFg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Database Explorer',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: theme.fgDefault,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 1.5,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.accentMuted,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'SQLite',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.accentFg,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],

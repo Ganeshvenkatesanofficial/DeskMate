@@ -92,7 +92,14 @@ class AgentWebSocketClient {
               onStatus?.call(title, msg);
             } else if (type == 'telemetry') {
               final step = AgentStepTelemetry.fromJson(event);
-              telemetrySteps.add(step);
+              final existingIndex = telemetrySteps.indexWhere(
+                (s) => s.step == step.step && s.phase == 'reasoning',
+              );
+              if (existingIndex != -1 && step.phase == 'reasoning') {
+                telemetrySteps[existingIndex] = step;
+              } else {
+                telemetrySteps.add(step);
+              }
               onTelemetry?.call(step);
             } else if (type == 'done') {
               timer.cancel();

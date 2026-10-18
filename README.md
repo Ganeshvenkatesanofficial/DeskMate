@@ -74,7 +74,16 @@ irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/ins
 * **Adaptive Fallback Hierarchy**: Automatically leverages local lightweight Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`) with sub-80ms latency and $0 cost. If unavailable, falls back to Gemini Flash or directly passes the raw query with zero crashes or lag.
 * **Strict Session Isolation**: Context is strictly confined to the active `conversation_id`. Clicking "New Chat" resets history completely with zero context bleeding.
 
+### 6. 🗄️ Inbuilt Visual SQLite Database Explorer & Query Console
+* **Direct In-App Database Management**: Click the **"Database Explorer"** button in the sidebar (above Settings) to inspect the local SQLite database (`deskmate_agent.db`) natively.
+* **Dual-Mode Visual Explorer**:
+  - **Tables & Records**: Browse SQLite tables (`tasks`, `notes`, `memories`) with live row counts, column schemas, real-time in-memory row filtering, and single-click JSON export.
+  - **SQL Query Console**: Write and execute safe, read-only `SELECT` SQL queries directly from the desktop app with execution timing benchmarks (e.g., *"3 rows returned in 2ms"*), quick query template chips (`SELECT * FROM tasks WHERE done = 0;`), and dynamic full-width data grid rendering.
+* **Full-Width Proportional Alignment**: Designed with Primer typography, auto-expanding text columns, boolean completion badges, priority status chips, and a double-click **Record Inspector** modal.
+* **Safe Session Isolation**: Personal records (tasks, notes, memories) are persisted safely on disk in SQLite. Starting a "New Conversation" resets only the active LLM context memory; your database records remain 100% intact and persistent.
+
 ---
+
 
 ## Dual‑Service AI Architecture
 
@@ -511,6 +520,101 @@ curl -X POST "http://127.0.0.1:8000/api/reset/test_conv_01"
 ```
 
 ---
+
+#### 10. Database Health & Overview — `GET /api/database/overview`
+* **What**: Returns SQLite database connection status, physical storage path, file size in KB, and detailed table summaries with row counts and column definitions.
+* **Why**: Powers the Database Explorer header and tables list in the Flutter desktop frontend.
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/database/overview"
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "path": "/Users/user/Library/Application Support/DeskMate/deskmate_agent.db",
+  "size_bytes": 20480,
+  "size_kb": 20.0,
+  "tables": [
+    {
+      "name": "tasks",
+      "row_count": 3,
+      "columns": [
+        {"name": "id", "type": "INTEGER", "pk": true},
+        {"name": "title", "type": "TEXT", "pk": false},
+        {"name": "priority", "type": "TEXT", "pk": false},
+        {"name": "due_date", "type": "TEXT", "pk": false},
+        {"name": "done", "type": "INTEGER", "pk": false},
+        {"name": "created_at", "type": "TEXT", "pk": false}
+      ]
+    },
+    {"name": "notes", "row_count": 2, "columns": [...]},
+    {"name": "memories", "row_count": 2, "columns": [...]}
+  ]
+}
+```
+
+---
+
+#### 11. Table Data & Records — `GET /api/database/table/{table_name}`
+* **What**: Fetches column definitions and paginated records from a specific SQLite table.
+* **Why**: Renders the full-width interactive data table in the Database Explorer.
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/database/table/tasks?limit=50&offset=0"
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "table": "tasks",
+  "total_rows": 3,
+  "limit": 50,
+  "offset": 0,
+  "columns": ["id", "title", "priority", "due_date", "done", "created_at"],
+  "rows": [
+    {
+      "id": 1,
+      "title": "in chennai",
+      "priority": "medium",
+      "due_date": null,
+      "done": 0,
+      "created_at": "2026-10-18 08:17:44"
+    }
+  ]
+}
+```
+
+---
+
+#### 12. Safe Read-Only SQL Query Console — `POST /api/database/query`
+* **What**: Safely executes read-only `SELECT` SQL queries and returns columns, rows, and total count.
+* **Why**: Executes custom queries written by the user or triggered via quick templates in the UI.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/database/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "SELECT id, title, done FROM tasks WHERE done = 0"
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "columns": ["id", "title", "done"],
+  "rows": [
+    {"id": 1, "title": "in chennai", "done": 0}
+  ],
+  "count": 1
+}
+```
+
+---
+
 
 ## 🔒 Conversation & Memory Security
 

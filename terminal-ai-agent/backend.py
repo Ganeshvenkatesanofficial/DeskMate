@@ -14,6 +14,7 @@ import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 from core.config import setup_stdio_logging, start_parent_watchdog
 from routers.api_routes import router as api_router
@@ -78,8 +79,6 @@ def find_free_port() -> int:
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     parser = argparse.ArgumentParser(description="DeskMate Backend Server")
     parser.add_argument("--port", type=int, default=None, help="Port to bind backend server (default: 2026)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host interface")

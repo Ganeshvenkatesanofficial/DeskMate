@@ -10,20 +10,40 @@ from __future__ import annotations
 import base64
 import json
 import os
-import sqlite3
+import sys
 import urllib.request
+import webbrowser
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-import sys as _sys
-_env_path = Path(_sys.executable).parent / ".env" if getattr(_sys, 'frozen', False) else Path(".env")
-load_dotenv(dotenv_path=_env_path, override=True)
-
+from duckduckgo_search import DDGS
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaInMemoryUpload
 from smolagents import Tool
 
+import faiss
+from sentence_transformers import SentenceTransformer
+
+_env_path = Path(sys.executable).parent / ".env" if getattr(sys, 'frozen', False) else Path(".env")
+load_dotenv(dotenv_path=_env_path, override=True)
+
 from core.config import get_user_data_dir
+from core.database import (
+    db_add_task,
+    db_complete_task,
+    db_get_all_memories,
+    db_list_tasks,
+    db_run_sql_query,
+    db_save_memory,
+    db_save_note,
+    db_search_notes,
+)
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,10 +52,6 @@ _CREDS = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
 
 def _google_service(scopes: list[str], token_path: str, api: str, version: str) -> Any:
     """Return an authenticated Google API service, refreshing token if needed."""
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
-    from googleapiclient.discovery import build
 
     # Always write tokens in user data directory
     resolved_token_path = str(get_user_data_dir() / Path(token_path).name)
@@ -101,8 +117,6 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                         req_scopes = list(set(scopes + existing_scopes))
                 except Exception:
                     pass
-            import webbrowser
-            import sys
 
             def _robust_open(url, new=0, autoraise=True):
                 sys.stderr.write(f"\n[OAuth Re-Auth] Please open this URL in your browser if it doesn't open automatically:\n{url}\n\n")
@@ -130,41 +144,6 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
     return build(api, version, credentials=creds)
 
 
-# ─── local SQLite store for Tasks & Notes ────────────────────────────────────
-
-_DEFAULT_DB = str(get_user_data_dir() / "deskmate_agent.db")
-_DB_PATH = os.getenv("LOCAL_AGENT_DB", _DEFAULT_DB)
-
-
-def _local_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            priority TEXT DEFAULT 'medium',
-            due_date TEXT,
-            done INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now'))
-        )""")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            tags TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now'))
-        )""")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS memories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            tags TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now'))
-        )""")
-    conn.commit()
-    return conn
-
 
 
 # ─── FAISS vector memory (in-process, fully offline) ─────────────────────────
@@ -175,10 +154,12 @@ _MEM_INDEX: Any = None
 
 
 def _embed_batch(texts: list[str]) -> Any:
-    from sentence_transformers import SentenceTransformer
     global _model_cache
     if '_model_cache' not in globals():
-        _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
+        if SentenceTransformer is not None:
+            _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
+        else:
+            raise RuntimeError("sentence_transformers is not installed.")
     return _model_cache.encode(texts, normalize_embeddings=True).astype("float32")
 
 
@@ -189,26 +170,26 @@ def _embed(text: str) -> Any:
 def _faiss_index() -> Any:
     global _MEM_INDEX, _MEM_TEXTS, _MEM_META
     if _MEM_INDEX is None:
-        import faiss
+        if faiss is None:
+            raise RuntimeError("faiss is not installed.")
         _MEM_INDEX = faiss.IndexFlatL2(384)
         _MEM_TEXTS = []
         _MEM_META = []
         
-        # Pull memories from persistent SQLite table
+        # Pull memories from persistent SQLite table via core.database
         try:
-            with _local_conn() as conn:
-                rows = conn.execute("SELECT content, tags, created_at FROM memories").fetchall()
-                if rows:
-                    texts = [r["content"] for r in rows]
-                    tags_list = [r["tags"] for r in rows]
-                    dates = [r["created_at"] for r in rows]
-                    
-                    embeddings = _embed_batch(texts)
-                    _MEM_INDEX.add(embeddings)
-                    
-                    for text, tags, date in zip(texts, tags_list, dates):
-                        _MEM_TEXTS.append(text)
-                        _MEM_META.append({"tags": tags, "saved_at": date})
+            rows = db_get_all_memories()
+            if rows:
+                texts = [r["content"] for r in rows]
+                tags_list = [r["tags"] for r in rows]
+                dates = [r["created_at"] for r in rows]
+                
+                embeddings = _embed_batch(texts)
+                _MEM_INDEX.add(embeddings)
+                
+                for text, tags, date in zip(texts, tags_list, dates):
+                    _MEM_TEXTS.append(text)
+                    _MEM_META.append({"tags": tags, "saved_at": date})
         except Exception as e:
             print(f"Error loading vector memory from DB: {e}")
     return _MEM_INDEX
@@ -331,7 +312,6 @@ class SendEmailTool(Tool):
                 os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
                 "gmail", "v1",
             )
-            from email.mime.text import MIMEText
             mime = MIMEText(body)
             mime["To"] = to
             mime["Subject"] = subject
@@ -506,7 +486,6 @@ class WebSearchTool(Tool):
 
     def forward(self, query: str, max_results: int | None = 5) -> str:
         try:
-            from duckduckgo_search import DDGS
             results = []
             max_results = max_results or 5
             with DDGS() as ddgs:
@@ -532,20 +511,7 @@ class ListTasksTool(Tool):
 
     def forward(self, show_done: bool | None = False, priority: str | None = "") -> str:
         try:
-            show_done = show_done or False
-            priority = priority or ""
-            with _local_conn() as conn:
-                q = "SELECT * FROM tasks"
-                conds, params = [], []
-                if not show_done:
-                    conds.append("done = 0")
-                if priority:
-                    conds.append("priority = ?")
-                    params.append(priority.lower())
-                if conds:
-                    q += " WHERE " + " AND ".join(conds)
-                q += " ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, due_date ASC"
-                rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+            rows = db_list_tasks(show_done=bool(show_done), priority=priority or "")
             return json.dumps(rows, indent=2)
         except Exception as e:
             return f"Failed to list tasks: {e}"
@@ -568,15 +534,8 @@ class AddTaskTool(Tool):
 
     def forward(self, title: str, priority: str | None = "medium", due_date: str | None = "") -> str:
         try:
-            priority = priority or "medium"
-            due_date = due_date or ""
-            with _local_conn() as conn:
-                conn.execute(
-                    "INSERT INTO tasks (title, priority, due_date) VALUES (?, ?, ?)",
-                    (title, priority.lower(), due_date or None),
-                )
-                conn.commit()
-            return f"Task added: '{title}' [{priority}]" + (f" due {due_date}" if due_date else "")
+            task = db_add_task(title=title, priority=priority or "medium", due_date=due_date or "")
+            return f"Task added: '{task['title']}' [{task['priority']}]" + (f" due {task['due_date']}" if task['due_date'] else "")
         except Exception as e:
             return f"Failed to add task: {e}"
 
@@ -591,10 +550,10 @@ class CompleteTaskTool(Tool):
 
     def forward(self, task_id: int) -> str:
         try:
-            with _local_conn() as conn:
-                conn.execute("UPDATE tasks SET done = 1 WHERE id = ?", (task_id,))
-                conn.commit()
-            return f"Task {task_id} marked as done."
+            success = db_complete_task(task_id=task_id)
+            if success:
+                return f"Task {task_id} marked as done."
+            return f"Task {task_id} not found."
         except Exception as e:
             return f"Failed to complete task: {e}"
 
@@ -619,10 +578,7 @@ class SaveNoteTool(Tool):
 
     def forward(self, content: str, tags: str | None = "") -> str:
         try:
-            tags = tags or ""
-            with _local_conn() as conn:
-                conn.execute("INSERT INTO notes (content, tags) VALUES (?, ?)", (content, tags))
-                conn.commit()
+            db_save_note(content=content, tags=tags or "")
             return "Note saved successfully."
         except Exception as e:
             return f"Failed to save note: {e}"
@@ -638,12 +594,8 @@ class SearchNotesTool(Tool):
 
     def forward(self, query: str) -> str:
         try:
-            with _local_conn() as conn:
-                rows = conn.execute(
-                    "SELECT * FROM notes WHERE content LIKE ? OR tags LIKE ? ORDER BY created_at DESC LIMIT 20",
-                    (f"%{query}%", f"%{query}%"),
-                ).fetchall()
-            return json.dumps([dict(r) for r in rows], indent=2)
+            rows = db_search_notes(query=query)
+            return json.dumps(rows, indent=2)
         except Exception as e:
             return f"Failed to search notes: {e}"
 
@@ -704,10 +656,8 @@ class SaveMemoryTool(Tool):
             tags = tags or ""
             created_at = datetime.utcnow().isoformat()
             
-            # Persist to SQLite database
-            with _local_conn() as conn:
-                conn.execute("INSERT INTO memories (content, tags, created_at) VALUES (?, ?, ?)", (content, tags, created_at))
-                conn.commit()
+            # Persist to SQLite database via core.database
+            db_save_memory(content=content, tags=tags, created_at=created_at)
             
             # Load and update FAISS index
             idx = _faiss_index()
@@ -771,21 +721,7 @@ class RunSQLQueryTool(Tool):
 
     def forward(self, query: str, db_url: str | None = "") -> str:
         try:
-            db_url = db_url or ""
-            if not query.strip().upper().startswith("SELECT"):
-                return "Error: only SELECT queries are permitted for safety."
-            
-            from sqlalchemy import create_engine, text
-            url = db_url or os.getenv("DATABASE_URL", "sqlite:///deskmate_data.db")
-            if url.startswith("sqlite:///"):
-                db_name = url.split("sqlite:///")[-1]
-                if not os.path.isabs(db_name):
-                    url = f"sqlite:///{str(get_user_data_dir() / db_name)}"
-            
-            engine = create_engine(url)
-            with engine.connect() as conn:
-                result = conn.execute(text(query))
-                rows = [dict(r._mapping) for r in result]
+            rows = db_run_sql_query(query=query, db_url=db_url or "")
             return json.dumps(rows, indent=2, default=str)
         except Exception as e:
             return f"SQL query failed: {e}"
@@ -936,7 +872,6 @@ class ReplyEmailTool(Tool):
             if orig_msg_id:
                 references = f"{references} {orig_msg_id}".strip()
             
-            from email.mime.text import MIMEText
             mime = MIMEText(body)
             mime["To"] = to
             mime["Subject"] = subject
@@ -1105,8 +1040,6 @@ class CreateDriveFileTool(Tool):
                 "name": title,
                 "mimeType": mime
             }
-            
-            from googleapiclient.http import MediaInMemoryUpload
             
             media_body = None
             if content and file_type.lower() in ["text", "doc"]:

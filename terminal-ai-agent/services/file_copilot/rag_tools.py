@@ -5,22 +5,8 @@ Offline vector indexing and semantic retrieval powered by local Qdrant and FastE
 """
 
 from pathlib import Path
+from qdrant_client import QdrantClient
 from smolagents import Tool
-
-try:
-    from qdrant_client import QdrantClient
-except ImportError:
-    class _DummyQdrantClient:
-        def __init__(self, *args, **kwargs):
-            pass
-        def collection_exists(self, collection_name: str) -> bool:
-            return False
-        def add(self, *args, **kwargs):
-            pass
-        def query(self, *args, **kwargs):
-            return []
-    QdrantClient = _DummyQdrantClient
-
 from core.config import get_user_data_dir
 
 # Storage directory for Qdrant database (guaranteed-writable location)
@@ -33,7 +19,6 @@ def get_qdrant_client():
     """Lazy initializer for Qdrant client."""
     global _client
     if _client is None:
-        from qdrant_client import QdrantClient
         _client = QdrantClient(path=QDRANT_PATH)
     return _client
 
@@ -61,8 +46,16 @@ class IndexDocumentTool(Tool):
             if not path.is_file():
                 return f"Error: '{file_path}' is not a valid file."
 
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
+            if path.suffix.lower() == ".pdf":
+                import pypdf
+                reader = pypdf.PdfReader(str(path))
+                extracted_pages = [page.extract_text() or "" for page in reader.pages]
+                content = "\n\n".join(extracted_pages)
+                if not content.strip():
+                    return f"Error: PDF '{path.name}' has no readable text layer (scanned or image-only)."
+            else:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
 
             chunks = chunk_text(content)
             documents = [{"text": chunk, "source": str(path.name)} for chunk in chunks]
