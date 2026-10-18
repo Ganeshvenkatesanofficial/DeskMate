@@ -6,10 +6,26 @@ import 'package:http/http.dart' as http;
 
 class BackendManager {
   static Process? _process;
-  static int _assignedPort = 8080;
+  static int _assignedPort = 2026;
+
+  static const int defaultPort = 2026;
 
   static int get assignedPort => _assignedPort;
   static String get backendUrl => 'http://127.0.0.1:$_assignedPort';
+
+  /// Check whether a specific port is available for binding
+  static Future<bool> isPortAvailable(int port) async {
+    try {
+      final socket = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        port,
+      );
+      await socket.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Find a free random port dynamically assigned by OS
   static Future<int> findFreePort() async {
@@ -19,7 +35,7 @@ class BackendManager {
       await socket.close();
       return port;
     } catch (_) {
-      return 8080;
+      return defaultPort;
     }
   }
 
@@ -42,6 +58,42 @@ class BackendManager {
     }
   }
 
+  /// Returns true if running on macOS directly from a mounted DMG or AppTranslocation sandbox
+  static bool get isRunningFromDmgOrTranslocation {
+    if (!Platform.isMacOS) return false;
+    final exe = Platform.resolvedExecutable;
+    return exe.contains('/Volumes/') || exe.contains('/AppTranslocation/');
+  }
+
+  /// Copies the currently running DeskMate.app to /Applications, removes quarantine, and relaunches
+  static Future<bool> copyToApplications() async {
+    if (!Platform.isMacOS) return false;
+    try {
+      final exe = Platform.resolvedExecutable;
+      final appIndex = exe.indexOf('.app');
+      if (appIndex == -1) return false;
+      final appPath = exe.substring(0, appIndex + 4);
+      final targetApp = '/Applications/DeskMate.app';
+
+      // Remove existing /Applications/DeskMate.app if present
+      await Process.run('/bin/rm', ['-rf', targetApp]);
+
+      // Copy DeskMate.app to /Applications
+      final copyRes = await Process.run('/bin/cp', ['-R', appPath, targetApp]);
+      if (copyRes.exitCode == 0) {
+        // Strip quarantine attributes so it opens cleanly without Gatekeeper bounce
+        await Process.run('/usr/bin/xattr', ['-cr', targetApp]);
+        await Process.run('/bin/chmod', ['-R', 'u+rwX,go+rX', targetApp]);
+        // Launch the /Applications copy and exit current instance
+        await Process.run('/usr/bin/open', [targetApp]);
+        exit(0);
+      }
+    } catch (e) {
+      debugPrint('Failed to copy DeskMate to Applications: $e');
+    }
+    return false;
+  }
+
   /// Launch backend executable silently in background on dynamic free port
   static Future<void> start() async {
     if (!Platform.isWindows && !Platform.isMacOS) {
@@ -51,7 +103,7 @@ class BackendManager {
       return;
     }
 
-    for (final port in [8080, 8000]) {
+    for (final port in [2026, 8080, 8000]) {
       if (await isBackendRunning(port)) {
         _assignedPort = port;
         debugPrint(
@@ -134,15 +186,22 @@ class BackendManager {
       }
 
       if (exePath.isEmpty || !await File(exePath).exists()) {
-        _assignedPort = 8080;
+        _assignedPort = defaultPort;
         debugPrint(
-          'Backend executable not found or placeholder at $exePath. Defaulting to port 8080 for development.',
+          'Backend executable not found or placeholder at $exePath. Defaulting to port $defaultPort for development.',
         );
         return;
       }
 
-      _assignedPort = await findFreePort();
-      debugPrint('Assigned dynamic random port: $_assignedPort');
+      if (await isPortAvailable(defaultPort)) {
+        _assignedPort = defaultPort;
+        debugPrint('Assigned default unique port: $_assignedPort');
+      } else {
+        _assignedPort = await findFreePort();
+        debugPrint(
+          'Default port $defaultPort is busy. Assigned dynamic port: $_assignedPort',
+        );
+      }
 
       String workingDir = '';
 

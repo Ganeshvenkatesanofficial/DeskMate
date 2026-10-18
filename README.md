@@ -6,6 +6,20 @@ By bundling the backend as a silent background process inside the Flutter applic
 
 ---
 
+## 🚀 Quick Install (100% Free Open-Source)
+
+### macOS (One-Line Auto-Install)
+Run this single command in your Terminal. It installs DeskMate directly into your Applications folder and launches immediately with **zero macOS Gatekeeper warnings**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/dev/install.sh | bash
+```
+
+### macOS (DMG Click-to-Install)
+1. Download **`DeskMate-macOS.dmg`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Open the disk image and double-click **`Install DeskMate`** to install and open with zero manual setup.
+
+---
+
 ## Architecture & Security Highlights
 
 ### 1. ⚡ Real-Time WebSockets & Agentic Telemetry
@@ -32,6 +46,14 @@ By bundling the backend as a silent background process inside the Flutter applic
   - `core/`: Shared model service, telemetry stream generator, and configuration.
 * **Production Auto-Binding**: In packaged standalone builds, DeskMate dynamically requests port `0` (`findFreePort()`). The OS allocates an unused ephemeral port, preventing port collisions even if other servers are running.
 * **Development Auto-Detection**: When running in developer mode, the Flutter frontend automatically probes ports `8080` and `8000`.
+
+### 5. 💬 Smart Multi-Turn Contextualization & Dynamic Query Rewriter (Both Agents)
+* **Zero Prompt Bloat**: Eliminates the naive approach of dumping entire conversation logs into agent prompts. Instead, a lightweight sub-80ms rewriter resolves follow-ups into standalone commands.
+* **Natural Follow-ups Across Modes**:
+  - **📁 File Explorer Copilot**: Seamlessly handles chained queries like *"What files are in core?"* → *"and in services?"* (rewritten as *"What files are in the services directory?"*) or *"read telemetry.py"* → *"show its content"*.
+  - **👤 Personal Assistant**: Naturally handles contextual queries like *"What is the weather in SF this weekend?"* → *"in chennai"* (rewritten as *"What is the weather in Chennai this weekend?"*).
+* **Adaptive Fallback Hierarchy**: Automatically leverages local lightweight Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`) with sub-80ms latency and $0 cost. If unavailable, falls back to Gemini Flash or directly passes the raw query with zero crashes or lag.
+* **Strict Session Isolation**: Context is strictly confined to the active `conversation_id`. Clicking "New Chat" resets history completely with zero context bleeding.
 
 ---
 

@@ -483,9 +483,8 @@ class SearchDriveTool(Tool):
                 }
                 for f in res.get("files", [])
             ]
-            return json.dumps(files, indent=2)
         except Exception as e:
-            return f"Drive search failed: {e}"
+            return f"Drive search failed: {e}. Note: If Google Drive is not connected, configure it under Personal Health. If you were searching for local computer files/folders, please use the File Explorer agent instead of Personal Agent."
 
 
 
@@ -554,9 +553,14 @@ class ListTasksTool(Tool):
 
 class AddTaskTool(Tool):
     name = "add_task"
-    description = "Add a new personal task to local storage."
+    description = (
+        "Add a new personal task or to-do item to local storage. "
+        "CRITICAL: Only call this tool when the user EXPLICITLY asks to create, add, or track a task/todo/reminder "
+        "(e.g., 'add a task to buy groceries', 'create todo: submit report'). "
+        "NEVER call this tool for questions, locations (e.g. 'in chennai'), or conversational follow-ups."
+    )
     inputs = {
-        "title": {"type": "string", "description": "Task description"},
+        "title": {"type": "string", "description": "Explicit task description (e.g. 'Buy groceries')"},
         "priority": {"type": "string", "description": "'high', 'medium', or 'low' (default 'medium')", "nullable": True},
         "due_date": {"type": "string", "description": "Optional due date as YYYY-MM-DD", "nullable": True},
     }
@@ -601,7 +605,12 @@ class CompleteTaskTool(Tool):
 
 class SaveNoteTool(Tool):
     name = "save_note"
-    description = "Save a text note locally with optional tags for later retrieval."
+    description = (
+        "Save a text note locally with optional tags for later retrieval. "
+        "CRITICAL: Only call this tool when the user EXPLICITLY asks to save or take a note "
+        "(e.g., 'save a note: project ideas', 'note: call doctor'). "
+        "NEVER call this tool for questions, locations, or conversational follow-ups."
+    )
     inputs = {
         "content": {"type": "string", "description": "Note content"},
         "tags": {"type": "string", "description": "Optional comma-separated tags", "nullable": True},
@@ -771,7 +780,7 @@ class RunSQLQueryTool(Tool):
             if url.startswith("sqlite:///"):
                 db_name = url.split("sqlite:///")[-1]
                 if not os.path.isabs(db_name):
-                    url = f"sqlite:///{str(_BASE_DIR / db_name)}"
+                    url = f"sqlite:///{str(get_user_data_dir() / db_name)}"
             
             engine = create_engine(url)
             with engine.connect() as conn:

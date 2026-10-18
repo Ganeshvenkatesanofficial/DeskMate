@@ -61,6 +61,15 @@ app.include_router(ws_personal_router)
 app.include_router(api_router)
 
 
+def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, port))
+            return True
+    except OSError:
+        return False
+
+
 def find_free_port() -> int:
     """Find an available port by asking the OS for an ephemeral port 0."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -72,11 +81,16 @@ if __name__ == "__main__":
     import uvicorn
 
     parser = argparse.ArgumentParser(description="DeskMate Backend Server")
-    parser.add_argument("--port", type=int, default=None, help="Port to bind backend server")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind backend server (default: 2026)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host interface")
     args, _ = parser.parse_known_args()
 
-    port = args.port if args.port else find_free_port()
+    if args.port:
+        port = args.port
+    elif is_port_available(2026, args.host):
+        port = 2026
+    else:
+        port = find_free_port()
     host = args.host
 
     logger.info(f"Starting DeskMate backend on http://{host}:{port}")

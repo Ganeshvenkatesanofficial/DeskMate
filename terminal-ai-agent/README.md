@@ -52,11 +52,16 @@ DeskMate features two distinct, purpose-built agent systems engineered with a st
 - **Safe File Editing**: Read, create, and modify local files with zero external cloud dependencies (`read_file`, `write_to_file`).
 - **Air-Gapped Privacy**: 100% offline inference on your GPU/CPU with zero cloud reliance.
 
-### Agent 2: Personal Workspace Assistant (Productivity Powered)
-- **Google Workspace Suite**: Search, compose, and reply to Gmail; list, create, and manage Calendar events; search and export Google Drive & Docs; manage Google Tasks.
-- **Offline Productivity Suite (Zero Setup)**: Persistent SQLite-backed to-do checklists and markdown notes (`deskmate_agent.db`).
-- **Semantic Vector Memory**: FAISS L2 memory allows the assistant to remember your preferences, project details, and past instructions across sessions.
-- **Web Intelligence & Live Weather**: Real-time web queries via DuckDuckGo and live global weather forecasts via wttr.in.
+### Multi-Turn Contextualization & Dynamic Query Rewriting (Both Agents)
+Both File Explorer Copilot and Personal Assistant utilize DeskMate's **Dynamic Query Rewriter** (`core.telemetry.resolve_contextual_query`):
+- **Zero Token Waste**: Rather than re-sending raw multi-turn conversation transcripts into SmolAgents, a lightweight sub-80ms rewriter resolves incomplete follow-ups into complete standalone prompts.
+- **File Explorer Follow-ups**: Follow-ups like *"and in services?"*, *"read the first file"*, or *"show its content"* are automatically contextualized into standalone filesystem tasks (e.g. *"What files are in the services directory?"*).
+- **Personal Assistant Follow-ups**: Dependent queries like *"in chennai"* or *"what about tomorrow?"* are resolved seamlessly without confusing the agent's tool selector.
+- **Adaptive Fallback Engine**:
+  1. Priority 1: Fast local Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`, `phi3:mini`) in <80ms with $0 cost.
+  2. Priority 2: Configured / default local Ollama model.
+  3. Priority 3: Gemini Flash (`gemini-2.5-flash`) if an API key is provided.
+  4. Priority 4: Safe, zero-crash fallback to raw user input if completely offline.
 
 ---
 

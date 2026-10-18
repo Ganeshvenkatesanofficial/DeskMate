@@ -89,7 +89,6 @@ def persist_env_variables(updates: dict[str, str]) -> None:
 
 def setup_stdio_logging() -> None:
     """Redirect standard I/O to log file when running as a frozen or headless binary."""
-    global sys
     if is_frozen or sys.stdout is None or sys.stderr is None:
         try:
             log_dir = get_user_data_dir()

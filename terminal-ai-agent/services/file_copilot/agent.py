@@ -77,15 +77,7 @@ def run_file_copilot(
     model_id: Optional[str] = None,
 ) -> str:
     """Synchronous execution of File Copilot (used for REST fallback)."""
-    # Fast path for basic file listing
-    if "list the files" in user_input.lower():
-        try:
-            listing = list_directory(".")
-            return f"{{\n  \"name\": \"list_directory\",\n  \"arguments\": {{\n    \"directory_path\": \".\"\n  }}\n}}\n{listing}"
-        except Exception as e:
-            return f"Error invoking list_directory tool: {e}"
-
-    prompt = build_chat_prompt(user_input, history)
+    prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_file_copilot_agent(api_key=api_key, model_id=model_id)
     raw_result = agent.run(prompt)
     return clean_final_answer(str(raw_result))
@@ -99,6 +91,6 @@ def stream_file_copilot(
     conversation_id: Optional[str] = None,
 ) -> Generator[Dict[str, Any], None, None]:
     """Streaming execution of File Copilot yielding real-time telemetry steps."""
-    prompt = build_chat_prompt(user_input, history)
+    prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_file_copilot_agent(api_key=api_key, model_id=model_id)
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id)
