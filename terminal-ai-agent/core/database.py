@@ -247,12 +247,12 @@ def db_get_tables_overview() -> List[Dict[str, Any]]:
         overview = []
         for t in tables:
             try:
-                count = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                count = conn.execute(f"SELECT COUNT(*) FROM [{t}]").fetchone()[0]  # nosec B608
             except Exception:
                 count = 0
             cols = [
                 {"name": r[1], "type": r[2], "pk": bool(r[5])}
-                for r in conn.execute(f"PRAGMA table_info({t})").fetchall()
+                for r in conn.execute(f"PRAGMA table_info([{t}])").fetchall()  # nosec B608
             ]
             overview.append({
                 "name": t,
@@ -269,9 +269,9 @@ def db_get_table_data(table_name: str, limit: int = 100, offset: int = 0) -> Dic
         raise ValueError("Invalid table name")
 
     with get_db_connection() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table_name})").fetchall()]
-        cursor = conn.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (limit, offset))
+        total = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]  # nosec B608
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info([{table_name}])").fetchall()]  # nosec B608
+        cursor = conn.execute(f"SELECT * FROM [{table_name}] LIMIT ? OFFSET ?", (limit, offset))  # nosec B608
         rows = [dict(r) for r in cursor.fetchall()]
         return {
             "table": table_name,
