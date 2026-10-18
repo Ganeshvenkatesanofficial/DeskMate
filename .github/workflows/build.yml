@@ -473,24 +473,7 @@ jobs:
           xattr -cr dmg/*.app || true
 
           # Add native double-click auto-installer inside DMG (zero-setup)
-          cat << 'EOF' > "dmg/Install DeskMate.command"
-#!/bin/bash
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-if [ -w "/Applications" ]; then
-  TARGET="/Applications"
-else
-  TARGET="$HOME/Applications"
-  mkdir -p "$TARGET"
-fi
-echo "Installing DeskMate to $TARGET..."
-rm -rf "$TARGET/DeskMate.app"
-cp -R "$DIR/DeskMate.app" "$TARGET/"
-xattr -cr "$TARGET/DeskMate.app" 2>/dev/null || true
-chmod +x "$TARGET/DeskMate.app/Contents/MacOS/DeskMate" 2>/dev/null || true
-echo "Launching DeskMate..."
-open "$TARGET/DeskMate.app"
-exit 0
-EOF
+          cp scripts/install_macos.command "dmg/Install DeskMate.command"
           chmod +x "dmg/Install DeskMate.command"
 
           hdiutil create \
