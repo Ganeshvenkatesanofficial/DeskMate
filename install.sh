@@ -39,11 +39,19 @@ echo -e "Detected Architecture: ${BOLD}${ARCH}${NC}"
 # 2. Determine Installation Target Directory
 if [ -w "/Applications" ]; then
   APP_DIR="/Applications"
+  TARGET_APP="$APP_DIR/DeskMate.app"
 else
-  APP_DIR="$HOME/Applications"
-  mkdir -p "$APP_DIR"
+  # On macOS Sequoia, ~/Applications can inherit com.apple.provenance which blocks dyld.
+  # If provenance exists on ~/Applications, install directly to $HOME/DeskMate.app.
+  if xattr -l "$HOME/Applications" 2>/dev/null | grep -q "com.apple.provenance"; then
+    APP_DIR="$HOME"
+    TARGET_APP="$HOME/DeskMate.app"
+  else
+    APP_DIR="$HOME/Applications"
+    mkdir -p "$APP_DIR"
+    TARGET_APP="$APP_DIR/DeskMate.app"
+  fi
 fi
-TARGET_APP="$APP_DIR/DeskMate.app"
 
 echo -e "Installation Destination: ${BOLD}${TARGET_APP}${NC}"
 
@@ -163,7 +171,11 @@ echo "Setting executable permissions..."
 chmod +x "$TARGET_APP/Contents/MacOS/DeskMate" 2>/dev/null || true
 find "$TARGET_APP/Contents" -type f -name "deskmate_backend" -exec chmod +x {} + 2>/dev/null || true
 
-# 7. Launch DeskMate
+# 7. Apply local ad-hoc signature to satisfy macOS Sequoia dyld
+echo "Signing application bundle locally..."
+codesign --force --deep --sign - "$TARGET_APP" 2>/dev/null || true
+
+# 8. Launch DeskMate
 echo -e "${GREEN}${BOLD}✔ DeskMate installed successfully to ${TARGET_APP}!${NC}"
 echo "Launching DeskMate..."
 open "$TARGET_APP"
