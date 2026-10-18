@@ -24,7 +24,8 @@ on:
           - all
           - macos
           - windows
-
+permissions:
+  contents: write
 
 # ============================================================
 # 1. PYTHON LINT
@@ -499,3 +500,18 @@ jobs:
         with:
           name: DeskMate-macOS-App
           path: DeskMate-macOS.zip
+
+      - name: Publish Continuous Pre-release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: "DeskMate Continuous Build"
+          body: "Automated continuous build from ${{ github.ref_name }} branch (commit ${{ github.sha }})."
+          prerelease: true
+          files: |
+            DeskMate-macOS.dmg
+            DeskMate-macOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

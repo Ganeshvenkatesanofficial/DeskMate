@@ -72,38 +72,72 @@ elif [ -d "$LOCAL_DEBUG_PATH" ]; then
   rm -rf "$TARGET_APP"
   cp -R "$LOCAL_DEBUG_PATH" "$APP_DIR/"
 else
-  echo -e "Downloading latest release package from GitHub..."
+  echo -e "Checking for latest release package from GitHub..."
   ZIP_PATH="$TMP_DIR/DeskMate-macOS.zip"
-  
-  HTTP_STATUS=$(curl -fsSL -w "%{http_code}" -o "$ZIP_PATH" "$DOWNLOAD_URL" || true)
-  if [ ! -f "$ZIP_PATH" ] || [ ! -s "$ZIP_PATH" ]; then
-    # Fallback to dev release asset or raw build if latest release tag is not yet drafted
-    FALLBACK_URL="https://github.com/${REPO}/releases/download/v1.0.0/DeskMate-macOS.zip"
-    echo -e "${YELLOW}Attempting fallback release URL...${NC}"
-    curl -fsSL -o "$ZIP_PATH" "$FALLBACK_URL" || true
-  fi
 
-  if [ -f "$ZIP_PATH" ] && [ -s "$ZIP_PATH" ]; then
-    echo "Extracting application bundle..."
-    unzip -q -o "$ZIP_PATH" -d "$TMP_DIR/"
-    rm -rf "$TARGET_APP"
-    cp -R "$TMP_DIR"/DeskMate*.app "$TARGET_APP"
-  else
-    echo -e "${YELLOW}Notice: Remote release archive not found online yet.${NC}"
-    # Check if a DMG or existing bundle is in Downloads
+  # URLs to check in order of preference
+  RELEASE_URLS=(
+    "https://github.com/${REPO}/releases/download/continuous/DeskMate-macOS.zip"
+    "https://github.com/${REPO}/releases/latest/download/DeskMate-macOS.zip"
+    "https://github.com/${REPO}/releases/download/v1.0.0/DeskMate-macOS.zip"
+  )
+
+  for URL in "${RELEASE_URLS[@]}"; do
+    echo "Attempting download from: $URL ..."
+    if curl -fsSL -o "$ZIP_PATH" "$URL" 2>/dev/null && [ -s "$ZIP_PATH" ]; then
+      echo -e "${GREEN}Successfully downloaded DeskMate package from release.${NC}"
+      break
+    fi
+    rm -f "$ZIP_PATH"
+  done
+
+  # Fallback to local Downloads directory if online release is not yet drafted/published
+  if [ ! -f "$ZIP_PATH" ] || [ ! -s "$ZIP_PATH" ]; then
+    echo -e "${YELLOW}Notice: Online release archive not published or accessible yet.${NC}"
+    echo "Searching ~/Downloads for downloaded GitHub Actions artifacts or DMGs..."
+
+    ZIP_CANDIDATE="$(find "$HOME/Downloads" -maxdepth 2 -name "DeskMate*.zip" 2>/dev/null | head -n 1)"
     DMG_CANDIDATE="$(find "$HOME/Downloads" -maxdepth 2 -name "DeskMate*.dmg" 2>/dev/null | head -n 1)"
-    if [ -n "$DMG_CANDIDATE" ] && [ -f "$DMG_CANDIDATE" ]; then
-      echo "Mounting disk image from Downloads: $DMG_CANDIDATE"
+
+    if [ -n "$ZIP_CANDIDATE" ] && [ -f "$ZIP_CANDIDATE" ]; then
+      echo "Found artifact ZIP in Downloads: $ZIP_CANDIDATE"
+      cp "$ZIP_CANDIDATE" "$ZIP_PATH"
+    elif [ -n "$DMG_CANDIDATE" ] && [ -f "$DMG_CANDIDATE" ]; then
+      echo "Found DMG in Downloads: $DMG_CANDIDATE"
       MOUNT_DIR=$(hdiutil attach "$DMG_CANDIDATE" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
       if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
         rm -rf "$TARGET_APP"
         cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
       fi
       hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
-    else
-      echo -e "${RED}Error: Could not locate a release artifact. Please run in your repo or download the release.${NC}"
-      exit 1
     fi
+  fi
+
+  # Extract ZIP if available
+  if [ -f "$ZIP_PATH" ] && [ -s "$ZIP_PATH" ]; then
+    echo "Extracting application bundle..."
+    unzip -q -o "$ZIP_PATH" -d "$TMP_DIR/"
+
+    NESTED_APP="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.app" -type d 2>/dev/null | head -n 1)"
+    NESTED_DMG="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.dmg" -type f 2>/dev/null | head -n 1)"
+
+    if [ -n "$NESTED_APP" ] && [ -d "$NESTED_APP" ]; then
+      rm -rf "$TARGET_APP"
+      cp -R "$NESTED_APP" "$TARGET_APP"
+    elif [ -n "$NESTED_DMG" ] && [ -f "$NESTED_DMG" ]; then
+      MOUNT_DIR=$(hdiutil attach "$NESTED_DMG" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
+      if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
+        rm -rf "$TARGET_APP"
+        cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
+      fi
+      hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
+    fi
+  fi
+
+  if [ ! -d "$TARGET_APP" ]; then
+    echo -e "${RED}Error: Could not install DeskMate.${NC}"
+    echo "Please ensure the GitHub Actions build on 'dev' has completed or download DeskMate-macOS.dmg into ~/Downloads."
+    exit 1
   fi
 fi
 
