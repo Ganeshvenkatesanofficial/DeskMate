@@ -61,6 +61,24 @@ class _ChatBubbleState extends State<ChatBubble> {
     );
   }
 
+  String _sanitizeMarkdown(String text) {
+    if (text.isEmpty) return '*(No response received)*';
+    if (!text.contains('<br') &&
+        !text.contains('<BR') &&
+        !text.contains('<Br')) {
+      return text;
+    }
+    var res = text.replaceAll(
+      RegExp(r'\s*<br\s*/?>\s*•?\s*', caseSensitive: false),
+      '\n• ',
+    );
+    res = res.replaceAll(
+      RegExp(r'\s*<br\s*/?>\s*', caseSensitive: false),
+      '\n\n',
+    );
+    return res;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isUser = widget.message.role == MessageRole.user;
@@ -171,9 +189,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                             TelemetryAccordion(steps: widget.message.telemetry),
                           SelectionArea(
                             child: MarkdownBody(
-                              data: widget.message.content.isNotEmpty
-                                  ? widget.message.content
-                                  : '*(No response received)*',
+                              data: _sanitizeMarkdown(widget.message.content),
                               selectable: false,
                               styleSheet: MarkdownStyleSheet.fromTheme(theme)
                                   .copyWith(

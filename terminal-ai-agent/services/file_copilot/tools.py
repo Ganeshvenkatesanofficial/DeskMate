@@ -8,18 +8,19 @@ keyword-argument resilience, and dynamic multi-folder search.
 
 from __future__ import annotations
 
-import glob
+import fnmatch
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 from smolagents import Tool
 
 
 def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = False) -> Path:
     """
     Robustly resolves a path string into a valid Path object:
-    - Resolves laptop root ('laptop', 'computer', 'root', '/') to system root.
+    - Resolves laptop aliases ('lap', 'in lap', 'laptop', 'my laptop', 'computer', 'macbook', 'pc') to Path.home().
+    - Resolves system root ('root', 'system root', '/') to system root.
     - Expands '~' to the user's home directory.
     - Resolves current OS username, 'home', 'user' to Path.home().
     - Resolves common user folders ('Desktop', 'Downloads', 'Documents', 'Pictures') relative to Path.home().
@@ -36,8 +37,15 @@ def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = Fals
     if re.fullmatch(r"[A-Za-z]:", raw):
         raw = f"{raw}\\"
 
-    # System / Laptop root keywords
-    if raw.lower() in ("laptop", "my laptop", "computer", "my computer", "macbook", "pc", "system", "root", "/"):
+    # Machine / Laptop user scope aliases (maps to user home directory where user workspaces and files live)
+    if raw.lower() in (
+        "lap", "my lap", "in lap", "laptop", "my laptop", "computer",
+        "my computer", "macbook", "pc", "machine", "device"
+    ):
+        return Path.home()
+
+    # System / System root keywords
+    if raw.lower() in ("root", "system root", "/"):
         return Path(os.path.abspath(os.sep))
 
     # Check if raw matches user's home name, 'home', or '~'
@@ -135,6 +143,64 @@ def extract_file_content(path: Path, max_chars: int = 20000) -> str:
         return f"Error reading file '{path.name}': {str(e)}"
 
 
+IGNORED_SEARCH_DIRS = {
+    "$RECYCLE.BIN", "NODE_MODULES", ".GIT", ".VENV", "VENV",
+    "__PYCACHE__", "LIBRARY", ".TRASH", ".CACHE", ".IDEA", ".VSCODE"
+}
+
+
+def fast_walk_search(
+    root_dir: Path,
+    pattern: str,
+    max_results: int = 100,
+    min_size_mb: Optional[float] = None,
+    max_size_mb: Optional[float] = None,
+) -> List[Path]:
+    """
+    Ultra-fast case-insensitive recursive filesystem search using os.walk
+    with in-place directory pruning to skip heavy directories (.venv, node_modules, Library).
+    Runs in milliseconds and supports wildcards (*.pdf, *resume*, *requirement*.txt).
+    """
+    raw_pat = pattern.strip()
+    if raw_pat.lower() in ("resume", "resume.txt", "cv", "my resume", "resume.pdf"):
+        pat_lower = "*resume*"
+    elif raw_pat.lower() in ("requirements.txt", "requirement.txt", "requirements", "requirement"):
+        pat_lower = "*requirement*.txt"
+    elif "*" not in raw_pat and "?" not in raw_pat:
+        pat_lower = f"*{raw_pat.lower()}*"
+    else:
+        pat_lower = raw_pat.lower()
+
+    matches: List[Path] = []
+    if not root_dir.is_dir():
+        return matches
+
+    for root, dirs, files in os.walk(root_dir):
+        # In-place directory pruning: immediately stops descending into ignored/hidden dirs
+        dirs[:] = [
+            d for d in dirs
+            if d.upper() not in IGNORED_SEARCH_DIRS and not d.startswith(".")
+        ]
+        for f in files:
+            if fnmatch.fnmatch(f.lower(), pat_lower):
+                full_path = Path(root) / f
+                if min_size_mb is not None or max_size_mb is not None:
+                    try:
+                        size_mb = os.path.getsize(full_path) / (1024 * 1024)
+                        if min_size_mb is not None and size_mb < float(min_size_mb):
+                            continue
+                        if max_size_mb is not None and size_mb > float(max_size_mb):
+                            continue
+                    except OSError:
+                        continue
+
+                matches.append(full_path)
+                if len(matches) >= max_results:
+                    return matches
+
+    return matches
+
+
 class ReadFileTool(Tool):
     name = "read_file"
     skip_forward_signature_validation = True
@@ -164,97 +230,27 @@ class ReadFileTool(Tool):
 
         try:
             target_clean = str(target).strip().strip("'\"?")
-            is_bare_filename = "/" not in target_clean and "\\" not in target_clean
 
-            ignored_dirs = {
-                "$RECYCLE.BIN", "node_modules", ".git", ".venv", "venv",
-                "__pycache__", "Library", ".Trash", ".cache"
-            }
-
-            # If bare filename, search across user home/projects to find all occurrences
-            if is_bare_filename:
-                search_pattern = os.path.join(Path.home(), "**", target_clean)
-                matches = glob.glob(search_pattern, recursive=True)
-                valid_matches = []
-                for m in matches:
-                    if os.path.isfile(m):
-                        parts = Path(m).parts
-                        if not any(part.upper() in (x.upper() for x in ignored_dirs) for part in parts):
-                            valid_matches.append(m)
-
-                if valid_matches:
-                    if len(valid_matches) == 1:
-                        single_path = Path(valid_matches[0])
-                        content = extract_file_content(single_path)
-                        return f"Contents of '{single_path}':\n\n{content}"
-
-                    # Multiple matches found across different folders
-                    results = [f"Found {len(valid_matches)} '{target_clean}' files across your folders:\n"]
-                    for idx, match_path in enumerate(valid_matches, 1):
-                        p = Path(match_path)
-                        results.append(f"### [{idx}] {p}")
-                        results.append(f"```\n{extract_file_content(p)}\n```\n")
-
-                    return "\n".join(results)
-
-            # Direct file path resolution
+            # 1. Direct path check (exact relative or absolute path)
             resolved = resolve_target_path(target_clean, must_be_dir=False)
             if resolved.is_file():
                 content = extract_file_content(resolved)
                 return f"Contents of '{resolved}':\n\n{content}"
 
-            # If not found directly, try searching for the basename (exact and fuzzy)
-            base_name = Path(target_clean).name
-            search_pattern = os.path.join(Path.home(), "**", base_name)
-            matches = glob.glob(search_pattern, recursive=True)
-            valid_matches = [
-                m for m in matches
-                if os.path.isfile(m) and not any(p.upper() in (x.upper() for x in ignored_dirs) for p in Path(m).parts)
-            ]
+            # 2. Fast case-insensitive recursive search across user workspace/home for the filename/pattern
+            base_name = Path(target_clean).name or target_clean
+            matches = fast_walk_search(Path.home(), base_name, max_results=10)
 
-            # Fuzzy fallback if exact basename yielded nothing
-            if not valid_matches and not ("*" in base_name or "?" in base_name):
-                p_obj = Path(base_name)
-                stem = p_obj.stem
-                suffix = p_obj.suffix
-                singular_stem = stem[:-1] if stem.endswith("s") and len(stem) > 3 else stem
-                fuzzy_patterns = [
-                    f"*{singular_stem}*{suffix}",
-                    f"*{stem}*{suffix}",
-                    f"*{stem}*",
-                ]
-                search_roots = []
-                if "/" in target_clean or "\\" in target_clean:
-                    folder_part = str(Path(target_clean).parent)
-                    resolved_folder = resolve_target_path(folder_part, must_be_dir=True)
-                    if resolved_folder.is_dir():
-                        search_roots.append(resolved_folder)
-                search_roots.append(Path.home())
-
-                for root_dir in search_roots:
-                    for f_pat in fuzzy_patterns:
-                        f_matches = glob.glob(os.path.join(root_dir, "**", f_pat), recursive=True)
-                        f_valid = [
-                            m for m in f_matches
-                            if os.path.isfile(m) and not any(p.upper() in (x.upper() for x in ignored_dirs) for p in Path(m).parts)
-                        ]
-                        if f_valid:
-                            valid_matches = f_valid
-                            break
-                    if valid_matches:
-                        break
-
-            if valid_matches:
-                if len(valid_matches) == 1:
-                    single_path = Path(valid_matches[0])
+            if matches:
+                if len(matches) == 1:
+                    single_path = matches[0]
                     content = extract_file_content(single_path)
                     return f"Found '{single_path.name}' at '{single_path}':\n\n{content}"
 
-                results = [f"Found {len(valid_matches)} matching files for '{target_clean}' across your folders:\n"]
-                for idx, match_path in enumerate(valid_matches, 1):
-                    p = Path(match_path)
-                    results.append(f"### [{idx}] {p}")
-                    results.append(f"```\n{extract_file_content(p)}\n```\n")
+                results = [f"Found {len(matches)} matching files for '{target_clean}' across your folders:\n"]
+                for idx, match_path in enumerate(matches, 1):
+                    results.append(f"### [{idx}] {match_path}")
+                    results.append(f"```\n{extract_file_content(match_path)}\n```\n")
                 return "\n".join(results)
 
             return f"Error: File '{target_clean}' was not found at '{resolved}' or across user directories."
@@ -381,73 +377,44 @@ class SearchFilesTool(Tool):
             if not resolved_dir.is_dir():
                 return f"Error: '{target_dir}' resolved to '{resolved_dir}' which is not a valid directory."
 
-            search_pattern = os.path.join(resolved_dir, "**", pattern)
-            matches = glob.glob(search_pattern, recursive=True)
+            matches = fast_walk_search(
+                root_dir=resolved_dir,
+                pattern=pattern,
+                max_results=150,
+                min_size_mb=min_size_mb,
+                max_size_mb=max_size_mb,
+            )
 
-            # Fallback for exact filenames that might have variations across inner microservices/subfolders
-            if not matches and not ("*" in pattern or "?" in pattern):
-                p_obj = Path(pattern)
-                stem = p_obj.stem
-                suffix = p_obj.suffix
-                singular_stem = stem[:-1] if stem.endswith("s") and len(stem) > 3 else stem
-                fuzzy_patterns = [
-                    f"*{singular_stem}*{suffix}",
-                    f"*{stem}*{suffix}",
-                    f"*{stem}*",
-                ]
-                for f_pat in fuzzy_patterns:
-                    f_search = os.path.join(resolved_dir, "**", f_pat)
-                    f_matches = glob.glob(f_search, recursive=True)
-                    if f_matches:
-                        matches = f_matches
-                        break
+            dir_label = "your laptop and user workspaces" if resolved_dir == Path.home() else str(resolved_dir)
 
             if not matches:
-                return f"No files matching '{pattern}' found in '{resolved_dir}' or its inner subfolders."
-
-            ignored_dirs = {
-                "$RECYCLE.BIN", "node_modules", ".git", ".venv", "venv",
-                "__pycache__", "Library", ".Trash", ".cache"
-            }
-
-            rel_matches = []
-            for m in matches:
-                if os.path.isfile(m):
-                    parts = Path(m).parts
-                    if any(part.upper() in (x.upper() for x in ignored_dirs) for part in parts):
-                        continue
-
-                    try:
-                        size_bytes = os.path.getsize(m)
-                        size_mb = size_bytes / (1024 * 1024)
-                    except OSError:
-                        size_bytes = 0
-                        size_mb = 0.0
-
-                    if min_size_mb is not None and size_mb < float(min_size_mb):
-                        continue
-                    if max_size_mb is not None and size_mb > float(max_size_mb):
-                        continue
-
-                    size_label = f"{size_mb:.2f} MB" if size_mb >= 1.0 else f"{size_bytes / 1024:.1f} KB"
-                    clean_path = str(Path(m).resolve())
-                    rel_matches.append(f"{clean_path} ({size_label})")
-
-            if not rel_matches:
                 criteria = f" matching '{pattern}'"
                 if min_size_mb is not None:
                     criteria += f" >= {min_size_mb}MB"
                 if max_size_mb is not None:
                     criteria += f" <= {max_size_mb}MB"
-                return f"No files{criteria} found in '{resolved_dir}' or its inner subfolders."
+                return f"No files{criteria} found across {dir_label}."
+
+            rel_matches = []
+            for m in matches:
+                try:
+                    size_bytes = os.path.getsize(m)
+                    size_mb = size_bytes / (1024 * 1024)
+                except OSError:
+                    size_bytes = 0
+                    size_mb = 0.0
+
+                size_label = f"{size_mb:.2f} MB" if size_mb >= 1.0 else f"{size_bytes / 1024:.1f} KB"
+                clean_path = str(m.resolve())
+                rel_matches.append(f"{clean_path} ({size_label})")
 
             total_count = len(rel_matches)
             max_display = 100
             if total_count > max_display:
                 preview = "\n".join(rel_matches[:max_display])
-                return f"Found {total_count} matching files in '{resolved_dir}' across its subfolders. Showing first {max_display}:\n{preview}\n... (truncated)"
+                return f"Found {total_count} matching files across {dir_label}. Showing first {max_display}:\n{preview}\n... (truncated)"
 
-            return f"Found {total_count} matching files in '{resolved_dir}' across its inner subfolders:\n" + "\n".join(rel_matches)
+            return f"Found {total_count} matching files across {dir_label}:\n" + "\n".join(rel_matches)
         except Exception as e:
             return f"Error searching for files: {str(e)}"
 

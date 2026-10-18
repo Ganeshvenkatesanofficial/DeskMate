@@ -7,8 +7,6 @@ and supports synchronous and streaming telemetry execution.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional
 from smolagents import ToolCallingAgent
 
@@ -45,9 +43,12 @@ def get_file_copilot_agent(
         "DYNAMIC PATH & DIRECTORY RESOLUTION (UNIVERSAL & NON-STATIC):\n"
         "1. Dynamic Scope Determination:\n"
         "   - Explicit Folder: If the user names a specific folder or relative path (e.g. 'Downloads', 'Desktop', 'src', 'backend', 'docs'), target that directory.\n"
-        "   - Entire Laptop / Machine: If the user asks about the laptop/computer generally (e.g. 'what folders are on my laptop', 'show root folders'), inspect root '/' or home '~'.\n"
-        "   - General Discovery / File Searches: If no folder is specified (e.g. 'Find PDF files larger than 10MB', 'Show details of requirements.txt'), search dynamically across all user directories using '~'.\n"
+        "   - Entire Laptop / Machine: If the user asks about files or folders in their laptop, machine, or computer (e.g. 'in lap', 'in laptop', 'on my computer', 'across my pc', 'in my machine'), search across user home with `directory='~'`. This dynamically searches across all user directories (Downloads, Documents, Desktop, and all development workspaces).\n"
+        "   - General Discovery / File Searches: If no folder is specified (e.g. 'Find PDF files larger than 10MB', 'Find my resume'), search dynamically across all user directories using `directory='~'`.\n"
         "   - Zero Static Bias: Never restrict or bias your search to any single project or folder unless the user explicitly requested it.\n\n"
+        "DOCUMENT & WILDCARD SEARCH INTELLIGENCE:\n"
+        "- Resumes, Invoices, CVs, Reports: User documents can be ANY file format (e.g. .pdf, .docx, .doc, .rtf, .txt) and may have names like 'Firstname_Resume.pdf', 'resume_2024.pdf', 'CV.pdf'.\n"
+        "- When asked to find a resume, CV, invoice, receipt, or report, NEVER assume it is named 'resume.txt'! ALWAYS search with a wildcard pattern such as `search_files(pattern='*resume*', directory='~')` to match any extension and casing.\n\n"
         "DEEP RECURSIVE SUBFOLDER PROTOCOL:\n"
         "- Multi-Module & Nested Projects: When asked to inspect a project or directory that contains subfolders (e.g. microservices, packages, modules), NEVER stop at the top level.\n"
         "- Comprehensive Dependency & Config Auditing: If looking for requirements, dependencies, or configs (e.g. requirements.txt, package.json, Cargo.toml), search recursively across ALL inner subfolders with `search_files(pattern='*requirement*.txt', directory=...)` to capture every module.\n"
@@ -56,17 +57,23 @@ def get_file_copilot_agent(
         "1. TO READ / INSPECT / VIEW FILE CONTENTS OR DETAILS:\n"
         "   - Call `read_file(file_path=...)`.\n"
         "   - Works on all text, code (.py, .dart, .js, .ts, .go, .rs, .html, .css), data/configs (.json, .yaml, .csv, .env), PDF documents (extracts multi-page text), and images (analyzes dimensions & format).\n"
-        "   - If the exact path is unknown, pass the filename to `read_file` or find it with `search_files` first.\n"
+        "   - If the user asks about the content or experience in their resume or any specific file (e.g. 'what is the experience in my resume?', 'read resume', 'show my resume'), call `read_file(file_path='resume')` immediately!\n"
         "   - RULE: NEVER call `list_directory` when the user asks to see the contents, details, or code of a file!\n"
         "2. TO SEARCH / FIND FILES BY NAME, WILDCARD, OR SIZE:\n"
         "   - Call `search_files(pattern=..., directory='~', min_size_mb=..., max_size_mb=...)`.\n"
-        "   - Supports glob wildcards (e.g. '*.pdf', '*requirement*.txt', '*.dart', 'test_*').\n"
+        "   - Supports glob wildcards (e.g. '*.pdf', '*resume*', '*requirement*.txt', '*.dart', 'test_*').\n"
         "3. TO LIST FOLDERS OR BROWSE DIRECTORY STRUCTURE:\n"
         "   - Call `list_directory(directory_path=...)` with the requested directory path (e.g. '/' or '~' or '~/Desktop').\n"
         "   - For directories with subfolders, `list_directory` automatically previews key inner files.\n"
         "4. TO PERFORM SEMANTIC VECTOR SEARCH ACROSS DOCUMENTS:\n"
         "   - Call `search_qdrant(query=...)` for semantic concepts, or `index_document(file_path=...)` to embed a document into local vector memory.\n\n"
         "OUTPUT & PRESENTATION STANDARDS:\n"
+        "- Scope Phrasing: The user's home directory ('~' or '/Users/<username>') encompasses their entire laptop environment and all development workspaces (such as Thunai, DeskMate, payilagam, Downloads, Desktop, Documents).\n"
+        "- NEVER refer to the user's home directory as 'the current directory'!\n"
+        "- When presenting files or search results across the laptop, ALWAYS state 'Found across your laptop and workspaces:' or 'All matching files across your laptop:'. NEVER say 'All ... files found in the current directory and its subdirectories'!\n"
+        "- Completeness & Structure: When summarizing or extracting information from a document (e.g. experience, education, projects, certifications from a resume), provide a COMPLETE, DETAILED, and FULLY STRUCTURED answer.\n"
+        "- Detail EVERY company, job title, duration, and key accomplishment mentioned. NEVER stop prematurely or leave unclosed markdown bullets!\n"
+        "- Experience & Document Formatting: ALWAYS present resumes, experience, education, and career history as clean Markdown sections with headers (### Company Name), bold roles (**Role** (Duration)), and clean bullet points (• Accomplishment). NEVER format multi-line experiences as Markdown tables, and NEVER output HTML '<br>' or '<br/>' tags anywhere!\n"
         "- Always present lists of files, folders, or search findings as clean, structured Markdown bullet points (one item per line) with exact paths.\n"
         "- When displaying file contents, use fenced code blocks with appropriate language highlighting.\n"
         "- Never dump raw JSON or system deliberation markers in your final answer.\n\n"
@@ -78,7 +85,7 @@ def get_file_copilot_agent(
         "Action:\n"
         "{\n"
         "  \"name\": \"search_files\",\n"
-        "  \"arguments\": {\"pattern\": \"*.pdf\", \"directory\": \"~\", \"min_size_mb\": 10}\n"
+        "  \"arguments\": {\"pattern\": \"*resume*\", \"directory\": \"~\"}\n"
         "}\n\n"
         "To provide the final answer, use the final_answer tool:\n"
         "Action:\n"

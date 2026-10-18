@@ -426,6 +426,101 @@ curl -X POST "http://127.0.0.1:8000/api/reset/test_conv_01"
 
 ---
 
+#### 10. Database Health & Overview — `GET /api/database/overview`
+* **What**: Returns SQLite database connection status, physical storage path, file size in KB, and detailed table summaries with row counts and column schemas.
+* **Why**: Powers the in-app Database Explorer header and tables sidebar in DeskMate.
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/database/overview"
+```
+
+##### Sample Response:
+```json
+{
+  "status": "ok",
+  "path": "/Users/user/Library/Application Support/DeskMate/deskmate_agent.db",
+  "size_bytes": 20480,
+  "size_kb": 20.0,
+  "tables": [
+    {
+      "name": "tasks",
+      "row_count": 3,
+      "columns": [
+        {"name": "id", "type": "INTEGER", "pk": true},
+        {"name": "title", "type": "TEXT", "pk": false},
+        {"name": "priority", "type": "TEXT", "pk": false},
+        {"name": "due_date", "type": "TEXT", "pk": false},
+        {"name": "done", "type": "INTEGER", "pk": false},
+        {"name": "created_at", "type": "TEXT", "pk": false}
+      ]
+    },
+    {"name": "notes", "row_count": 2, "columns": [...]},
+    {"name": "memories", "row_count": 2, "columns": [...]}
+  ]
+}
+```
+
+---
+
+#### 11. Table Data & Records — `GET /api/database/table/{table_name}`
+* **What**: Fetches column definitions and paginated records from a specific SQLite table.
+* **Why**: Renders the full-width interactive data table in the Database Explorer.
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/database/table/tasks?limit=50&offset=0"
+```
+
+##### Sample Response:
+```json
+{
+  "status": "ok",
+  "table": "tasks",
+  "total_rows": 3,
+  "limit": 50,
+  "offset": 0,
+  "columns": ["id", "title", "priority", "due_date", "done", "created_at"],
+  "rows": [
+    {
+      "id": 1,
+      "title": "in chennai",
+      "priority": "medium",
+      "due_date": null,
+      "done": 0,
+      "created_at": "2026-10-18 08:17:44"
+    }
+  ]
+}
+```
+
+---
+
+#### 12. Safe Read-Only SQL Query Console — `POST /api/database/query`
+* **What**: Safely executes read-only `SELECT` SQL queries and returns column lists, records, and count.
+* **Why**: Executes custom queries written in the visual SQL Console.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/database/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "SELECT id, title, done FROM tasks WHERE done = 0"
+  }'
+```
+
+##### Sample Response:
+```json
+{
+  "status": "ok",
+  "columns": ["id", "title", "done"],
+  "rows": [
+    {"id": 1, "title": "in chennai", "done": 0}
+  ],
+  "count": 1
+}
+```
+
+---
+
+
 ## Memory & Cache Lifecycle
 
 * **Session Cache (`conversation_id`)**: The backend and client cache turns strictly in memory. The `conversation_id` serves as the cache key.

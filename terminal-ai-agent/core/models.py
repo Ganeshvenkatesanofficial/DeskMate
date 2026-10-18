@@ -98,7 +98,12 @@ def ask_local_llm(
         "model": selected_model,
         "prompt": prompt,
         "stream": stream,
-        "temperature": temperature,
+        "options": {
+            "temperature": temperature,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.15,
+        },
     }
 
     response = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=600)
@@ -127,7 +132,12 @@ def chat_local_llm(
         "model": selected_model,
         "messages": messages,
         "stream": should_stream,
-        "options": {"temperature": temperature},
+        "options": {
+            "temperature": temperature,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.15,
+        },
     }
     if tools:
         payload["tools"] = tools

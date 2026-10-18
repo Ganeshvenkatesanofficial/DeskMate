@@ -223,7 +223,7 @@ def db_run_sql_query(query: str, db_url: Optional[str] = "") -> List[Dict[str, A
         conn.close()
 
 
-# ─── Database Health Check ────────────────────────────────────────────────────
+# ─── Database Health & Inspection ───────────────────────────────────────────
 
 def check_database_health() -> bool:
     """Verify that the SQLite database is reachable and can execute queries."""
@@ -234,3 +234,50 @@ def check_database_health() -> bool:
     except Exception as exc:
         logger.error(f"Database health check failed: {exc}")
         return False
+
+
+def db_get_tables_overview() -> List[Dict[str, Any]]:
+    """List all SQLite tables with row counts and column schemas for UI explorer."""
+    with get_db_connection() as conn:
+        tables = [
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        ]
+        overview = []
+        for t in tables:
+            try:
+                count = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            except Exception:
+                count = 0
+            cols = [
+                {"name": r[1], "type": r[2], "pk": bool(r[5])}
+                for r in conn.execute(f"PRAGMA table_info({t})").fetchall()
+            ]
+            overview.append({
+                "name": t,
+                "row_count": count,
+                "columns": cols,
+            })
+        return overview
+
+
+def db_get_table_data(table_name: str, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
+    """Retrieve column names and paginated rows from a specific SQLite table."""
+    import re
+    if not re.match(r"^[A-Za-z0-9_]+$", table_name):
+        raise ValueError("Invalid table name")
+
+    with get_db_connection() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table_name})").fetchall()]
+        cursor = conn.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (limit, offset))
+        rows = [dict(r) for r in cursor.fetchall()]
+        return {
+            "table": table_name,
+            "total_rows": total,
+            "limit": limit,
+            "offset": offset,
+            "columns": cols,
+            "rows": rows,
+        }

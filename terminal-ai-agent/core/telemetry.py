@@ -49,7 +49,89 @@ def clean_final_answer(raw_answer: str) -> str:
         except Exception:
             pass
 
+    # Sanitize incorrect scope phrasing: user home directory is the entire laptop workspace, NOT "current directory"
+    res_str = re.sub(
+        r"(?i)\bAll\s+([^\n]+?)\s+files\s+found\s+in\s+the\s+current\s+directory\s+and\s+its\s+subdirectories:?",
+        r"All \1 files found across your laptop and workspaces:",
+        res_str,
+    )
+    res_str = re.sub(
+        r"(?i)\b(in|from)\s+the\s+current\s+directory\s+and\s+its\s+subdirectories\b",
+        "across your laptop and workspaces",
+        res_str,
+    )
+    res_str = re.sub(
+        r"(?i)\b(in|from)\s+the\s+current\s+directory\b",
+        "across your laptop and workspaces",
+        res_str,
+    )
+
+    # Convert cramped Markdown tables containing <br> into clean, structured Markdown sections
+    if re.search(r"<br\s*/?>", res_str, flags=re.IGNORECASE):
+        res_str = _convert_br_tables_to_markdown_sections(res_str)
+        # Any residual <br> converted to clean newlines and bullets
+        res_str = re.sub(r"\s*<br\s*/?>\s*•?\s*", r"\n• ", res_str, flags=re.IGNORECASE)
+        res_str = re.sub(r"\s*<br\s*/?>\s*", r"\n\n", res_str, flags=re.IGNORECASE)
+
     return res_str.strip() or "Task completed successfully."
+
+
+def _convert_br_tables_to_markdown_sections(text: str) -> str:
+    """Convert cramped Markdown tables containing <br> bullet points into clean, structured sections."""
+    lines = text.split("\n")
+    table_lines: List[str] = []
+    output_lines: List[str] = []
+
+    def _flush_table(tbl: List[str]) -> str:
+        full_table = "\n".join(tbl)
+        if not re.search(r"<br\s*/?>", full_table, flags=re.IGNORECASE):
+            return full_table
+        rows: List[List[str]] = []
+        for l in tbl:
+            stripped = l.strip()
+            if re.match(r"^\|[\s\-:|]+\|$", stripped):
+                continue
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            rows.append(cells)
+        if len(rows) < 2:
+            return full_table
+        data_rows = rows[1:]
+        res: List[str] = []
+        for r in data_rows:
+            if not r or all(not c for c in r):
+                continue
+            col1 = r[0] if len(r) > 0 else ""
+            col2 = r[1] if len(r) > 1 else ""
+            col3 = r[2] if len(r) > 2 else ""
+            if col1:
+                res.append(f"### {col1}")
+            if col2:
+                res.append(f"**{col2}**\n")
+            if col3:
+                bullets = re.split(r"<br\s*/?>", col3, flags=re.IGNORECASE)
+                for b in bullets:
+                    b_str = b.strip()
+                    if b_str:
+                        if not b_str.startswith("•") and not b_str.startswith("-") and not b_str.startswith("*"):
+                            b_str = "• " + b_str
+                        res.append(b_str)
+            res.append("")
+        return "\n".join(res)
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            table_lines.append(stripped)
+        else:
+            if table_lines:
+                output_lines.append(_flush_table(table_lines))
+                table_lines = []
+            output_lines.append(line)
+    if table_lines:
+        output_lines.append(_flush_table(table_lines))
+
+    return "\n".join(output_lines)
+
 
 
 
@@ -70,6 +152,48 @@ def summarize_observation(obs: Any, max_length: int = 300) -> str:
     return summary
 
 
+def should_contextualize(user_input: str) -> bool:
+    """
+    Determines if user input is an incomplete follow-up fragment that requires
+    contextualization against previous conversation turns.
+    Returns False if the query is already self-contained or a standalone command.
+    """
+    clean = user_input.strip()
+    if not clean:
+        return False
+
+    tokens = clean.lower().split()
+    if not tokens:
+        return False
+
+    # 1. Very short follow-up phrases (<= 5 words) starting with prepositions/conjunctions
+    fragment_starters = (
+        "in ", "at ", "on ", "under ", "from ", "inside ",
+        "and ", "also ", "or ", "but ", "what about ", "how about ",
+        "what of ", "why ", "where ", "which one", "again"
+    )
+    lower = clean.lower()
+    if len(tokens) <= 5 and any(lower.startswith(starter) for starter in fragment_starters):
+        return True
+
+    # 2. Contains anaphoric pronoun referring to previous context without explicit target
+    # e.g., "read it", "open that", "delete this file", "summarize it", "show me all", "check there"
+    anaphora_words = {"it", "that", "this", "them", "those", "there", "its", "former", "latter", "all", "both"}
+    if any(token in anaphora_words for token in tokens):
+        if len(tokens) <= 6:
+            return True
+        if any(w in tokens for w in ["it", "that", "there", "them", "all"]):
+            keywords = {"resume", "cv", "pdf", "file", "folder", "directory", "code", "image", "doc"}
+            if not any(k in lower for k in keywords):
+                return True
+
+    # 3. Explicit standalone questions or action commands:
+    # e.g., "can you find my resume in lap", "search for pdf files in Desktop",
+    # "find my resume", "read file requirements.txt", "list directory /", "what is machine learning"
+    # These are fully self-contained and must NOT be rewritten or blended with prior topics.
+    return False
+
+
 def resolve_contextual_query(
     user_input: str,
     history: Optional[List[Dict[str, str]]] = None,
@@ -87,6 +211,10 @@ def resolve_contextual_query(
         return ""
 
     if not history:
+        return clean_input
+
+    # Fast-path: Check if the query is already self-contained
+    if not should_contextualize(clean_input):
         return clean_input
 
     # 1. Extract the immediate preceding turn (last user message & last assistant message)
@@ -113,7 +241,17 @@ def resolve_contextual_query(
     system_instruction = (
         "You are a strict, ultra-concise query contextualizer. "
         "Given previous turns and a follow-up query, combine them into a single, self-contained standalone search or action query.\n"
+        "CRITICAL RULES:\n"
+        "1. If the Follow-up Query is ALREADY complete, self-contained, or asks for a new task/file/location (e.g. 'can you find my resume in lap'), return it EXACTLY as-is without altering it or blending previous directories into it.\n"
+        "2. Only resolve missing context for incomplete fragments (e.g. 'in backend?', 'how about tomorrow?', 'show me all').\n"
+        "3. NEVER use the phrase 'current directory' when referring to the user's laptop or home folder. Always state 'across your laptop and workspaces'.\n"
+        "4. NEVER change the search scope if the user explicitly specified a new scope like 'in lap', 'in laptop', or 'in Desktop'.\n"
+        "5. Output ONLY the Standalone Query, zero conversational filler.\n\n"
         "Examples:\n"
+        "- Previous User: Show details of requirements.txt\n"
+        "  Previous Assistant: I found 43 files named requirements.txt across your laptop.\n"
+        "  Follow-up Query: show me all.\n"
+        "  Standalone Query: List all requirements.txt files found across your laptop and workspaces\n"
         "- Previous User: Show details of requirements.txt\n"
         "  Follow-up Query: in backend directory check?\n"
         "  Standalone Query: Check and show details of requirements files in the backend directory and its subfolders\n"
@@ -122,8 +260,10 @@ def resolve_contextual_query(
         "  Standalone Query: What is the weather in New York?\n"
         "- Previous User: Find PDF files larger than 10MB\n"
         "  Follow-up Query: in Downloads\n"
-        "  Standalone Query: Find PDF files larger than 10MB in Downloads\n\n"
-        "NEVER output conversational filler, greetings, or explanations. Output ONLY the Standalone Query."
+        "  Standalone Query: Find PDF files larger than 10MB in Downloads\n"
+        "- Previous User: Check files in verdex-backend\n"
+        "  Follow-up Query: can you find my resume in lap\n"
+        "  Standalone Query: can you find my resume in lap\n"
     )
     user_turn_content = (
         f"Previous User: {last_user}\n"
@@ -395,6 +535,14 @@ def stream_agent_steps(
                 tool_args = getattr(item, "arguments", {})
 
                 if tool_name == "final_answer":
+                    ans = ""
+                    if isinstance(tool_args, dict):
+                        ans = str(tool_args.get("answer", "") or "")
+                    elif tool_args:
+                        ans = str(tool_args)
+                    if ans.strip():
+                        final_output = ans.strip()
+
                     synth_evt = {
                         "type": "status",
                         "phase": "synthesizing",
@@ -492,7 +640,9 @@ def stream_agent_steps(
                 current_step_num[0] = step_num + 1
 
             elif isinstance(item, FinalAnswerStep):
-                final_output = str(getattr(item, "output", ""))
+                out = str(getattr(item, "output", "") or "").strip()
+                if out:
+                    final_output = out
 
     except Exception as exc:
         logger.error(f"Error during agent streaming execution: {exc}", exc_info=True)
@@ -510,8 +660,17 @@ def stream_agent_steps(
         if hasattr(model, "set_reasoning_callback"):
             model.set_reasoning_callback(None)
 
+    # Fallback to last successful agent memory step if final_output is still empty
+    if not final_output and hasattr(agent, "memory") and hasattr(agent.memory, "steps"):
+        for step in reversed(agent.memory.steps):
+            if hasattr(step, "output") and step.output:
+                step_out = str(step.output).strip()
+                if step_out and not step_out.startswith("Error:"):
+                    final_output = step_out
+                    break
+
     # Clean and deliver final result
-    cleaned = clean_final_answer(final_output or "Task finished.")
+    cleaned = clean_final_answer(final_output or "Task completed.")
     total_duration_ms = int((time.time() - start_time) * 1000)
 
     done_evt = {

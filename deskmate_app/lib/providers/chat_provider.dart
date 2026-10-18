@@ -64,6 +64,7 @@ class ChatProvider extends ChangeNotifier {
   bool get hasConfiguredAi => _hasConfiguredAi;
   List<AgentStepTelemetry> get activeTelemetry => _activeTelemetry;
   String get activeStatusTitle => _activeStatusTitle;
+  ApiService get apiService => _apiService;
 
   late ApiService _apiService;
   late AgentWebSocketClient _wsClient;

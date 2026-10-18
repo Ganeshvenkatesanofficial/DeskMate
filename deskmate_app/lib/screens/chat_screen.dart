@@ -10,6 +10,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/telemetry_accordion.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/credentials_setup_dialog.dart';
+import '../widgets/database_explorer_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -26,6 +27,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _isSettingsOpen = false;
   bool _isSetupGuideOpen = false;
+  bool _isDatabaseExplorerOpen = false;
   AgentMode? _guideOverrideMode;
   bool _isGeminiKeyObscured = true;
   String? _settingsSelectedModel;
@@ -206,6 +208,8 @@ class _ChatScreenState extends State<ChatScreen> {
         if (event.logicalKey.keyLabel == 'Escape') {
           if (_editingMessageIndex != null) {
             _cancelEditing();
+          } else if (_isDatabaseExplorerOpen) {
+            setState(() => _isDatabaseExplorerOpen = false);
           } else if (_isSetupGuideOpen) {
             setState(() => _isSetupGuideOpen = false);
           } else if (_isSettingsOpen) {
@@ -244,6 +248,9 @@ class _ChatScreenState extends State<ChatScreen> {
             : Drawer(
                 child: Sidebar(
                   onOpenSettings: _openSettings,
+                  onOpenDatabaseExplorer: () {
+                    setState(() => _isDatabaseExplorerOpen = true);
+                  },
                   onOpenSetupGuide: ([mode]) {
                     setState(() {
                       if (mode != null) _guideOverrideMode = mode;
@@ -261,6 +268,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     ignoring: provider.showModelSelectionDialog,
                     child: Sidebar(
                       onOpenSettings: _openSettings,
+                      onOpenDatabaseExplorer: () {
+                        setState(() => _isDatabaseExplorerOpen = true);
+                      },
                       onOpenSetupGuide: ([mode]) {
                         setState(() {
                           if (mode != null) _guideOverrideMode = mode;
@@ -373,6 +383,37 @@ class _ChatScreenState extends State<ChatScreen> {
                           _isSetupGuideOpen = false;
                           _guideOverrideMode = null;
                         }),
+                      ),
+                    ).animate().scale(
+                      begin: const Offset(0.95, 0.95),
+                      end: const Offset(1.0, 1.0),
+                      duration: 200.ms,
+                      curve: Curves.easeOutCubic,
+                    ),
+              ),
+            ],
+
+            // Database Explorer Modal Overlay
+            if (_isDatabaseExplorerOpen) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _isDatabaseExplorerOpen = false),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                    child: Container(
+                      color: theme.isDark
+                          ? const Color(0x99010409)
+                          : const Color(0x661F2328),
+                    ),
+                  ),
+                ).animate().fadeIn(duration: 150.ms),
+              ),
+              Positioned.fill(
+                child:
+                    Center(
+                      child: DatabaseExplorerDialog(
+                        onClose: () =>
+                            setState(() => _isDatabaseExplorerOpen = false),
                       ),
                     ).animate().scale(
                       begin: const Offset(0.95, 0.95),
