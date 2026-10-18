@@ -594,7 +594,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       : [
                           SelectionArea(child: _buildFileAgentGuideTab(theme)),
                           SelectionArea(child: _buildRagArchitectureTab(theme)),
-                          SelectionArea(child: _buildFileCopilotToolsTab(theme)),
+                          SelectionArea(
+                            child: _buildFileCopilotToolsTab(theme),
+                          ),
                           SelectionArea(child: _buildFileEnvConfigTab(theme)),
                           SelectionArea(child: _buildFileReadmeTab(theme)),
                         ],
@@ -630,12 +632,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         child: ElevatedButton(
                           onPressed: widget.onClose,
                           style: ButtonStyle(
-                            elevation: WidgetStateProperty.resolveWith((states) {
-                              if (states.contains(WidgetState.hovered)) return 2.0;
+                            elevation: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return 2.0;
+                              }
                               return 0.0;
                             }),
-                            mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
-                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                            mouseCursor: WidgetStateProperty.all(
+                              SystemMouseCursors.click,
+                            ),
+                            backgroundColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
                               if (states.contains(WidgetState.hovered)) {
                                 return theme.accentHover;
                               }
@@ -644,7 +654,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                               }
                               return theme.accentFg;
                             }),
-                            foregroundColor: WidgetStateProperty.all(Colors.white),
+                            foregroundColor: WidgetStateProperty.all(
+                              Colors.white,
+                            ),
                             padding: WidgetStateProperty.all(
                               const EdgeInsets.symmetric(
                                 horizontal: 16,
@@ -890,11 +902,17 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       label: const Text('Open Guide'),
                       style: ButtonStyle(
                         elevation: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.hovered)) return 2.0;
+                          if (states.contains(WidgetState.hovered)) {
+                            return 2.0;
+                          }
                           return 0.0;
                         }),
-                        mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
-                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        mouseCursor: WidgetStateProperty.all(
+                          SystemMouseCursors.click,
+                        ),
+                        backgroundColor: WidgetStateProperty.resolveWith((
+                          states,
+                        ) {
                           if (states.contains(WidgetState.hovered)) {
                             return theme.accentHover;
                           }
@@ -1316,12 +1334,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           icon: const Icon(Icons.input_rounded, size: 14),
                           label: const Text('Enter Keys in Quick Setup Tab →'),
                           style: ButtonStyle(
-                            elevation: WidgetStateProperty.resolveWith((states) {
-                              if (states.contains(WidgetState.hovered)) return 2.0;
+                            elevation: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return 2.0;
+                              }
                               return 0.0;
                             }),
-                            mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
-                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                            mouseCursor: WidgetStateProperty.all(
+                              SystemMouseCursors.click,
+                            ),
+                            backgroundColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
                               if (states.contains(WidgetState.hovered)) {
                                 return theme.accentHover;
                               }
@@ -1330,7 +1356,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                               }
                               return theme.accentFg;
                             }),
-                            foregroundColor: WidgetStateProperty.all(Colors.white),
+                            foregroundColor: WidgetStateProperty.all(
+                              Colors.white,
+                            ),
                             padding: WidgetStateProperty.all(
                               const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -2533,7 +2561,11 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   child: ElevatedButton.icon(
                     onPressed: _isSaving
                         ? null
-                        : () => _handleSave(provider, theme, isReplace: _isEditing),
+                        : () => _handleSave(
+                            provider,
+                            theme,
+                            isReplace: _isEditing,
+                          ),
                     icon: _isSaving
                         ? const SizedBox(
                             width: 14,
@@ -2558,7 +2590,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     ),
                     style: ButtonStyle(
                       elevation: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.hovered)) return 2.0;
+                        if (states.contains(WidgetState.hovered)) {
+                          return 2.0;
+                        }
                         return 0.0;
                       }),
                       mouseCursor: WidgetStateProperty.resolveWith((states) {
@@ -2567,7 +2601,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         }
                         return SystemMouseCursors.click;
                       }),
-                      backgroundColor: WidgetStateProperty.resolveWith((states) {
+                      backgroundColor: WidgetStateProperty.resolveWith((
+                        states,
+                      ) {
                         if (_isEditing) {
                           if (states.contains(WidgetState.hovered)) {
                             return const Color(0xFFE3A638);
@@ -2687,11 +2723,15 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             visualDensity: VisualDensity.compact,
             mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
             foregroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.hovered)) return Colors.white;
+              if (states.contains(WidgetState.hovered)) {
+                return Colors.white;
+              }
               return theme.accentFg;
             }),
             backgroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.hovered)) return theme.accentFg;
+              if (states.contains(WidgetState.hovered)) {
+                return theme.accentFg;
+              }
               return Colors.transparent;
             }),
             side: WidgetStateProperty.resolveWith((states) {
