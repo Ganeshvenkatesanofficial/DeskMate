@@ -473,6 +473,9 @@ jobs:
           # Strip extended quarantine attributes before creating disk image
           xattr -cr dmg/*.app || true
 
+          # Ad-hoc sign bundle so macOS Gatekeeper approves the binaries
+          codesign --force --deep --sign - dmg/*.app || true
+
           # Add native double-click auto-installer inside DMG (zero-setup)
           cp scripts/install_macos.command "dmg/Install DeskMate.command"
           chmod +x "dmg/Install DeskMate.command"
