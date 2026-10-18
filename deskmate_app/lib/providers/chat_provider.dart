@@ -427,6 +427,31 @@ class ChatProvider extends ChangeNotifier {
     return 'msg_${ts}_$_msgCounter';
   }
 
+  Future<void> editAndResendMessage(int messageIndex, String newText) async {
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty || _isSending) return;
+
+    final isPersonal = _mode == AgentMode.personal;
+    final currentList = isPersonal ? _personalMessages : _fileMessages;
+
+    if (messageIndex < 0 || messageIndex >= currentList.length) return;
+
+    // Truncate message list up to messageIndex (removing this user query and all subsequent responses)
+    final truncated = List<ChatMessage>.from(
+      currentList.sublist(0, messageIndex),
+    );
+    if (isPersonal) {
+      _personalMessages = truncated;
+    } else {
+      _fileMessages = truncated;
+    }
+
+    notifyListeners();
+
+    // Re-send the edited query from this turn
+    await sendMessage(trimmed);
+  }
+
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || _isSending) return;
     final userMsg = ChatMessage(

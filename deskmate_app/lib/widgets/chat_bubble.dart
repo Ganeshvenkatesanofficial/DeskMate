@@ -1,18 +1,69 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/chat_message.dart';
 import '../theme/app_theme.dart';
 import 'telemetry_accordion.dart';
 
-class ChatBubble extends StatelessWidget {
+class ChatBubble extends StatefulWidget {
   final ChatMessage message;
+  final int? index;
+  final bool isSending;
+  final VoidCallback? onEdit;
 
-  const ChatBubble({super.key, required this.message});
+  const ChatBubble({
+    super.key,
+    required this.message,
+    this.index,
+    this.isSending = false,
+    this.onEdit,
+  });
+
+  @override
+  State<ChatBubble> createState() => _ChatBubbleState();
+}
+
+class _ChatBubbleState extends State<ChatBubble> {
+  bool _isCopied = false;
+  Timer? _copyTimer;
+
+  @override
+  void dispose() {
+    _copyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _copyToClipboard() {
+    final text = widget.message.content;
+    if (text.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: text));
+    setState(() => _isCopied = true);
+    _copyTimer?.cancel();
+    _copyTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _isCopied = false);
+    });
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.message.role == MessageRole.user
+              ? 'Query copied to clipboard'
+              : 'Response copied to clipboard',
+          style: const TextStyle(fontSize: 12),
+        ),
+        duration: const Duration(milliseconds: 1200),
+        behavior: SnackBarBehavior.floating,
+        width: 220,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isUser = message.role == MessageRole.user;
+    final isUser = widget.message.role == MessageRole.user;
     final theme = Theme.of(context);
 
     return Padding(
@@ -29,7 +80,7 @@ class ChatBubble extends StatelessWidget {
           ],
           Flexible(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 820),
+              constraints: const BoxConstraints(minWidth: 130, maxWidth: 820),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -47,12 +98,14 @@ class ChatBubble extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (!isUser && message.telemetry.isNotEmpty)
-                      TelemetryAccordion(steps: message.telemetry),
+                    if (!isUser && widget.message.telemetry.isNotEmpty)
+                      TelemetryAccordion(steps: widget.message.telemetry),
                     if (isUser)
                       SelectionArea(
                         child: Text(
-                          message.content.isNotEmpty ? message.content : '...',
+                          widget.message.content.isNotEmpty
+                              ? widget.message.content
+                              : '...',
                           style: TextStyle(
                             color: theme.isDark
                                 ? AppTheme.darkFgDefault
@@ -65,8 +118,8 @@ class ChatBubble extends StatelessWidget {
                     else
                       SelectionArea(
                         child: MarkdownBody(
-                          data: message.content.isNotEmpty
-                              ? message.content
+                          data: widget.message.content.isNotEmpty
+                              ? widget.message.content
                               : '*(No response received)*',
                           selectable: false,
                           styleSheet: MarkdownStyleSheet.fromTheme(theme)
@@ -99,14 +152,44 @@ class ChatBubble extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: 6),
-                    Text(
-                      message.formattedTime,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: theme.isDark
-                            ? AppTheme.darkFgMuted
-                            : AppTheme.lightFgMuted,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          widget.message.formattedTime,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: theme.isDark
+                                ? AppTheme.darkFgMuted
+                                : AppTheme.lightFgMuted,
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isUser) ...[
+                              _buildActionButton(
+                                icon: Icons.edit_outlined,
+                                tooltip: 'Edit query in chat box',
+                                onTap: widget.isSending ? null : widget.onEdit,
+                                theme: theme,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            _buildActionButton(
+                              icon: _isCopied
+                                  ? Icons.check_rounded
+                                  : Icons.copy_rounded,
+                              tooltip: _isCopied
+                                  ? 'Copied'
+                                  : (isUser ? 'Copy query' : 'Copy response'),
+                              color: _isCopied ? const Color(0xFF2DA44E) : null,
+                              onTap: _copyToClipboard,
+                              theme: theme,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -118,6 +201,39 @@ class ChatBubble extends StatelessWidget {
             _buildAvatar(theme, isUser: true),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onTap,
+    required ThemeData theme,
+    Color? color,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        mouseCursor: onTap != null
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        hoverColor: theme.isDark
+            ? const Color(0x26FFFFFF)
+            : const Color(0x1A000000),
+        child: Padding(
+          padding: const EdgeInsets.all(4.0),
+          child: Icon(
+            icon,
+            size: 13,
+            color:
+                color ??
+                (theme.isDark ? AppTheme.darkFgMuted : AppTheme.lightFgMuted),
+          ),
+        ),
       ),
     );
   }

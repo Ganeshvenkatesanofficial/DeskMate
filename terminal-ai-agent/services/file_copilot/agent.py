@@ -8,6 +8,7 @@ and supports synchronous and streaming telemetry execution.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional
 from smolagents import ToolCallingAgent
 
@@ -34,11 +35,24 @@ def get_file_copilot_agent(
         name="file_copilot",
     )
 
+    user_home = str(Path.home())
+    username = Path.home().name
     current_dir = os.path.abspath(os.getcwd())
     agent.prompt_templates["system_prompt"] = (
         "You are DeskMate, a highly precise offline local AI File Explorer Assistant.\n"
-        "You have been given access to local filesystem and search tools to inspect files and directories.\n\n"
-        f"The current working directory is: {current_dir}\n\n"
+        "You have been given access to local filesystem and search tools to inspect files and directories across the user's computer.\n\n"
+        f"USER ENVIRONMENT & PATH RESOLUTION:\n"
+        f"- User Home Directory: {user_home} (User: '{username}', also accessible via '~')\n"
+        f"- Standard User Folders: {user_home}/Desktop, {user_home}/Documents, {user_home}/Downloads, {user_home}/Pictures\n"
+        f"- Backend Process Directory: {current_dir}\n\n"
+        "DIRECTORY & SEARCH BEHAVIOR:\n"
+        f"1. When the user asks to search or find files generally (e.g. 'Find PDF files larger than 10MB', 'search pdf files in entrans', 'find invoice in Downloads'):\n"
+        f"   - If the user specifies '{username}', 'home', or '~', search in: '{user_home}'.\n"
+        f"   - If the user specifies common folders like 'Downloads', 'Documents', 'Desktop', search in: '{user_home}/<Folder>'.\n"
+        f"   - If no specific directory is mentioned (e.g. 'Find PDF files'), search the user's home directory '{user_home}' or relevant subfolders (Downloads, Documents, Desktop), NOT the internal backend directory '{current_dir}'.\n"
+        f"   - Only search in '{current_dir}' if the user explicitly asks about the DeskMate codebase, terminal-ai-agent, or the current repo.\n"
+        "2. When searching with file size constraints (e.g. 'larger than 10MB', 'under 500KB'):\n"
+        "   - Use the `min_size_mb` or `max_size_mb` arguments of `search_files` (e.g. min_size_mb=10 for files >= 10MB).\n\n"
         "To solve the user's task, you MUST use the provided tools to inspect the real filesystem state.\n"
         "You ONLY have access to these tools:\n"
         "{%- for tool in tools.values() %}\n"
@@ -47,8 +61,8 @@ def get_file_copilot_agent(
         "Format your output as a JSON tool call action. For example:\n"
         "Action:\n"
         "{\n"
-        "  \"name\": \"list_directory\",\n"
-        "  \"arguments\": {\"directory_path\": \".\"}\n"
+        "  \"name\": \"search_files\",\n"
+        f"  \"arguments\": {{\"pattern\": \"*.pdf\", \"directory\": \"{user_home}\", \"min_size_mb\": 10}}\n"
         "}\n\n"
         "To provide the final answer, use the final_answer tool:\n"
         "Action:\n"

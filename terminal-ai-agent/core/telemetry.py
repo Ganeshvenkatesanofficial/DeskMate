@@ -109,38 +109,18 @@ def resolve_contextual_query(
     if not last_user:
         return clean_input
 
-    # 2. Build lean few-shot contextualizer prompt covering both personal & file operations
-    prompt = (
-        "You are an expert query contextualizer. Rewrite follow-up queries into self-contained standalone requests.\n\n"
-        "Example 1:\n"
-        "Conversation:\n"
-        "User: What is the weather in San Francisco this weekend?\n"
-        "Assistant: It will be sunny and 18°C in San Francisco.\n"
-        'Latest query: "in chennai"\n'
-        "Standalone query: What is the weather in Chennai this weekend?\n\n"
-        "Example 2:\n"
-        "Conversation:\n"
-        "User: What files are in the core directory?\n"
-        "Assistant: Found models.py, telemetry.py, database.py.\n"
-        'Latest query: "and in services?"\n'
-        "Standalone query: What files are in the services directory?\n\n"
-        "Example 3:\n"
-        "Conversation:\n"
-        "User: Search for get_model\n"
-        "Assistant: Found get_model in core/models.py.\n"
-        'Latest query: "show its content"\n'
-        "Standalone query: Show the content of core/models.py\n\n"
-        "Example 4:\n"
-        "Conversation:\n"
-        "User: What files are in the core directory?\n"
-        "Assistant: Found models.py, telemetry.py.\n"
-        'Latest query: "create a note about meeting"\n'
-        "Standalone query: Create a note about meeting\n\n"
-        "Conversation:\n"
-        f"User: {last_user}\n"
-        f"Assistant: {last_assistant or 'None'}\n"
-        f'Latest query: "{clean_input}"\n'
-        "Standalone query:"
+    # 2. Build lean few-shot contextualizer prompt with strict system & user separation
+    system_instruction = (
+        "You are a strict, ultra-concise query contextualizer. "
+        "Given previous turns and a follow-up query, output ONLY the self-contained standalone query. "
+        "NEVER output conversational filler, greetings, or explanations (e.g. NEVER say 'Sure', 'Please provide', 'Here is'). "
+        "If the follow-up query is already complete and clear, return it exactly as is."
+    )
+    user_turn_content = (
+        f"Previous User: {last_user}\n"
+        f"Previous Assistant: {last_assistant or 'None'}\n"
+        f"Follow-up Query: {clean_input}\n\n"
+        "Standalone Query:"
     )
 
     rewritten: Optional[str] = None
@@ -172,7 +152,10 @@ def resolve_contextual_query(
                 chosen_local = get_default_model()
 
         if chosen_local:
-            messages = [{"role": "user", "content": prompt}]
+            messages = [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_turn_content},
+            ]
             resp = chat_local_llm(
                 messages,
                 model=chosen_local,
@@ -187,10 +170,14 @@ def resolve_contextual_query(
     # Step B: If local LLM was not available or failed, try Gemini Flash if API key provided
     if not rewritten and api_key and api_key.strip():
         try:
+            messages = [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_turn_content},
+            ]
             resp = litellm.completion(
                 model="gemini/gemini-2.5-flash",
                 api_key=api_key.strip(),
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=48,
                 temperature=0.0,
                 timeout=2.0,
@@ -208,6 +195,17 @@ def resolve_contextual_query(
             if cleaned.lower().startswith(prefix.lower()):
                 cleaned = cleaned[len(prefix):].strip()
         cleaned = cleaned.strip('`"\'').strip()
+
+        # Reject conversational artifacts (e.g., "Sure, please provide...", "As an AI...", "Here is...")
+        conversational_reject_patterns = [
+            "sure", "certainly", "please provide", "as an ai", "i would be happy",
+            "i can help", "feel free", "how can i help", "what would you like",
+            "could you please", "rewritten into", "i am an ai", "sorry"
+        ]
+        cleaned_lower = cleaned.lower()
+        if any(cleaned_lower.startswith(pat) or pat in cleaned_lower for pat in conversational_reject_patterns):
+            logger.warning(f"Discarding conversational rewriter artifact: '{cleaned}', keeping original query: '{clean_input}'")
+            return clean_input
 
         # Sanity check: must be a reasonable length sentence (not a huge hallucination)
         if cleaned and len(cleaned.split("\n")) <= 2 and len(cleaned) < 300:
