@@ -354,11 +354,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               Positioned.fill(
                 child: Center(
-                  child: _buildModelSelectionPopup(
-                    context,
-                    provider,
-                    theme,
-                  ),
+                  child: _buildModelSelectionPopup(context, provider, theme),
                 ),
               ).animate().scale(
                 begin: const Offset(0.95, 0.95),
@@ -820,9 +816,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 effectiveModel ??
                                     (provider.isLocalLlmOnline
                                         ? 'No models detected'
-                                        : (provider.selectedLocalModel.isNotEmpty
-                                            ? 'Active: ${provider.selectedLocalModel} (Offline)'
-                                            : 'Ollama Offline (127.0.0.1:11434)')),
+                                        : (provider
+                                                  .selectedLocalModel
+                                                  .isNotEmpty
+                                              ? 'Active: ${provider.selectedLocalModel} (Offline)'
+                                              : 'Ollama Offline (127.0.0.1:11434)')),
                                 style: TextStyle(
                                   fontFamily: effectiveModel != null
                                       ? 'monospace'
@@ -866,7 +864,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               final isOfflineModel = !provider
                                   .availableLocalModels
                                   .contains(m);
-                              final isSel = (m ==
+                              final isSel =
+                                  (m ==
                                   (effectiveModel ??
                                       provider.selectedLocalModel));
                               return Material(
@@ -1014,8 +1013,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   size: 14,
                   color: theme.fgMuted,
                 ),
-                onPressed: () =>
-                    setState(() => _isGeminiKeyObscured = !_isGeminiKeyObscured),
+                onPressed: () => setState(
+                  () => _isGeminiKeyObscured = !_isGeminiKeyObscured,
+                ),
               ),
             ),
           ),
@@ -1284,7 +1284,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     : () => _handleSaveAllSettings(provider, theme),
                 style: ButtonStyle(
                   elevation: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.hovered)) return 2.0;
+                    if (states.contains(WidgetState.hovered)) {
+                      return 2.0;
+                    }
                     return 0.0;
                   }),
                   mouseCursor: WidgetStateProperty.resolveWith((states) {
@@ -2453,7 +2455,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   height: 40,
                   width: 42,
                   child: MouseRegion(
-                    cursor: (provider.isSending ||
+                    cursor:
+                        (provider.isSending ||
                             (!provider.isLocalLlmOnline &&
                                 !provider.isUsingGemini))
                         ? SystemMouseCursors.basic
@@ -2473,7 +2476,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       style: ButtonStyle(
                         padding: WidgetStateProperty.all(EdgeInsets.zero),
                         elevation: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.hovered)) return 2.0;
+                          if (states.contains(WidgetState.hovered)) {
+                            return 2.0;
+                          }
                           return 0.0;
                         }),
                         mouseCursor: WidgetStateProperty.resolveWith((states) {
@@ -2482,7 +2487,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           }
                           return SystemMouseCursors.click;
                         }),
-                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        backgroundColor: WidgetStateProperty.resolveWith((
+                          states,
+                        ) {
                           if (states.contains(WidgetState.disabled)) {
                             return theme.bgEmphasis;
                           }
@@ -2500,20 +2507,20 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                       ),
-                    child: provider.isSending
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
+                      child: provider.isSending
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
                               color: Colors.white,
-                              strokeWidth: 2,
+                              size: 18,
                             ),
-                          )
-                        : const Icon(
-                            Icons.send_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
                     ),
                   ),
                 ),
