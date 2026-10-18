@@ -80,7 +80,10 @@ class _ChatBubbleState extends State<ChatBubble> {
           ],
           Flexible(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 130, maxWidth: 820),
+              constraints: BoxConstraints(
+                minWidth: isUser ? 110 : 160,
+                maxWidth: isUser ? 680 : 820,
+              ),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -94,105 +97,142 @@ class _ChatBubbleState extends State<ChatBubble> {
                     width: 1,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isUser && widget.message.telemetry.isNotEmpty)
-                      TelemetryAccordion(steps: widget.message.telemetry),
-                    if (isUser)
-                      SelectionArea(
-                        child: Text(
-                          widget.message.content.isNotEmpty
-                              ? widget.message.content
-                              : '...',
-                          style: TextStyle(
-                            color: theme.isDark
-                                ? AppTheme.darkFgDefault
-                                : AppTheme.lightFgDefault,
-                            fontSize: 14,
-                            height: 1.5,
-                          ),
-                        ),
-                      )
-                    else
-                      SelectionArea(
-                        child: MarkdownBody(
-                          data: widget.message.content.isNotEmpty
-                              ? widget.message.content
-                              : '*(No response received)*',
-                          selectable: false,
-                          styleSheet: MarkdownStyleSheet.fromTheme(theme)
-                              .copyWith(
-                                p: TextStyle(
+                child: isUser
+                    ? IntrinsicWidth(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SelectionArea(
+                              child: Text(
+                                widget.message.content.isNotEmpty
+                                    ? widget.message.content
+                                    : '...',
+                                style: TextStyle(
                                   color: theme.isDark
                                       ? AppTheme.darkFgDefault
                                       : AppTheme.lightFgDefault,
                                   fontSize: 14,
                                   height: 1.5,
                                 ),
-                                code: TextStyle(
-                                  backgroundColor: theme.bgInset,
-                                  fontFamily: 'monospace',
-                                  fontSize: 13,
-                                  color: theme.isDark
-                                      ? AppTheme.darkFgDefault
-                                      : AppTheme.lightFgDefault,
-                                ),
-                                codeblockDecoration: BoxDecoration(
-                                  color: theme.bgInset,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: theme.borderDefault,
-                                    width: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  widget.message.formattedTime,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: theme.isDark
+                                        ? AppTheme.darkFgMuted
+                                        : AppTheme.lightFgMuted,
                                   ),
                                 ),
-                                codeblockPadding: const EdgeInsets.all(12),
-                              ),
-                        ),
-                      ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          widget.message.formattedTime,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: theme.isDark
-                                ? AppTheme.darkFgMuted
-                                : AppTheme.lightFgMuted,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isUser) ...[
-                              _buildActionButton(
-                                icon: Icons.edit_outlined,
-                                tooltip: 'Edit query in chat box',
-                                onTap: widget.isSending ? null : widget.onEdit,
-                                theme: theme,
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                            _buildActionButton(
-                              icon: _isCopied
-                                  ? Icons.check_rounded
-                                  : Icons.copy_rounded,
-                              tooltip: _isCopied
-                                  ? 'Copied'
-                                  : (isUser ? 'Copy query' : 'Copy response'),
-                              color: _isCopied ? const Color(0xFF2DA44E) : null,
-                              onTap: _copyToClipboard,
-                              theme: theme,
+                                const SizedBox(width: 14),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildActionButton(
+                                      icon: Icons.edit_outlined,
+                                      tooltip: 'Edit query in chat box',
+                                      onTap: widget.isSending
+                                          ? null
+                                          : widget.onEdit,
+                                      theme: theme,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    _buildActionButton(
+                                      icon: _isCopied
+                                          ? Icons.check_rounded
+                                          : Icons.copy_rounded,
+                                      tooltip: _isCopied
+                                          ? 'Copied'
+                                          : 'Copy query',
+                                      color: _isCopied
+                                          ? const Color(0xFF2DA44E)
+                                          : null,
+                                      onTap: _copyToClipboard,
+                                      theme: theme,
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isUser && widget.message.telemetry.isNotEmpty)
+                            TelemetryAccordion(steps: widget.message.telemetry),
+                          SelectionArea(
+                            child: MarkdownBody(
+                              data: widget.message.content.isNotEmpty
+                                  ? widget.message.content
+                                  : '*(No response received)*',
+                              selectable: false,
+                              styleSheet: MarkdownStyleSheet.fromTheme(theme)
+                                  .copyWith(
+                                    p: TextStyle(
+                                      color: theme.isDark
+                                          ? AppTheme.darkFgDefault
+                                          : AppTheme.lightFgDefault,
+                                      fontSize: 14,
+                                      height: 1.5,
+                                    ),
+                                    code: TextStyle(
+                                      backgroundColor: theme.bgInset,
+                                      fontFamily: 'monospace',
+                                      fontSize: 13,
+                                      color: theme.isDark
+                                          ? AppTheme.darkFgDefault
+                                          : AppTheme.lightFgDefault,
+                                    ),
+                                    codeblockDecoration: BoxDecoration(
+                                      color: theme.bgInset,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: theme.borderDefault,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    codeblockPadding: const EdgeInsets.all(12),
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.message.formattedTime,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: theme.isDark
+                                      ? AppTheme.darkFgMuted
+                                      : AppTheme.lightFgMuted,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildActionButton(
+                                icon: _isCopied
+                                    ? Icons.check_rounded
+                                    : Icons.copy_rounded,
+                                tooltip: _isCopied ? 'Copied' : 'Copy response',
+                                color: _isCopied
+                                    ? const Color(0xFF2DA44E)
+                                    : null,
+                                onTap: _copyToClipboard,
+                                theme: theme,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),
