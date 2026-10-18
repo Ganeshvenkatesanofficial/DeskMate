@@ -27,6 +27,7 @@ class _ChatScreenState extends State<ChatScreen> {
   AgentMode? _guideOverrideMode;
   bool _isGeminiKeyObscured = true;
   String? _settingsSelectedModel;
+  bool _isSettingsModelDropdownOpen = false;
   final TextEditingController _geminiKeyController = TextEditingController();
   final FocusNode _geminiKeyFocusNode = FocusNode();
   final TextEditingController _googleClientIdController =
@@ -142,12 +143,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _googleCredsError = null;
     provider.fetchPersonalCredentials();
     setState(() {
+      _isSettingsModelDropdownOpen = false;
       _isSettingsOpen = true;
     });
   }
 
   void _closeSettings() {
     setState(() {
+      _isSettingsModelDropdownOpen = false;
       _isSettingsOpen = false;
     });
   }
@@ -268,21 +271,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             theme,
                             isDesktop: isDesktop,
                           ),
-                        if (provider.showModelSelectionDialog)
-                          Positioned.fill(
-                            child: Container(
-                              color: const Color(
-                                0xB3010409,
-                              ), // rgba(1, 4, 9, 0.70)
-                              child: Center(
-                                child: _buildModelSelectionPopup(
-                                  context,
-                                  provider,
-                                  theme,
-                                ),
-                              ),
-                            ).animate().fadeIn(duration: 200.ms),
-                          ),
                       ],
                     ),
                   ),
@@ -346,6 +334,37 @@ class _ChatScreenState extends State<ChatScreen> {
                       duration: 200.ms,
                       curve: Curves.easeOutCubic,
                     ),
+              ),
+            ],
+
+            // Centered DeskMate AI & Model Configuration Modal (Always on top of EVERYTHING, including User Guide)
+            if (provider.showModelSelectionDialog) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => provider.dismissModelSelectionDialog(),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(
+                      color: theme.isDark
+                          ? const Color(0x99010409)
+                          : const Color(0x661F2328),
+                    ),
+                  ),
+                ).animate().fadeIn(duration: 150.ms),
+              ),
+              Positioned.fill(
+                child: Center(
+                  child: _buildModelSelectionPopup(
+                    context,
+                    provider,
+                    theme,
+                  ),
+                ),
+              ).animate().scale(
+                begin: const Offset(0.95, 0.95),
+                end: const Offset(1.0, 1.0),
+                duration: 200.ms,
+                curve: Curves.easeOutCubic,
               ),
             ],
           ],
@@ -518,19 +537,23 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: _closeSettings,
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: theme.fgMuted,
-                      size: 18,
-                    ),
-                    hoverColor: theme.bgEmphasis,
-                    splashRadius: 16,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: IconButton(
+                      mouseCursor: SystemMouseCursors.click,
+                      onPressed: _closeSettings,
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: theme.fgMuted,
+                        size: 18,
+                      ),
+                      hoverColor: theme.bgEmphasis,
+                      splashRadius: 16,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
                     ),
                   ),
                 ],
@@ -748,76 +771,199 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 5),
 
-          Container(
-            width: double.infinity,
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: theme.isDark ? theme.bgSubtle : Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: theme.borderDefault, width: 0.8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: effectiveModel,
-                hint: Text(
-                  provider.isLocalLlmOnline
-                      ? 'No models detected'
-                      : (provider.selectedLocalModel.isNotEmpty
-                            ? 'Active: ${provider.selectedLocalModel} (Offline)'
-                            : 'Ollama Offline (127.0.0.1:11434)'),
-                  style: TextStyle(fontSize: 11, color: theme.fgMuted),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeInOut,
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: theme.isDark ? theme.bgSubtle : Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _isSettingsModelDropdownOpen
+                      ? theme.accentFg
+                      : theme.borderDefault,
+                  width: _isSettingsModelDropdownOpen ? 1.0 : 0.8,
                 ),
-                isExpanded: true,
-                dropdownColor: theme.bgOverlay,
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  size: 18,
-                  color: theme.fgMuted,
-                ),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: theme.fgDefault,
-                ),
-                onChanged: (newVal) {
-                  if (newVal != null) {
-                    setState(() => _settingsSelectedModel = newVal);
-                  }
-                },
-                items: allModels.map((m) {
-                  final isOfflineModel = !provider.availableLocalModels
-                      .contains(m);
-                  final isSel =
-                      (m == (effectiveModel ?? provider.selectedLocalModel));
-                  return DropdownMenuItem<String>(
-                    value: m,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.memory_rounded,
-                          size: 13,
-                          color: isSel ? theme.accentFg : theme.fgMuted,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      mouseCursor: SystemMouseCursors.click,
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        setState(() {
+                          _isSettingsModelDropdownOpen =
+                              !_isSettingsModelDropdownOpen;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 9,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isOfflineModel ? '$m (Saved / Offline)' : m,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              fontWeight: isSel
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: theme.fgDefault,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.memory_rounded,
+                              size: 15,
+                              color: effectiveModel != null
+                                  ? const Color(0xFF8250DF)
+                                  : theme.fgMuted,
                             ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                effectiveModel ??
+                                    (provider.isLocalLlmOnline
+                                        ? 'No models detected'
+                                        : (provider.selectedLocalModel.isNotEmpty
+                                            ? 'Active: ${provider.selectedLocalModel} (Offline)'
+                                            : 'Ollama Offline (127.0.0.1:11434)')),
+                                style: TextStyle(
+                                  fontFamily: effectiveModel != null
+                                      ? 'monospace'
+                                      : null,
+                                  fontSize: 12,
+                                  fontWeight: effectiveModel != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: effectiveModel != null
+                                      ? theme.fgDefault
+                                      : theme.fgMuted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Icon(
+                              _isSettingsModelDropdownOpen
+                                  ? Icons.arrow_drop_up_rounded
+                                  : Icons.arrow_drop_down_rounded,
+                              size: 20,
+                              color: theme.fgMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_isSettingsModelDropdownOpen) ...[
+                    Divider(
+                      height: 1,
+                      thickness: 0.8,
+                      color: theme.borderDefault,
+                    ),
+                    if (allModels.isNotEmpty)
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 180),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: allModels.map((m) {
+                              final isOfflineModel = !provider
+                                  .availableLocalModels
+                                  .contains(m);
+                              final isSel = (m ==
+                                  (effectiveModel ??
+                                      provider.selectedLocalModel));
+                              return Material(
+                                color: isSel
+                                    ? theme.accentFg.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                                child: InkWell(
+                                  mouseCursor: SystemMouseCursors.click,
+                                  onTap: () {
+                                    setState(() {
+                                      _settingsSelectedModel = m;
+                                      _isSettingsModelDropdownOpen = false;
+                                    });
+                                  },
+                                  hoverColor: theme.isDark
+                                      ? const Color(0xFF1F242C)
+                                      : const Color(0xFFF1F4F8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.memory_rounded,
+                                          size: 13,
+                                          color: isSel
+                                              ? theme.accentFg
+                                              : theme.fgMuted,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            isOfflineModel
+                                                ? '$m (Saved / Offline)'
+                                                : m,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontFamily: 'monospace',
+                                              fontSize: 11.5,
+                                              fontWeight: isSel
+                                                  ? FontWeight.w700
+                                                  : FontWeight.normal,
+                                              color: isSel
+                                                  ? theme.accentFg
+                                                  : theme.fgDefault,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSel)
+                                          Icon(
+                                            Icons.check_rounded,
+                                            size: 14,
+                                            color: theme.accentFg,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              provider.isLocalLlmOnline
+                                  ? 'No models detected on Ollama.'
+                                  : 'Ollama Offline on http://127.0.0.1:11434',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Run "ollama run llama3.2" to install.',
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 10.5,
+                                color: theme.accentFg,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -837,6 +983,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               if (_geminiKeyController.text.isNotEmpty)
                 InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   onTap: () => setState(() => _geminiKeyController.clear()),
                   child: Text(
                     'Clear',
@@ -856,16 +1003,20 @@ class _ChatScreenState extends State<ChatScreen> {
             hintText: 'Enter Gemini key',
             prefixIcon: Icons.vpn_key_outlined,
             obscureText: _isGeminiKeyObscured,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _isGeminiKeyObscured
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                size: 14,
-                color: theme.fgMuted,
+            suffixIcon: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: IconButton(
+                mouseCursor: SystemMouseCursors.click,
+                icon: Icon(
+                  _isGeminiKeyObscured
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 14,
+                  color: theme.fgMuted,
+                ),
+                onPressed: () =>
+                    setState(() => _isGeminiKeyObscured = !_isGeminiKeyObscured),
               ),
-              onPressed: () =>
-                  setState(() => _isGeminiKeyObscured = !_isGeminiKeyObscured),
             ),
           ),
           const SizedBox(height: 5),
@@ -962,17 +1113,21 @@ class _ChatScreenState extends State<ChatScreen> {
             prefixIcon: Icons.key_outlined,
             isMonospace: true,
             obscureText: _isGoogleClientSecretObscured,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _isGoogleClientSecretObscured
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 14,
-                color: theme.fgMuted,
-              ),
-              onPressed: () => setState(
-                () => _isGoogleClientSecretObscured =
-                    !_isGoogleClientSecretObscured,
+            suffixIcon: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: IconButton(
+                mouseCursor: SystemMouseCursors.click,
+                icon: Icon(
+                  _isGoogleClientSecretObscured
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 14,
+                  color: theme.fgMuted,
+                ),
+                onPressed: () => setState(
+                  () => _isGoogleClientSecretObscured =
+                      !_isGoogleClientSecretObscured,
+                ),
               ),
             ),
           ),
@@ -1119,35 +1274,62 @@ class _ChatScreenState extends State<ChatScreen> {
           SizedBox(
             width: double.infinity,
             height: 38,
-            child: ElevatedButton.icon(
-              onPressed: _isSavingAllSettings
-                  ? null
-                  : () => _handleSaveAllSettings(provider, theme),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.accentEmphasis,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+            child: MouseRegion(
+              cursor: _isSavingAllSettings
+                  ? SystemMouseCursors.basic
+                  : SystemMouseCursors.click,
+              child: ElevatedButton.icon(
+                onPressed: _isSavingAllSettings
+                    ? null
+                    : () => _handleSaveAllSettings(provider, theme),
+                style: ButtonStyle(
+                  elevation: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.hovered)) return 2.0;
+                    return 0.0;
+                  }),
+                  mouseCursor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.disabled)) {
+                      return SystemMouseCursors.basic;
+                    }
+                    return SystemMouseCursors.click;
+                  }),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.disabled)) {
+                      return theme.bgEmphasis;
+                    }
+                    if (states.contains(WidgetState.hovered)) {
+                      return theme.accentHover;
+                    }
+                    if (states.contains(WidgetState.pressed)) {
+                      return AppTheme.purpleActive;
+                    }
+                    return theme.accentEmphasis;
+                  }),
+                  foregroundColor: WidgetStateProperty.all(Colors.white),
+                  shape: WidgetStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
                 ),
-              ),
-              icon: _isSavingAllSettings
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.check_rounded, size: 16),
-              label: Text(
-                _isSavingAllSettings
-                    ? 'Validating & Saving...'
-                    : 'Save Configuration',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                icon: _isSavingAllSettings
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 16),
+                label: Text(
+                  _isSavingAllSettings
+                      ? 'Validating & Saving...'
+                      : 'Save Configuration',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -1304,37 +1486,40 @@ class _ChatScreenState extends State<ChatScreen> {
   }) {
     final isSelected = provider.themeMode == mode;
     return Expanded(
-      child: GestureDetector(
-        onTap: () => provider.setThemeMode(mode),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (theme.isDark ? theme.bgEmphasis : Colors.white)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
-            border: isSelected
-                ? Border.all(color: theme.borderDefault, width: 1)
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected ? theme.accentFg : theme.fgMuted,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? theme.fgDefault : theme.fgMuted,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => provider.setThemeMode(mode),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(5),
+              border: isSelected
+                  ? Border.all(color: theme.borderDefault, width: 1)
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 14,
+                  color: isSelected ? theme.accentFg : theme.fgMuted,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? theme.fgDefault : theme.fgMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1413,6 +1598,16 @@ class _ChatScreenState extends State<ChatScreen> {
                           ],
                         ),
                       ),
+                      IconButton(
+                        mouseCursor: SystemMouseCursors.click,
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: theme.fgMuted,
+                        ),
+                        tooltip: 'Close',
+                        onPressed: () => provider.dismissModelSelectionDialog(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1487,62 +1682,66 @@ class _ChatScreenState extends State<ChatScreen> {
                             modelName,
                           ) {
                             final isSelected = tempSelected == modelName;
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? (theme.isDark
-                                          ? theme.bgEmphasis
-                                          : const Color(0xFFEAEEF2))
-                                    : (theme.isDark
-                                          ? theme.bgCanvas
-                                          : Colors.white),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
+                            return MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                decoration: BoxDecoration(
                                   color: isSelected
-                                      ? theme.accentFg
-                                      : theme.borderDefault,
-                                  width: isSelected ? 1.4 : 0.8,
+                                      ? (theme.isDark
+                                            ? theme.bgEmphasis
+                                            : const Color(0xFFEAEEF2))
+                                      : (theme.isDark
+                                            ? theme.bgCanvas
+                                            : Colors.white),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? theme.accentFg
+                                        : theme.borderDefault,
+                                    width: isSelected ? 1.4 : 0.8,
+                                  ),
                                 ),
-                              ),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: RadioListTile<String>(
-                                  value: modelName,
-                                  // ignore: deprecated_member_use
-                                  groupValue: tempSelected,
-                                  dense: true,
-                                  activeColor: theme.accentFg,
-                                  title: Text(
-                                    modelName,
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 12,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.normal,
-                                      color: theme.fgDefault,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: RadioListTile<String>(
+                                    mouseCursor: SystemMouseCursors.click,
+                                    value: modelName,
+                                    // ignore: deprecated_member_use
+                                    groupValue: tempSelected,
+                                    dense: true,
+                                    activeColor: theme.accentFg,
+                                    title: Text(
+                                      modelName,
+                                      style: TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 12,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.normal,
+                                        color: theme.fgDefault,
+                                      ),
                                     ),
-                                  ),
-                                  subtitle: Text(
-                                    isSelected
-                                        ? 'Active Model'
-                                        : 'Click to select',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      color: isSelected
-                                          ? theme.accentFg
-                                          : theme.fgMuted,
+                                    subtitle: Text(
+                                      isSelected
+                                          ? 'Active Model'
+                                          : 'Click to select',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: isSelected
+                                            ? theme.accentFg
+                                            : theme.fgMuted,
+                                      ),
                                     ),
+                                    // ignore: deprecated_member_use
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setPopupState(() {
+                                          tempSelected = val;
+                                        });
+                                      }
+                                    },
                                   ),
-                                  // ignore: deprecated_member_use
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setPopupState(() {
-                                        tempSelected = val;
-                                      });
-                                    }
-                                  },
                                 ),
                               ),
                             );
@@ -1651,6 +1850,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           color: theme.fgMuted,
                         ),
                         suffixIcon: IconButton(
+                          mouseCursor: SystemMouseCursors.click,
                           icon: Icon(
                             obscureGemini
                                 ? Icons.visibility_outlined
@@ -1858,6 +2058,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (isPersonal) ...[
                 const SizedBox(height: 16),
                 InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   onTap: () => setState(() {
                     _guideOverrideMode = AgentMode.personal;
                     _isSetupGuideOpen = true;
@@ -1909,6 +2110,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ] else ...[
                 const SizedBox(height: 16),
                 InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   onTap: () => setState(() {
                     _guideOverrideMode = AgentMode.deskMate;
                     _isSetupGuideOpen = true;
@@ -2015,6 +2217,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(6),
           onTap: () {
             setState(() {
@@ -2191,20 +2394,23 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      provider.retryConnecting();
-                    },
-                    icon: const Icon(Icons.refresh, size: 14),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: theme.attentionFg, width: 1),
-                      foregroundColor: theme.attentionFg,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        provider.retryConnecting();
+                      },
+                      icon: const Icon(Icons.refresh, size: 14),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: theme.attentionFg, width: 1),
+                        foregroundColor: theme.attentionFg,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                       ),
+                      label: const Text('Retry'),
                     ),
-                    label: const Text('Retry'),
                   ),
                 ],
               ),
@@ -2246,26 +2452,54 @@ class _ChatScreenState extends State<ChatScreen> {
                 SizedBox(
                   height: 40,
                   width: 42,
-                  child: ElevatedButton(
-                    onPressed:
-                        provider.isSending ||
+                  child: MouseRegion(
+                    cursor: (provider.isSending ||
                             (!provider.isLocalLlmOnline &&
-                                !provider.isUsingGemini)
-                        ? null
-                        : () {
-                            if (_messageController.text.isNotEmpty) {
-                              provider.sendMessage(_messageController.text);
-                              _messageController.clear();
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      backgroundColor: theme.accentEmphasis,
-                      disabledBackgroundColor: theme.bgEmphasis,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+                                !provider.isUsingGemini))
+                        ? SystemMouseCursors.basic
+                        : SystemMouseCursors.click,
+                    child: ElevatedButton(
+                      onPressed:
+                          provider.isSending ||
+                              (!provider.isLocalLlmOnline &&
+                                  !provider.isUsingGemini)
+                          ? null
+                          : () {
+                              if (_messageController.text.isNotEmpty) {
+                                provider.sendMessage(_messageController.text);
+                                _messageController.clear();
+                              }
+                            },
+                      style: ButtonStyle(
+                        padding: WidgetStateProperty.all(EdgeInsets.zero),
+                        elevation: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.hovered)) return 2.0;
+                          return 0.0;
+                        }),
+                        mouseCursor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return SystemMouseCursors.basic;
+                          }
+                          return SystemMouseCursors.click;
+                        }),
+                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return theme.bgEmphasis;
+                          }
+                          if (states.contains(WidgetState.hovered)) {
+                            return theme.accentHover;
+                          }
+                          if (states.contains(WidgetState.pressed)) {
+                            return AppTheme.purpleActive;
+                          }
+                          return theme.accentEmphasis;
+                        }),
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
                       ),
-                    ),
                     child: provider.isSending
                         ? const SizedBox(
                             width: 16,
@@ -2280,6 +2514,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             color: Colors.white,
                             size: 18,
                           ),
+                    ),
                   ),
                 ),
               ],

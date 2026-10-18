@@ -124,6 +124,8 @@ class AppTheme {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         elevation: 0,
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         backgroundColor: purplePrimary,
@@ -134,12 +136,26 @@ class AppTheme {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         elevation: 0,
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         side: const BorderSide(color: lightBorderDefault, width: 1),
         backgroundColor: lightBgSubtle,
         foregroundColor: lightFgDefault,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -205,6 +221,8 @@ class AppTheme {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         elevation: 0,
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         backgroundColor: purplePrimary,
@@ -215,12 +233,26 @@ class AppTheme {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         elevation: 0,
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         side: const BorderSide(color: darkBorderDefault, width: 1),
         backgroundColor: darkBgEmphasis,
         foregroundColor: darkFgDefault,
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        enabledMouseCursor: SystemMouseCursors.click,
+        disabledMouseCursor: SystemMouseCursors.basic,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(

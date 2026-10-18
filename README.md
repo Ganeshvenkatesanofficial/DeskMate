@@ -8,15 +8,34 @@ By bundling the backend as a silent background process inside the Flutter applic
 
 ## 🚀 Quick Install (100% Free Open-Source)
 
-### macOS (One-Line Auto-Install)
+### 🍏 macOS
+
+#### One-Line Auto-Install (macOS)
 Run this single command in your Terminal. It installs DeskMate directly into your Applications folder and launches immediately with **zero macOS Gatekeeper warnings**:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/dev/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/install.sh | bash
 ```
 
-### macOS (DMG Click-to-Install)
+#### DMG Click-to-Install (macOS)
 1. Download **`DeskMate-macOS.dmg`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
 2. Open the disk image and double-click **`Install DeskMate`** to install and open with zero manual setup.
+
+---
+
+### 🪟 Windows
+
+#### One-Line Auto-Install (PowerShell)
+Open PowerShell (`Win + X` → **Terminal** or **PowerShell**) and run:
+```powershell
+irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/install.ps1 | iex
+```
+*Automatically downloads the latest release, installs DeskMate into `%LOCALAPPDATA%\DeskMate`, creates Desktop & Start Menu shortcuts, and launches immediately!*
+
+#### Portable ZIP (Click-to-Install)
+1. Download **`DeskMate-Windows.zip`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Right-click the `.zip` file and select **Extract All...**.
+3. Open the extracted folder and double-click **`DeskMate.exe`**.
+4. The embedded local Python AI backend launches silently in the background automatically!
 
 ---
 
@@ -145,10 +164,10 @@ A comprehensive personal workspace assistant featuring **30 class-based tools**:
 ## Standalone Run & Releases (Windows & macOS)
 
 ### 🪟 Running on Windows
-1. Download **`DeskMate-Windows-Release`** `.zip` from GitHub Releases / Actions.
+1. Download **`DeskMate-Windows.zip`** from [GitHub Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
 2. Extract the `.zip` archive.
 3. Double-click **`DeskMate.exe`** — the backend launches automatically.
-4. Enter your **Gemini API Key** in the sidebar (optional) and start chatting!
+4. Enter your **Gemini API Key** in the sidebar (optional) or use offline models with [Ollama for Windows](https://ollama.com/download/windows) and start chatting!
 
 ---
 

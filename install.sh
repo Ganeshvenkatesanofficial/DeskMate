@@ -157,7 +157,7 @@ else
 
   if [ ! -d "$TARGET_APP" ]; then
     echo -e "${RED}Error: Could not install DeskMate.${NC}"
-    echo "Please ensure the GitHub Actions build on 'dev' has completed or download DeskMate-macOS.dmg into ~/Downloads."
+    echo "Please ensure the GitHub Actions build on 'main' has completed or download DeskMate-macOS.dmg into ~/Downloads."
     exit 1
   fi
 fi
