@@ -152,11 +152,13 @@ def summarize_observation(obs: Any, max_length: int = 300) -> str:
     return summary
 
 
-def should_contextualize(user_input: str) -> bool:
+def should_contextualize(
+    user_input: str,
+    history: Optional[List[Dict[str, str]]] = None,
+) -> bool:
     """
-    Determines if user input is an incomplete follow-up fragment that requires
-    contextualization against previous conversation turns.
-    Returns False if the query is already self-contained or a standalone command.
+    Determines if user input is an incomplete follow-up fragment or answer to a question
+    that requires contextualization against previous conversation turns.
     """
     clean = user_input.strip()
     if not clean:
@@ -165,32 +167,42 @@ def should_contextualize(user_input: str) -> bool:
     tokens = clean.lower().split()
     if not tokens:
         return False
+    lower = clean.lower()
 
-    # 1. Very short follow-up phrases (<= 5 words) starting with prepositions/conjunctions
+    # 1. If previous assistant turn ended with a question mark or asked a question, user is responding to it
+    if history:
+        for item in reversed(history):
+            if str(item.get("role", "")).strip().lower() == "assistant":
+                prev_text = str(item.get("content", "")).strip()
+                if prev_text:
+                    # If assistant asked for clarification, choices, or questions
+                    if "?" in prev_text or any(q in prev_text.lower() for q in ["which", "let me know", "would you like", "or", "say so"]):
+                        return True
+                    # Check if user query mentions numbers or counts present in assistant's previous message
+                    # e.g., assistant found 43 files, user says "show location 43 places" or "43"
+                    for tok in tokens:
+                        if tok.isdigit() and tok in prev_text:
+                            return True
+                break
+
+    # 2. Short phrases starting with follow-up words: "just", "only", "show", "give", "list", "where", "in", "at", etc.
     fragment_starters = (
         "in ", "at ", "on ", "under ", "from ", "inside ",
         "and ", "also ", "or ", "but ", "what about ", "how about ",
-        "what of ", "why ", "where ", "which one", "again"
+        "what of ", "why ", "where ", "which one", "again",
+        "just ", "only ", "show ", "list ", "give ", "tell ", "display "
     )
-    lower = clean.lower()
-    if len(tokens) <= 5 and any(lower.startswith(starter) for starter in fragment_starters):
+    if len(tokens) <= 7 and any(lower.startswith(starter) for starter in fragment_starters):
         return True
 
-    # 2. Contains anaphoric pronoun referring to previous context without explicit target
-    # e.g., "read it", "open that", "delete this file", "summarize it", "show me all", "check there"
-    anaphora_words = {"it", "that", "this", "them", "those", "there", "its", "former", "latter", "all", "both"}
-    if any(token in anaphora_words for token in tokens):
-        if len(tokens) <= 6:
-            return True
-        if any(w in tokens for w in ["it", "that", "there", "them", "all"]):
-            keywords = {"resume", "cv", "pdf", "file", "folder", "directory", "code", "image", "doc"}
-            if not any(k in lower for k in keywords):
-                return True
+    # 3. Contains anaphoric pronoun or ordinal referring to previous context without explicit target
+    anaphora_words = {
+        "it", "that", "this", "them", "those", "there", "its", "former", "latter",
+        "all", "both", "one", "first", "second", "third", "last", "places", "locations"
+    }
+    if any(token in anaphora_words for token in tokens) and len(tokens) <= 8:
+        return True
 
-    # 3. Explicit standalone questions or action commands:
-    # e.g., "can you find my resume in lap", "search for pdf files in Desktop",
-    # "find my resume", "read file requirements.txt", "list directory /", "what is machine learning"
-    # These are fully self-contained and must NOT be rewritten or blended with prior topics.
     return False
 
 
@@ -214,7 +226,7 @@ def resolve_contextual_query(
         return clean_input
 
     # Fast-path: Check if the query is already self-contained
-    if not should_contextualize(clean_input):
+    if not should_contextualize(clean_input, history):
         return clean_input
 
     # 1. Extract the immediate preceding turn (last user message & last assistant message)
@@ -366,6 +378,38 @@ def resolve_contextual_query(
     return clean_input
 
 
+def format_conversation_history(
+    history: Optional[List[Dict[str, str]]],
+    max_turns: int = 6,
+) -> str:
+    """Format recent conversation turns into a clean context block."""
+    if not history:
+        return ""
+
+    valid_items = [
+        item for item in history
+        if isinstance(item, dict) and str(item.get("content", "")).strip()
+    ]
+    if not valid_items:
+        return ""
+
+    # Keep up to max_turns most recent messages
+    recent_items = valid_items[-max_turns:]
+    lines = []
+    for item in recent_items:
+        role = str(item.get("role", "")).strip().lower()
+        role_label = "User" if role == "user" else "Assistant"
+        content = str(item.get("content", "")).strip()
+
+        # Truncate overly long assistant messages to keep prompt focused and within context budget
+        if role != "user" and len(content) > 500:
+            content = content[:350].strip() + "\n... [truncated] ...\n" + content[-120:].strip()
+
+        lines.append(f"{role_label}: {content}")
+
+    return "\n".join(lines)
+
+
 def build_chat_prompt(
     user_input: str,
     history: Optional[List[Dict[str, str]]] = None,
@@ -373,14 +417,43 @@ def build_chat_prompt(
     model_id: Optional[str] = None,
 ) -> str:
     """
-    Resolve and return a standalone, clean query for the agent.
-    Option 1: Uses dynamic query contextualization instead of polluting agent prompt history.
+    Build a context-aware prompt combining conversation history and current user request.
+    Guarantees that the agent understands follow-up answers, questions it asked, and references
+    to previous findings without losing context across turns.
     """
-    return resolve_contextual_query(
-        user_input=user_input,
-        history=history,
-        api_key=api_key,
-        model_id=model_id,
+    clean_input = user_input.strip()
+    if not clean_input:
+        return ""
+
+    if not history:
+        return clean_input
+
+    history_text = format_conversation_history(history, max_turns=6)
+    if not history_text:
+        return clean_input
+
+    # Also attempt dynamic query contextualization to provide a helpful target hint
+    query_hint = ""
+    try:
+        resolved = resolve_contextual_query(
+            user_input=clean_input,
+            history=history,
+            api_key=api_key,
+            model_id=model_id,
+        )
+        if resolved and resolved.strip().lower() != clean_input.lower():
+            query_hint = f"\n[Context Clarification: The user is referring to: {resolved.strip()}]\n"
+    except Exception:
+        pass
+
+    return (
+        f"### CONVERSATION HISTORY (Previous turns in this chat session):\n"
+        f"{history_text}\n"
+        f"{query_hint}\n"
+        f"### CURRENT USER REQUEST:\n"
+        f"{clean_input}\n\n"
+        f"INSTRUCTION: Fulfill the CURRENT USER REQUEST, using the CONVERSATION HISTORY above to resolve any references to files, questions you asked, or counts/locations mentioned earlier. "
+        f"Execute any necessary tools to fulfill the user's request."
     )
 
 

@@ -239,6 +239,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         widget.steps.isNotEmpty && _expandedSteps.length == widget.steps.length;
 
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: theme.isDark ? theme.bgSubtle : const Color(0xFFF8FAFC),

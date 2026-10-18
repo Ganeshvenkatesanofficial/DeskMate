@@ -182,7 +182,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                         ),
                       )
                     : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (!isUser && widget.message.telemetry.isNotEmpty)
@@ -222,7 +222,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                           ),
                           const SizedBox(height: 8),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 widget.message.formattedTime,
@@ -233,7 +233,6 @@ class _ChatBubbleState extends State<ChatBubble> {
                                       : AppTheme.lightFgMuted,
                                 ),
                               ),
-                              const SizedBox(width: 8),
                               _buildActionButton(
                                 icon: _isCopied
                                     ? Icons.check_rounded
