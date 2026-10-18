@@ -466,6 +466,32 @@ jobs:
 
           # Ensure global executable and read permissions
           chmod -R u+rwX,go+rX dmg/*.app
+          chmod +x dmg/*.app/Contents/MacOS/* || true
+          find dmg/*.app/Contents -type f -name "deskmate_backend" -exec chmod +x {} + || true
+
+          # Strip extended quarantine attributes before creating disk image
+          xattr -cr dmg/*.app || true
+
+          # Add native double-click auto-installer inside DMG (zero-setup)
+          cat << 'EOF' > "dmg/Install DeskMate.command"
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -w "/Applications" ]; then
+  TARGET="/Applications"
+else
+  TARGET="$HOME/Applications"
+  mkdir -p "$TARGET"
+fi
+echo "Installing DeskMate to $TARGET..."
+rm -rf "$TARGET/DeskMate.app"
+cp -R "$DIR/DeskMate.app" "$TARGET/"
+xattr -cr "$TARGET/DeskMate.app" 2>/dev/null || true
+chmod +x "$TARGET/DeskMate.app/Contents/MacOS/DeskMate" 2>/dev/null || true
+echo "Launching DeskMate..."
+open "$TARGET/DeskMate.app"
+exit 0
+EOF
+          chmod +x "dmg/Install DeskMate.command"
 
           hdiutil create \
             -volname "DeskMate" \

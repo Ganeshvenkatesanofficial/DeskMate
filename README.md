@@ -6,6 +6,20 @@ By bundling the backend as a silent background process inside the Flutter applic
 
 ---
 
+## 🚀 Quick Install (100% Free Open-Source)
+
+### macOS (One-Line Auto-Install)
+Run this single command in your Terminal. It installs DeskMate directly into your Applications folder and launches immediately with **zero macOS Gatekeeper warnings**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/dev/install.sh | bash
+```
+
+### macOS (DMG Click-to-Install)
+1. Download **`DeskMate-macOS.dmg`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Open the disk image and double-click **`Install DeskMate`** to install and open with zero manual setup.
+
+---
+
 ## Architecture & Security Highlights
 
 ### 1. ⚡ Real-Time WebSockets & Agentic Telemetry
