@@ -73,64 +73,77 @@ elif [ -d "$LOCAL_DEBUG_PATH" ]; then
   cp -R "$LOCAL_DEBUG_PATH" "$APP_DIR/"
 else
   echo -e "Checking for latest release package from GitHub..."
-  ZIP_PATH="$TMP_DIR/DeskMate-macOS.zip"
+  DOWNLOADED_FILE=""
 
-  # URLs to check in order of preference
+  # URLs to check in order of preference (DMG first, then ZIP)
   RELEASE_URLS=(
+    "https://github.com/${REPO}/releases/download/continuous/DeskMate-macOS.dmg"
     "https://github.com/${REPO}/releases/download/continuous/DeskMate-macOS.zip"
+    "https://github.com/${REPO}/releases/latest/download/DeskMate-macOS.dmg"
     "https://github.com/${REPO}/releases/latest/download/DeskMate-macOS.zip"
+    "https://github.com/${REPO}/releases/download/v1.0.0/DeskMate-macOS.dmg"
     "https://github.com/${REPO}/releases/download/v1.0.0/DeskMate-macOS.zip"
   )
 
   for URL in "${RELEASE_URLS[@]}"; do
     echo "Attempting download from: $URL ..."
-    if curl -fsSL -o "$ZIP_PATH" "$URL" 2>/dev/null && [ -s "$ZIP_PATH" ]; then
-      echo -e "${GREEN}Successfully downloaded DeskMate package from release.${NC}"
+    FILENAME="$(basename "$URL")"
+    TARGET_FILE_PATH="$TMP_DIR/$FILENAME"
+    if curl -fsSL -o "$TARGET_FILE_PATH" "$URL" 2>/dev/null && [ -s "$TARGET_FILE_PATH" ]; then
+      echo -e "${GREEN}Successfully downloaded $FILENAME from release.${NC}"
+      DOWNLOADED_FILE="$TARGET_FILE_PATH"
       break
     fi
-    rm -f "$ZIP_PATH"
+    rm -f "$TARGET_FILE_PATH"
   done
 
   # Fallback to local Downloads directory if online release is not yet drafted/published
-  if [ ! -f "$ZIP_PATH" ] || [ ! -s "$ZIP_PATH" ]; then
+  if [ -z "$DOWNLOADED_FILE" ]; then
     echo -e "${YELLOW}Notice: Online release archive not published or accessible yet.${NC}"
     echo "Searching ~/Downloads for downloaded GitHub Actions artifacts or DMGs..."
 
-    ZIP_CANDIDATE="$(find "$HOME/Downloads" -maxdepth 2 -name "DeskMate*.zip" 2>/dev/null | head -n 1)"
     DMG_CANDIDATE="$(find "$HOME/Downloads" -maxdepth 2 -name "DeskMate*.dmg" 2>/dev/null | head -n 1)"
+    ZIP_CANDIDATE="$(find "$HOME/Downloads" -maxdepth 2 -name "DeskMate*.zip" 2>/dev/null | head -n 1)"
 
-    if [ -n "$ZIP_CANDIDATE" ] && [ -f "$ZIP_CANDIDATE" ]; then
-      echo "Found artifact ZIP in Downloads: $ZIP_CANDIDATE"
-      cp "$ZIP_CANDIDATE" "$ZIP_PATH"
-    elif [ -n "$DMG_CANDIDATE" ] && [ -f "$DMG_CANDIDATE" ]; then
+    if [ -n "$DMG_CANDIDATE" ] && [ -f "$DMG_CANDIDATE" ]; then
       echo "Found DMG in Downloads: $DMG_CANDIDATE"
-      MOUNT_DIR=$(hdiutil attach "$DMG_CANDIDATE" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
-      if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
-        rm -rf "$TARGET_APP"
-        cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
-      fi
-      hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
+      DOWNLOADED_FILE="$DMG_CANDIDATE"
+    elif [ -n "$ZIP_CANDIDATE" ] && [ -f "$ZIP_CANDIDATE" ]; then
+      echo "Found artifact ZIP in Downloads: $ZIP_CANDIDATE"
+      DOWNLOADED_FILE="$ZIP_CANDIDATE"
     fi
   fi
 
-  # Extract ZIP if available
-  if [ -f "$ZIP_PATH" ] && [ -s "$ZIP_PATH" ]; then
-    echo "Extracting application bundle..."
-    unzip -q -o "$ZIP_PATH" -d "$TMP_DIR/"
-
-    NESTED_APP="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.app" -type d 2>/dev/null | head -n 1)"
-    NESTED_DMG="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.dmg" -type f 2>/dev/null | head -n 1)"
-
-    if [ -n "$NESTED_APP" ] && [ -d "$NESTED_APP" ]; then
-      rm -rf "$TARGET_APP"
-      cp -R "$NESTED_APP" "$TARGET_APP"
-    elif [ -n "$NESTED_DMG" ] && [ -f "$NESTED_DMG" ]; then
-      MOUNT_DIR=$(hdiutil attach "$NESTED_DMG" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
+  # Install from downloaded file
+  if [ -n "$DOWNLOADED_FILE" ] && [ -f "$DOWNLOADED_FILE" ]; then
+    if [[ "$DOWNLOADED_FILE" == *.dmg ]]; then
+      echo "Mounting disk image: $DOWNLOADED_FILE ..."
+      MOUNT_DIR=$(hdiutil attach "$DOWNLOADED_FILE" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
       if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
+        echo "Copying DeskMate.app to $APP_DIR..."
         rm -rf "$TARGET_APP"
         cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
       fi
       hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
+    elif [[ "$DOWNLOADED_FILE" == *.zip ]]; then
+      echo "Extracting application bundle..."
+      unzip -q -o "$DOWNLOADED_FILE" -d "$TMP_DIR/"
+
+      NESTED_APP="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.app" -type d 2>/dev/null | head -n 1)"
+      NESTED_DMG="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.dmg" -type f 2>/dev/null | head -n 1)"
+
+      if [ -n "$NESTED_APP" ] && [ -d "$NESTED_APP" ]; then
+        echo "Copying DeskMate.app to $TARGET_APP..."
+        rm -rf "$TARGET_APP"
+        cp -R "$NESTED_APP" "$TARGET_APP"
+      elif [ -n "$NESTED_DMG" ] && [ -f "$NESTED_DMG" ]; then
+        MOUNT_DIR=$(hdiutil attach "$NESTED_DMG" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
+        if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
+          rm -rf "$TARGET_APP"
+          cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
+        fi
+        hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
+      fi
     fi
   fi
 
