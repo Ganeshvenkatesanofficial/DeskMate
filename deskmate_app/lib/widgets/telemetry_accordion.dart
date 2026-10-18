@@ -219,6 +219,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         children: [
           // ─── Main Accordion Header ──────────────────────────────────────
           InkWell(
+            mouseCursor: SystemMouseCursors.click,
             onTap: () {
               setState(() {
                 _isExpanded = !_isExpanded;
@@ -261,6 +262,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                   // "Expand all" toggle (only when accordion is open)
                   if (_isExpanded && widget.steps.isNotEmpty) ...[
                     InkWell(
+                      mouseCursor: SystemMouseCursors.click,
                       onTap: _toggleAllSteps,
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
@@ -477,6 +479,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                   children: [
                     // Clickable Step Header Bar
                     InkWell(
+                      mouseCursor: SystemMouseCursors.click,
                       onTap: () => _toggleStep(index),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
@@ -677,6 +680,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             ),
             const Spacer(),
             InkWell(
+              mouseCursor: SystemMouseCursors.click,
               onTap: () =>
                   _copyContent(jsonStr, 'Arguments payload', stepIndex),
               borderRadius: BorderRadius.circular(4),
@@ -787,6 +791,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             ),
             const Spacer(),
             InkWell(
+              mouseCursor: SystemMouseCursors.click,
               onTap: () => _copyContent(fullText, 'Output data', stepIndex),
               borderRadius: BorderRadius.circular(4),
               child: Padding(
@@ -900,6 +905,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             ),
             const Spacer(),
             InkWell(
+              mouseCursor: SystemMouseCursors.click,
               onTap: () =>
                   _copyContent(thoughtText, 'Thought process', stepIndex),
               borderRadius: BorderRadius.circular(4),

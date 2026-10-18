@@ -236,38 +236,41 @@ class _SidebarState extends State<Sidebar> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (theme.isDark ? theme.bgEmphasis : Colors.white)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(5),
-          border: isSelected
-              ? Border.all(color: theme.borderDefault, width: 1)
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 15,
-              color: isSelected ? theme.accentFg : theme.fgMuted,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? theme.fgDefault : theme.fgMuted,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (theme.isDark ? theme.bgEmphasis : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+            border: isSelected
+                ? Border.all(color: theme.borderDefault, width: 1)
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected ? theme.accentFg : theme.fgMuted,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? theme.fgDefault : theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -331,7 +334,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           const SizedBox(height: 7),
 
-          // Processor / Chip Icon for Local LLM or Cloud Icon for Gemini
+          // Processor / Chip Icon for Local LLM or Cloud Icon for Gemini (Clickable to open Model Configuration)
           Builder(
             builder: (context) {
               final isGemini = provider.isUsingGemini;
@@ -343,88 +346,70 @@ class _SidebarState extends State<Sidebar> {
                   ? Icons.cloud_done_rounded
                   : Icons.memory_rounded; // Microchip / Processor icon
 
-              return Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(3.5),
-                    decoration: BoxDecoration(
-                      color: llmColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: llmColor.withValues(alpha: 0.35),
-                        width: 0.8,
+              final modelText = isGemini
+                  ? 'Gemini (Flash) Active'
+                  : (isLlmOnline
+                        ? (provider.selectedLocalModel.isNotEmpty
+                              ? 'Local: ${provider.selectedLocalModel}'
+                              : 'Local LLM Active')
+                        : 'Local LLM Offline');
+
+              return Tooltip(
+                message: 'Click to configure AI model & Gemini key',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: () {
+                      provider.openModelSelectionDialog();
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    hoverColor: theme.accentFg.withValues(alpha: 0.08),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 3,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3.5),
+                            decoration: BoxDecoration(
+                              color: llmColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: llmColor.withValues(alpha: 0.35),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Icon(llmIcon, size: 13, color: llmColor),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              modelText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: theme.fgDefault,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 13,
+                            color: theme.fgMuted.withValues(alpha: 0.7),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Icon(llmIcon, size: 13, color: llmColor),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isGemini
-                          ? 'Gemini (Flash) Active'
-                          : (isLlmOnline
-                                ? (provider.selectedLocalModel.isNotEmpty
-                                      ? 'Local: ${provider.selectedLocalModel}'
-                                      : 'Local LLM Active')
-                                : 'Local LLM Offline'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+                ),
               );
             },
           ),
-          if (provider.availableLocalModels.length > 1 &&
-              !provider.isUsingGemini) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-              decoration: BoxDecoration(
-                color: theme.bgSubtle,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: theme.borderDefault, width: 1),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value:
-                      provider.selectedLocalModel.isNotEmpty &&
-                          provider.availableLocalModels.contains(
-                            provider.selectedLocalModel,
-                          )
-                      ? provider.selectedLocalModel
-                      : provider.availableLocalModels.first,
-                  isExpanded: true,
-                  dropdownColor: theme.bgOverlay,
-                  icon: Icon(
-                    Icons.arrow_drop_down,
-                    size: 16,
-                    color: theme.fgMuted,
-                  ),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: theme.fgDefault,
-                  ),
-                  onChanged: (val) {
-                    if (val != null) {
-                      provider.setSelectedLocalModel(val);
-                    }
-                  },
-                  items: provider.availableLocalModels.map((m) {
-                    return DropdownMenuItem<String>(
-                      value: m,
-                      child: Text(m, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -434,6 +419,7 @@ class _SidebarState extends State<Sidebar> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () => provider.resetChat(),
         borderRadius: BorderRadius.circular(6),
         hoverColor: theme.bgEmphasis,
@@ -521,6 +507,7 @@ class _SidebarState extends State<Sidebar> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
         hoverColor: theme.bgEmphasis,
@@ -731,6 +718,7 @@ class _SidebarState extends State<Sidebar> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: widget.onOpenSettings,
         borderRadius: BorderRadius.circular(6),
         hoverColor: theme.bgEmphasis,

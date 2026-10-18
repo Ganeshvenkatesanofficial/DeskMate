@@ -147,7 +147,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: SelectableText(
               text,
               style: TextStyle(
                 fontFamily: isMonospace ? 'monospace' : null,
@@ -157,6 +157,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             ),
           ),
           InkWell(
+            mouseCursor: SystemMouseCursors.click,
             onTap: () => _copy(text, keyId, label),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -394,31 +395,39 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    IconButton(
-                      onPressed: () =>
-                          setState(() => _isFullScreen = !_isFullScreen),
-                      icon: Icon(
-                        _isFullScreen
-                            ? Icons.fullscreen_exit_rounded
-                            : Icons.fullscreen_rounded,
-                        size: 20,
-                        color: theme.fgMuted,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: IconButton(
+                        mouseCursor: SystemMouseCursors.click,
+                        onPressed: () =>
+                            setState(() => _isFullScreen = !_isFullScreen),
+                        icon: Icon(
+                          _isFullScreen
+                              ? Icons.fullscreen_exit_rounded
+                              : Icons.fullscreen_rounded,
+                          size: 20,
+                          color: theme.fgMuted,
+                        ),
+                        tooltip: _isFullScreen
+                            ? 'Exit Full Screen'
+                            : 'Full Screen',
+                        hoverColor: theme.bgEmphasis,
+                        splashRadius: 18,
                       ),
-                      tooltip: _isFullScreen
-                          ? 'Exit Full Screen'
-                          : 'Full Screen',
-                      hoverColor: theme.bgEmphasis,
-                      splashRadius: 18,
                     ),
-                    IconButton(
-                      onPressed: widget.onClose,
-                      icon: Icon(
-                        Icons.close_rounded,
-                        size: 20,
-                        color: theme.fgMuted,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: IconButton(
+                        mouseCursor: SystemMouseCursors.click,
+                        onPressed: widget.onClose,
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 20,
+                          color: theme.fgMuted,
+                        ),
+                        hoverColor: theme.bgEmphasis,
+                        splashRadius: 18,
                       ),
-                      hoverColor: theme.bgEmphasis,
-                      splashRadius: 18,
                     ),
                   ],
                 ),
@@ -577,17 +586,17 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   children: isPersonal
                       ? [
                           _buildQuickSetupTab(theme),
-                          _buildGcpGuideTab(theme),
-                          _buildOfflineToolsTab(theme),
-                          _buildEnvConfigTab(theme),
-                          _buildPersonalReadmeTab(theme),
+                          SelectionArea(child: _buildGcpGuideTab(theme)),
+                          SelectionArea(child: _buildOfflineToolsTab(theme)),
+                          SelectionArea(child: _buildEnvConfigTab(theme)),
+                          SelectionArea(child: _buildPersonalReadmeTab(theme)),
                         ]
                       : [
-                          _buildFileAgentGuideTab(theme),
-                          _buildRagArchitectureTab(theme),
-                          _buildFileCopilotToolsTab(theme),
-                          _buildFileEnvConfigTab(theme),
-                          _buildFileReadmeTab(theme),
+                          SelectionArea(child: _buildFileAgentGuideTab(theme)),
+                          SelectionArea(child: _buildRagArchitectureTab(theme)),
+                          SelectionArea(child: _buildFileCopilotToolsTab(theme)),
+                          SelectionArea(child: _buildFileEnvConfigTab(theme)),
+                          SelectionArea(child: _buildFileReadmeTab(theme)),
                         ],
                 ),
               ),
@@ -615,25 +624,46 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         style: TextStyle(fontSize: 11, color: theme.fgMuted),
                       ),
                     ),
-                    ElevatedButton(
-                      onPressed: widget.onClose,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.accentFg,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      child: const Text(
-                        'Done',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    SelectionContainer.disabled(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: ElevatedButton(
+                          onPressed: widget.onClose,
+                          style: ButtonStyle(
+                            elevation: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.hovered)) return 2.0;
+                              return 0.0;
+                            }),
+                            mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
+                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return theme.accentHover;
+                              }
+                              if (states.contains(WidgetState.pressed)) {
+                                return AppTheme.purpleActive;
+                              }
+                              return theme.accentFg;
+                            }),
+                            foregroundColor: WidgetStateProperty.all(Colors.white),
+                            padding: WidgetStateProperty.all(
+                              const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                            shape: WidgetStateProperty.all(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ),
+                          child: const Text(
+                            'Done',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -701,6 +731,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
   Widget _buildTabButton(int index, String title, ThemeData theme) {
     final isSelected = _selectedTabIndex == index;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: () => setState(() => _selectedTabIndex = index),
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -737,6 +768,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     required VoidCallback onTap,
   }) {
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -849,20 +881,41 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: () => setState(() => _selectedTabIndex = 1),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 14),
-                  label: const Text('Open Guide'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.accentFg,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
+                SelectionContainer.disabled(
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: ElevatedButton.icon(
+                      onPressed: () => setState(() => _selectedTabIndex = 1),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                      label: const Text('Open Guide'),
+                      style: ButtonStyle(
+                        elevation: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.hovered)) return 2.0;
+                          return 0.0;
+                        }),
+                        mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
+                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.hovered)) {
+                            return theme.accentHover;
+                          }
+                          if (states.contains(WidgetState.pressed)) {
+                            return AppTheme.purpleActive;
+                          }
+                          return theme.accentFg;
+                        }),
+                        foregroundColor: WidgetStateProperty.all(Colors.white),
+                        padding: WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                        ),
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1020,18 +1073,21 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             ),
           ),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: () {
-              provider.openModelSelectionDialog();
-            },
-            icon: const Icon(Icons.tune_rounded, size: 13),
-            label: const Text('Change Model / Key'),
-            style: OutlinedButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              foregroundColor: theme.accentFg,
-              side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                provider.openModelSelectionDialog();
+              },
+              icon: const Icon(Icons.tune_rounded, size: 13),
+              label: const Text('Change Model / Key'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: theme.accentFg,
+                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
               ),
             ),
           ),
@@ -1090,21 +1146,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             title: 'Open Google Cloud Console & Create Project',
             description:
                 'Visit the Google Cloud Console. Select an existing project or click "New Project" (e.g. name it "DeskMate") from the top navigation dropdown.',
-            actionButton: OutlinedButton.icon(
-              onPressed: () => _launchExternalUrl(
-                'https://console.cloud.google.com/',
-                'Google Cloud Console',
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 12),
-              label: const Text('Open Console'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: theme.accentFg,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
+            actionButton: _buildStepActionButton(
+              theme: theme,
+              url: 'https://console.cloud.google.com/',
+              label: 'Open Console',
             ),
           ),
 
@@ -1115,21 +1160,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             title: 'Enable Required Google Workspace APIs',
             description:
                 'Under "APIs & Services" > "Library", search for and enable these 4 essential Google Workspace APIs:',
-            actionButton: OutlinedButton.icon(
-              onPressed: () => _launchExternalUrl(
-                'https://console.cloud.google.com/apis/library',
-                'API Library',
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 12),
-              label: const Text('Open Library'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: theme.accentFg,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
+            actionButton: _buildStepActionButton(
+              theme: theme,
+              url: 'https://console.cloud.google.com/apis/library',
+              label: 'Open Library',
             ),
             customContent: Container(
               padding: const EdgeInsets.all(10),
@@ -1177,21 +1211,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             title: 'Configure OAuth Consent Screen',
             description:
                 'Go to "APIs & Services" > "OAuth consent screen" to configure permissions for your user account:',
-            actionButton: OutlinedButton.icon(
-              onPressed: () => _launchExternalUrl(
-                'https://console.cloud.google.com/apis/credentials/consent',
-                'Consent Screen',
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 12),
-              label: const Text('Open Consent'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: theme.accentFg,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
+            actionButton: _buildStepActionButton(
+              theme: theme,
+              url: 'https://console.cloud.google.com/apis/credentials/consent',
+              label: 'Open Consent',
             ),
             customContent: Container(
               padding: const EdgeInsets.all(10),
@@ -1234,21 +1257,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             title: 'Create Desktop OAuth 2.0 Credentials',
             description:
                 'Go to "APIs & Services" > "Credentials" > "+ Create Credentials" > "OAuth client ID".',
-            actionButton: OutlinedButton.icon(
-              onPressed: () => _launchExternalUrl(
-                'https://console.cloud.google.com/apis/credentials',
-                'Credentials Page',
-              ),
-              icon: const Icon(Icons.open_in_new_rounded, size: 12),
-              label: const Text('Open Credentials'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: theme.accentFg,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
+            actionButton: _buildStepActionButton(
+              theme: theme,
+              url: 'https://console.cloud.google.com/apis/credentials',
+              label: 'Open Credentials',
             ),
             customContent: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1291,25 +1303,46 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabIndex = 0;
-                          _isEditing = true;
-                        });
-                      },
-                      icon: const Icon(Icons.input_rounded, size: 14),
-                      label: const Text('Enter Keys in Quick Setup Tab →'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.accentFg,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
+                    SelectionContainer.disabled(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedTabIndex = 0;
+                              _isEditing = true;
+                            });
+                          },
+                          icon: const Icon(Icons.input_rounded, size: 14),
+                          label: const Text('Enter Keys in Quick Setup Tab →'),
+                          style: ButtonStyle(
+                            elevation: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.hovered)) return 2.0;
+                              return 0.0;
+                            }),
+                            mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
+                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return theme.accentHover;
+                              }
+                              if (states.contains(WidgetState.pressed)) {
+                                return AppTheme.purpleActive;
+                              }
+                              return theme.accentFg;
+                            }),
+                            foregroundColor: WidgetStateProperty.all(Colors.white),
+                            padding: WidgetStateProperty.all(
+                              const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            shape: WidgetStateProperty.all(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1919,6 +1952,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 ),
               ),
               InkWell(
+                mouseCursor: SystemMouseCursors.click,
                 onTap: () => _copy(cmd, keyId, 'Command'),
                 child: Row(
                   children: [
@@ -2027,6 +2061,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     required ThemeData theme,
   }) {
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: () => _launchExternalUrl(url, label),
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -2189,6 +2224,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   ),
                   if (activeClientId.isNotEmpty)
                     InkWell(
+                      mouseCursor: SystemMouseCursors.click,
                       onTap: () =>
                           _copy(activeClientId, 'active_cid', 'Client ID'),
                       child: Padding(
@@ -2293,25 +2329,28 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             // Edit Action Button
             Align(
               alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isEditing = true;
-                    _inlineError = null;
-                    if (_clientIdController.text.isEmpty &&
-                        activeClientId.isNotEmpty) {
-                      _clientIdController.text = activeClientId;
-                    }
-                    _clientSecretController.clear();
-                  });
-                },
-                icon: const Icon(Icons.edit_note_rounded, size: 16),
-                label: const Text('Edit / Replace Credentials'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.accentFg,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _isEditing = true;
+                      _inlineError = null;
+                      if (_clientIdController.text.isEmpty &&
+                          activeClientId.isNotEmpty) {
+                        _clientIdController.text = activeClientId;
+                      }
+                      _clientSecretController.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.edit_note_rounded, size: 16),
+                  label: const Text('Edit / Replace Credentials'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.accentFg,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ),
@@ -2377,10 +2416,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 color: theme.fgMuted,
               ),
               suffixIcon: _clientIdController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, size: 14),
-                      onPressed: () =>
-                          setState(() => _clientIdController.clear()),
+                  ? MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 14),
+                        onPressed: () =>
+                            setState(() => _clientIdController.clear()),
+                      ),
                     )
                   : null,
             ),
@@ -2406,16 +2448,19 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 size: 16,
                 color: theme.fgMuted,
               ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _isSecretObscured
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 16,
-                  color: theme.fgMuted,
+              suffixIcon: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: IconButton(
+                  icon: Icon(
+                    _isSecretObscured
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 16,
+                    color: theme.fgMuted,
+                  ),
+                  onPressed: () =>
+                      setState(() => _isSecretObscured = !_isSecretObscured),
                 ),
-                onPressed: () =>
-                    setState(() => _isSecretObscured = !_isSecretObscured),
               ),
             ),
           ),
@@ -2459,61 +2504,100 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (_isEditing) ...[
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _isEditing = false;
-                      _inlineError = null;
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: theme.fgMuted,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 9,
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = false;
+                        _inlineError = null;
+                      });
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.fgMuted,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
                     ),
+                    child: const Text('Cancel'),
                   ),
-                  child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 10),
               ],
-              ElevatedButton.icon(
-                onPressed: _isSaving
-                    ? null
-                    : () => _handleSave(provider, theme, isReplace: _isEditing),
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+              SelectionContainer.disabled(
+                child: MouseRegion(
+                  cursor: _isSaving
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSaving
+                        ? null
+                        : () => _handleSave(provider, theme, isReplace: _isEditing),
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            _isEditing
+                                ? Icons.published_with_changes_rounded
+                                : Icons.check_circle_outline_rounded,
+                            size: 15,
+                          ),
+                    label: Text(
+                      _isSaving
+                          ? 'Validating...'
+                          : _isEditing
+                          ? 'Validate & Replace Old Credentials'
+                          : 'Validate & Activate Credentials',
+                    ),
+                    style: ButtonStyle(
+                      elevation: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.hovered)) return 2.0;
+                        return 0.0;
+                      }),
+                      mouseCursor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.disabled)) {
+                          return SystemMouseCursors.basic;
+                        }
+                        return SystemMouseCursors.click;
+                      }),
+                      backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        if (_isEditing) {
+                          if (states.contains(WidgetState.hovered)) {
+                            return const Color(0xFFE3A638);
+                          }
+                          return const Color(0xFFD29922);
+                        }
+                        if (states.contains(WidgetState.disabled)) {
+                          return theme.bgEmphasis;
+                        }
+                        if (states.contains(WidgetState.hovered)) {
+                          return theme.accentHover;
+                        }
+                        if (states.contains(WidgetState.pressed)) {
+                          return AppTheme.purpleActive;
+                        }
+                        return theme.accentFg;
+                      }),
+                      foregroundColor: WidgetStateProperty.all(Colors.white),
+                      padding: WidgetStateProperty.all(
+                        const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                      )
-                    : Icon(
-                        _isEditing
-                            ? Icons.published_with_changes_rounded
-                            : Icons.check_circle_outline_rounded,
-                        size: 15,
                       ),
-                label: Text(
-                  _isSaving
-                      ? 'Validating...'
-                      : _isEditing
-                      ? 'Validate & Replace Old Credentials'
-                      : 'Validate & Activate Credentials',
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isEditing
-                      ? const Color(0xFFD29922)
-                      : theme.accentFg,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
+                      shape: WidgetStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2584,6 +2668,51 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         });
       }
     }
+  }
+
+  Widget _buildStepActionButton({
+    required ThemeData theme,
+    required String url,
+    required String label,
+    IconData icon = Icons.open_in_new_rounded,
+  }) {
+    return SelectionContainer.disabled(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: OutlinedButton.icon(
+          onPressed: () => _launchExternalUrl(url, label),
+          icon: Icon(icon, size: 12),
+          label: Text(label),
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.hovered)) return Colors.white;
+              return theme.accentFg;
+            }),
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.hovered)) return theme.accentFg;
+              return Colors.transparent;
+            }),
+            side: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.hovered)) {
+                return BorderSide(color: theme.accentFg, width: 1.2);
+              }
+              return BorderSide(
+                color: theme.accentFg.withValues(alpha: 0.5),
+                width: 1.0,
+              );
+            }),
+            padding: WidgetStateProperty.all(
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            ),
+            shape: WidgetStateProperty.all(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildStepCard({
@@ -2664,7 +2793,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 ),
                 if (actionButton != null) ...[
                   const SizedBox(width: 8),
-                  actionButton,
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: actionButton,
+                  ),
                 ],
               ],
             ),
@@ -2810,6 +2942,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
               ),
               const Spacer(),
               InkWell(
+                mouseCursor: SystemMouseCursors.click,
                 onTap: () =>
                     _copy(envTemplate, 'env_template', '.env template'),
                 borderRadius: BorderRadius.circular(4),
@@ -3478,6 +3611,7 @@ RAG_CHUNK_OVERLAP=200
               ),
               const Spacer(),
               InkWell(
+                mouseCursor: SystemMouseCursors.click,
                 onTap: () => _copy(
                   envTemplate,
                   'file_env_template',

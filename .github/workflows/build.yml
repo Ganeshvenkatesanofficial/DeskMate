@@ -365,11 +365,36 @@ jobs:
             exit 1
           }
 
-      - name: Upload Windows artifact
+      - name: Package Windows ZIP
+        shell: pwsh
+        run: |
+          $releasePath = "deskmate_app\build\windows\x64\runner\Release"
+          $zipPath = "DeskMate-Windows.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          $tempStage = "DeskMate"
+          if (Test-Path $tempStage) { Remove-Item $tempStage -Recurse -Force }
+          Copy-Item -Path $releasePath -Destination $tempStage -Recurse
+          Compress-Archive -Path $tempStage -DestinationPath $zipPath -Force
+          Remove-Item $tempStage -Recurse -Force
+
+      - name: Upload Windows ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: DeskMate-Windows
-          path: deskmate_app/build/windows/x64/runner/Release
+          name: DeskMate-Windows-Zip
+          path: DeskMate-Windows.zip
+
+      - name: Publish Windows Continuous Pre-release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: "DeskMate Continuous Build"
+          body: "Automated continuous build from ${{ github.ref_name }} branch (commit ${{ github.sha }})."
+          prerelease: true
+          files: |
+            DeskMate-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
 # ============================================================
