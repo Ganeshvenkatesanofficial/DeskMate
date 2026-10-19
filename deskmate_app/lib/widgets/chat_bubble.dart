@@ -186,7 +186,12 @@ class _ChatBubbleState extends State<ChatBubble> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (!isUser && widget.message.telemetry.isNotEmpty)
-                            TelemetryAccordion(steps: widget.message.telemetry),
+                            TelemetryAccordion(
+                              key: ValueKey(
+                                'telemetry_${widget.message.id}_${widget.index ?? 0}',
+                              ),
+                              steps: widget.message.telemetry,
+                            ),
                           SelectionArea(
                             child: MarkdownBody(
                               data: _sanitizeMarkdown(widget.message.content),

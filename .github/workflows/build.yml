@@ -4,14 +4,11 @@ on:
   push:
     branches:
       - main
-      - test
       - dev
 
   pull_request:
     branches:
       - main
-      - test
-      - dev
 
   workflow_dispatch:
     inputs:
@@ -24,6 +21,11 @@ on:
           - all
           - macos
           - windows
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 

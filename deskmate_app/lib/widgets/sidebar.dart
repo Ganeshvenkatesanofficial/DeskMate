@@ -49,125 +49,144 @@ class _SidebarState extends State<Sidebar> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 14),
             child: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- BRAND HEADER ---
-                  SizedBox(
-                    width: double.infinity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          theme.isDark
-                              ? 'assets/app_icon.png'
-                              : 'assets/app_icon_light.png',
-                          key: ValueKey(theme.isDark),
-                          width: 68,
-                          height: 68,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                width: 68,
-                                height: 68,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: theme.isDark
-                                      ? theme.bgEmphasis
-                                      : theme.bgCanvas,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: theme.borderDefault,
-                                    width: 1,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // --- BRAND HEADER ---
+                            SizedBox(
+                              width: double.infinity,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Image.asset(
+                                    theme.isDark
+                                        ? 'assets/app_icon.png'
+                                        : 'assets/app_icon_light.png',
+                                    key: ValueKey(theme.isDark),
+                                    width: 68,
+                                    height: 68,
+                                    fit: BoxFit.contain,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              width: 68,
+                                              height: 68,
+                                              padding: const EdgeInsets.all(14),
+                                              decoration: BoxDecoration(
+                                                color: theme.isDark
+                                                    ? theme.bgEmphasis
+                                                    : theme.bgCanvas,
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                border: Border.all(
+                                                  color: theme.borderDefault,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Icon(
+                                                Icons.auto_awesome_rounded,
+                                                color: theme.accentFg,
+                                                size: 32,
+                                              ),
+                                            ),
                                   ),
-                                ),
-                                child: Icon(
-                                  Icons.auto_awesome_rounded,
-                                  color: theme.accentFg,
-                                  size: 32,
-                                ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'DeskMate',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      color: theme.fgDefault,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Open Source AI',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: theme.fgMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // --- MODE SELECTOR ---
+                            _buildModeSelector(provider, theme),
+                            const SizedBox(height: 10),
+
+                            // --- NEW CONVERSATION BUTTON ---
+                            _buildNewChatButton(provider, theme),
+                            const SizedBox(height: 12),
+
+                            // --- STATUS CARD ---
+                            _buildStatusCard(provider, theme),
+
+                            if (provider.mode == AgentMode.personal) ...[
+                              const SizedBox(height: 12),
+                              _buildPersonalHealthCard(provider, theme),
+                            ],
+
+                            const SizedBox(height: 12),
+
+                            // --- AGENT GUIDES & DOCUMENTATION ---
+                            _buildAgentGuidesSection(theme),
+
+                            const Spacer(),
+
+                            // --- DATABASE EXPLORER & SETTINGS ---
+                            const SizedBox(height: 12),
+                            _buildDatabaseExplorerButton(theme),
+                            const SizedBox(height: 8),
+                            _buildSettingsButton(theme),
+                            const SizedBox(height: 10),
+                            Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'DeskMate AI • v1.0.0',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.fgMuted.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Open Source AI Copilot & Personal Agent',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: theme.fgMuted.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'DeskMate',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: theme.fgDefault,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          'Open Source AI',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w500,
-                            color: theme.fgMuted,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // --- MODE SELECTOR ---
-                  _buildModeSelector(provider, theme),
-                  const SizedBox(height: 10),
-
-                  // --- NEW CONVERSATION BUTTON ---
-                  _buildNewChatButton(provider, theme),
-                  const SizedBox(height: 12),
-
-                  // --- STATUS CARD ---
-                  _buildStatusCard(provider, theme),
-
-                  if (provider.mode == AgentMode.personal) ...[
-                    const SizedBox(height: 12),
-                    _buildPersonalHealthCard(provider, theme),
-                  ],
-
-                  const SizedBox(height: 12),
-
-                  // --- AGENT GUIDES & DOCUMENTATION ---
-                  _buildAgentGuidesSection(theme),
-
-                  const Spacer(),
-
-                  // --- DATABASE EXPLORER & SETTINGS ---
-                  const SizedBox(height: 12),
-                  _buildDatabaseExplorerButton(theme),
-                  const SizedBox(height: 8),
-                  _buildSettingsButton(theme),
-                  const SizedBox(height: 10),
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'DeskMate AI • v1.0.0',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.fgMuted.withValues(alpha: 0.8),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Open Source AI Copilot & Personal Agent',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: theme.fgMuted.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),
