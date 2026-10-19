@@ -28,6 +28,40 @@ class NullWriter:
         return False
 
 
+class SafeStreamWriter:
+    """Wraps a stream to catch and suppress Errno 5 / EIO / BrokenPipe errors on Linux."""
+    def __init__(self, target, fallback_file=None):
+        self._target = target
+        self._fallback_file = fallback_file
+
+    def write(self, s: str) -> int:
+        try:
+            return self._target.write(s)
+        except (OSError, IOError):
+            if self._fallback_file:
+                try:
+                    return self._fallback_file.write(s)
+                except Exception:
+                    pass
+            return len(s)
+
+    def flush(self) -> None:
+        try:
+            self._target.flush()
+        except (OSError, IOError):
+            if self._fallback_file:
+                try:
+                    self._fallback_file.flush()
+                except Exception:
+                    pass
+
+    def isatty(self) -> bool:
+        try:
+            return self._target.isatty()
+        except Exception:
+            return False
+
+
 class NullReader:
     def read(self, *args, **kwargs) -> str:
         return ""
@@ -89,13 +123,31 @@ def persist_env_variables(updates: dict[str, str]) -> None:
 
 
 def setup_stdio_logging() -> None:
-    """Redirect standard I/O to log file when running as a frozen or headless binary."""
-    if is_frozen or sys.stdout is None or sys.stderr is None:
+    """Redirect standard I/O to log file when running as a frozen or headless binary, or when streams are invalid."""
+    log_dir = get_user_data_dir()
+    log_path = log_dir / "deskmate_backend.log"
+
+    stdout_broken = False
+    try:
+        if sys.stdout is None:
+            stdout_broken = True
+        else:
+            sys.stdout.flush()
+    except (OSError, IOError):
+        stdout_broken = True
+
+    stdin_broken = False
+    try:
+        if sys.stdin is None:
+            stdin_broken = True
+    except (OSError, IOError):
+        stdin_broken = True
+
+    if is_frozen or stdout_broken or sys.stderr is None:
         try:
-            log_dir = get_user_data_dir()
-            log_path = log_dir / "deskmate_backend.log"
-            sys.stdout = open(log_path, "w", encoding="utf-8", buffering=1)
-            sys.stderr = sys.stdout
+            log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+            sys.stdout = log_file
+            sys.stderr = log_file
         except Exception:
             try:
                 sys.stdout = open(os.devnull, "w", encoding="utf-8")
@@ -103,8 +155,16 @@ def setup_stdio_logging() -> None:
             except Exception:
                 sys.stdout = NullWriter()
                 sys.stderr = NullWriter()
+    else:
+        try:
+            log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+            sys.stdout = SafeStreamWriter(sys.stdout, log_file)
+            sys.stderr = SafeStreamWriter(sys.stderr, log_file)
+        except Exception:
+            sys.stdout = SafeStreamWriter(sys.stdout)
+            sys.stderr = SafeStreamWriter(sys.stderr)
 
-    if is_frozen or sys.stdin is None:
+    if is_frozen or stdin_broken:
         try:
             sys.stdin = open(os.devnull, "r", encoding="utf-8")
         except Exception:

@@ -32,6 +32,8 @@ hiddenimports = [
     'PIL.Image',
     'faiss',
     'sentence_transformers',
+    'mcp',
+    'mcp.types',
 ]
 
 packages_to_collect = [

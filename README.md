@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/Ganeshvenkatesanofficial/DeskMate/releases"><img src="https://img.shields.io/github/v/release/Ganeshvenkatesanofficial/DeskMate?include_prereleases&style=flat-square&color=8250DF" alt="Release"></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Flutter-3.22+-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License">
@@ -29,6 +29,30 @@
 ---
 
 ## 🚀 Quick Install
+
+### 🐧 Linux (Any Distribution)
+Run this command in your Terminal to automatically install DeskMate:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/install.sh | bash
+```
+
+#### Running Directly from Portable `tar.gz`:
+1. Download **`DeskMate-Linux-x64.tar.gz`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Extract the archive:
+   ```bash
+   tar -xzf DeskMate-Linux-x64.tar.gz
+   cd DeskMate
+   ```
+3. Run natively:
+   ```bash
+   ./run.sh
+   # or run the executable directly:
+   ./DeskMate
+   ```
+4. *(Optional)* Integrate into your desktop application menu:
+   ```bash
+   ./install_linux.sh
+   ```
 
 ### 🍏 macOS
 Run this command in Terminal to install DeskMate into `/Applications`:
@@ -85,7 +109,7 @@ python backend.py --port 8080
 ```bash
 cd deskmate_app
 flutter pub get
-flutter run -d macos   # or: flutter run -d windows
+flutter run -d linux   # or: flutter run -d macos / windows
 ```
 
 ---
