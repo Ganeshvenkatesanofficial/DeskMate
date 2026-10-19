@@ -61,7 +61,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
 
   void _toggleAllSteps() {
     setState(() {
-      if (_expandedSteps.length == widget.steps.length) {
+      if (_expandedSteps.isNotEmpty) {
         _expandedSteps.clear();
       } else {
         _expandedSteps.addAll(List.generate(widget.steps.length, (i) => i));
@@ -235,8 +235,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
           '$count step${count > 1 ? 's' : ''} · $toolCallsCount Action${toolCallsCount > 1 ? 's' : ''}, $obsCount Result${obsCount > 1 ? 's' : ''}, $reasoningCount Thought${reasoningCount > 1 ? 's' : ''}';
     }
 
-    final allExpanded =
-        widget.steps.isNotEmpty && _expandedSteps.length == widget.steps.length;
+    final hasExpandedSteps = _expandedSteps.isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -250,114 +249,163 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ─── Main Accordion Header ──────────────────────────────────────
-          InkWell(
-            mouseCursor: SystemMouseCursors.click,
-            onTap: () {
-              setState(() {
-                _isExpanded = !_isExpanded;
-              });
-            },
-            borderRadius: BorderRadius.circular(9),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  if (widget.isActive) ...[
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.accentFg,
+          // ─── Main Accordion Header Bar ──────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: [
+                // Clickable Title area
+                Expanded(
+                  child: InkWell(
+                    mouseCursor: SystemMouseCursors.click,
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      setState(() {
+                        _isExpanded = !_isExpanded;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          if (widget.isActive) ...[
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.accentFg,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ] else ...[
+                            Icon(
+                              Icons.hub_outlined,
+                              size: 15,
+                              color: theme.accentFg,
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(
+                            child: Text(
+                              headerSummary,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: theme.fgDefault,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                  ] else ...[
-                    Icon(Icons.hub_outlined, size: 15, color: theme.accentFg),
-                    const SizedBox(width: 10),
-                  ],
-                  // Header Title
-                  Expanded(
-                    child: Text(
-                      headerSummary,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgDefault,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                ),
+                const SizedBox(width: 8),
 
-                  // "Expand all" toggle (only when accordion is open)
-                  if (_isExpanded && widget.steps.isNotEmpty) ...[
-                    InkWell(
-                      mouseCursor: SystemMouseCursors.click,
-                      onTap: _toggleAllSteps,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.isDark
-                              ? const Color(0xFF1E232B)
-                              : const Color(0xFFEFF2F5),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: theme.borderDefault,
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Text(
-                          allExpanded ? 'Collapse details' : 'Inspect all',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.accentFg,
-                          ),
+                // "Inspect all" / "Collapse all" toggle button (only when accordion is open)
+                if (_isExpanded && widget.steps.isNotEmpty) ...[
+                  InkWell(
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: _toggleAllSteps,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.isDark
+                            ? const Color(0xFF1E232B)
+                            : const Color(0xFFEFF2F5),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: hasExpandedSteps
+                              ? theme.accentFg.withValues(alpha: 0.5)
+                              : theme.borderDefault,
+                          width: 0.8,
                         ),
                       ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            hasExpandedSteps
+                                ? Icons.unfold_less_rounded
+                                : Icons.unfold_more_rounded,
+                            size: 13,
+                            color: theme.accentFg,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            hasExpandedSteps ? 'Collapse all' : 'Inspect all',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: theme.accentFg,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 6),
-                  ],
+                  ),
+                  const SizedBox(width: 6),
+                ],
 
-                  // "Hide / View process" toggle button
-                  Container(
+                // "Hide / View process" toggle button
+                InkWell(
+                  mouseCursor: SystemMouseCursors.click,
+                  onTap: () {
+                    setState(() {
+                      _isExpanded = !_isExpanded;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(7),
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 3,
+                      vertical: 3.5,
                     ),
                     decoration: BoxDecoration(
                       color: theme.isDark
                           ? const Color(0xFF21262D)
                           : const Color(0xFFEAEEF2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: theme.borderDefault, width: 1),
-                    ),
-                    child: Text(
-                      _isExpanded ? 'Hide process' : 'View process',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: theme.fgMuted,
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: _isExpanded
+                            ? theme.accentFg.withValues(alpha: 0.4)
+                            : theme.borderDefault,
+                        width: 1,
                       ),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _isExpanded ? 'Hide process' : 'View process',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _isExpanded
+                                ? theme.fgDefault
+                                : theme.fgMuted,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          _isExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 15,
+                          color: _isExpanded ? theme.fgDefault : theme.fgMuted,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: theme.fgMuted,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -484,10 +532,8 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       }
 
       if (isVectorTool || isDbTool) {
-        final firstLine = summary.split('\n').first.trim();
-        inlineMeta = firstLine.length > 55
-            ? '${firstLine.substring(0, 52)}...'
-            : firstLine;
+        final firstLine = summary.split('\n').first.trim().replaceAll('**', '');
+        inlineMeta = firstLine;
       } else {
         // Smart concise summary for the preview row
         final dirCount = RegExp(r'\[DIR\]').allMatches(summary).length;
@@ -497,10 +543,12 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         } else if (summary.contains("is not a valid directory")) {
           inlineMeta = 'Adjusted to absolute path';
         } else {
-          inlineMeta = summary.split('\n').first.trim();
-          if (inlineMeta.length > 55) {
-            inlineMeta = '${inlineMeta.substring(0, 52)}...';
-          }
+          final firstLine = summary
+              .split('\n')
+              .first
+              .trim()
+              .replaceAll('**', '');
+          inlineMeta = firstLine;
         }
       }
     } else {
@@ -508,10 +556,12 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       nodeColor = const Color(0xFF8250DF); // GitHub Purple
       stageBadge = 'AI REASONING';
       primaryTitle = 'LLM Deliberation';
-      final firstThought = (step.summary ?? '').split('\n').first.trim();
-      inlineMeta = firstThought.length > 55
-          ? '${firstThought.substring(0, 52)}...'
-          : firstThought;
+      final firstThought = (step.summary ?? '')
+          .split('\n')
+          .first
+          .trim()
+          .replaceAll('**', '');
+      inlineMeta = firstThought;
     }
 
     return IntrinsicHeight(
@@ -620,15 +670,21 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                             if (inlineMeta.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  inlineMeta,
-                                  style: TextStyle(
-                                    fontFamily: isTool ? 'monospace' : null,
-                                    fontSize: 10.5,
-                                    color: theme.fgMuted,
+                                child: Tooltip(
+                                  message: inlineMeta,
+                                  waitDuration: const Duration(
+                                    milliseconds: 300,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  child: Text(
+                                    inlineMeta,
+                                    style: TextStyle(
+                                      fontFamily: isTool ? 'monospace' : null,
+                                      fontSize: 10.5,
+                                      color: theme.fgMuted,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ),
                             ] else
@@ -665,16 +721,22 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                             // Expand / Inspect Chevron Pill
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1.5,
+                                horizontal: 6,
+                                vertical: 2,
                               ),
                               decoration: BoxDecoration(
                                 color: isStepExpanded
-                                    ? nodeColor.withValues(alpha: 0.15)
+                                    ? nodeColor.withValues(alpha: 0.16)
                                     : (theme.isDark
                                           ? const Color(0xFF1E232B)
                                           : const Color(0xFFEAEEF2)),
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: isStepExpanded
+                                      ? nodeColor.withValues(alpha: 0.45)
+                                      : theme.borderDefault,
+                                  width: 0.8,
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
