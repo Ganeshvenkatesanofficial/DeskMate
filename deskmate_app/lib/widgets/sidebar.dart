@@ -149,8 +149,10 @@ class _SidebarState extends State<Sidebar> {
                             const Spacer(),
 
                             // --- DATABASE EXPLORER & SETTINGS ---
-                            const SizedBox(height: 12),
-                            _buildDatabaseExplorerButton(theme),
+                            if (provider.mode == AgentMode.personal) ...[
+                              const SizedBox(height: 12),
+                              _buildDatabaseExplorerButton(theme),
+                            ],
                             const SizedBox(height: 8),
                             _buildSettingsButton(theme),
                             const SizedBox(height: 10),
