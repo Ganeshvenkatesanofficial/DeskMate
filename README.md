@@ -17,14 +17,50 @@
 
 ---
 
-## ✨ Features
+## ✨ Core Features & Tri-Agent Capabilities
 
-* **📁 File Copilot (100% Offline)**: Direct local filesystem navigation, recursive file search, multi-format reading (Code, PDF, Markdown, Images), and local semantic search powered by Qdrant vector database.
-* **👤 Personal Assistant**: 30 tools covering tasks, quick notes, personal memories, Google Workspace (Gmail, Calendar, Drive, Docs), weather, and web search.
-* **⚡ Live Step-by-Step Telemetry**: Expandable accordion displaying the agent's real-time thought process, tool execution details, latency, and observations.
-* **🧠 Dynamic Local LLM Support**: Automatically discovers your local [Ollama](https://ollama.com) models (`llama3.2`, `mistral`, `qwen2.5`, `deepseek-r1`) with optional Gemini BYOK cloud reasoning.
-* **🗄️ In-App SQLite Explorer**: Browse and query your local agent memory vault, task lists, and notes directly inside the app with a built-in SQL console.
-* **🔒 Privacy by Design**: All files, code, and SQLite databases stay strictly on your local machine.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>📁 File Copilot (100% Offline)</h3>
+      <ul>
+        <li><b>Local Filesystem Discovery</b>: Seamlessly search, read, and navigate local codebases, documents, and directories.</li>
+        <li><b>Multi-Format Intelligence</b>: Native parsing of Source Code, PDFs, Markdown, JSON, YAML, and Images.</li>
+        <li><b>Local Codebase RAG</b>: Semantic document search and indexing powered by embedded <b>Qdrant</b> &amp; <b>FastEmbed</b>.</li>
+        <li><b>Zero Cloud Exposure</b>: 100% air-gapped execution on local GPU/CPU.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>👤 Personal Assistant</h3>
+      <ul>
+        <li><b>Google Workspace Ecosystem</b>: Bi-directional access to Gmail, Calendar, Drive, and Google Docs with secure OAuth.</li>
+        <li><b>Local SQLite Vault</b>: Full CRUD management of daily tasks, quick notes, and structured personal data.</li>
+        <li><b>Episodic FAISS Memory</b>: Recalls user preferences, past decisions, and conversational facts with semantic search.</li>
+        <li><b>Web Research &amp; Weather</b>: Live DuckDuckGo queries and weather data.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🎙️ Meeting Scribe &amp; Intelligence</h3>
+      <ul>
+        <li><b>8-Stage Computer Vision</b>: Non-blocking 2.0 FPS screen change detection, cursor tracking, and UI interaction logging.</li>
+        <li><b>NVIDIA LocateAnything-3B</b>: Visual UI grounding with high-speed Parallel Box Decoding (PBD).</li>
+        <li><b>Voxtral 4B Diarization</b>: Speech-to-text with native multi-speaker recognition (<i>Zero Whisper</i>).</li>
+        <li><b>Executive PDF &amp; Cloud Sync</b>: Auto-generates styled PDF briefs and uploads directly to Google Drive &amp; Gmail.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>⚡ Native Desktop Experience</h3>
+      <ul>
+        <li><b>Live Streaming Telemetry</b>: Real-time accordion displaying LLM reasoning steps, tool calls, and execution latencies.</li>
+        <li><b>Dynamic Local LLM Discovery</b>: Auto-detects local <b>Ollama</b> models (<code>llama3.2</code>, <code>mistral</code>, <code>qwen2.5</code>, <code>deepseek-r1</code>).</li>
+        <li><b>In-App SQLite Explorer</b>: Inspect and query your agent database tables directly with an interactive console.</li>
+        <li><b>GitHub Primer UI</b>: Sleek, high-contrast dark &amp; light themes with custom DeskMate purple accents.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -51,23 +87,53 @@ irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/ins
 ```mermaid
 graph TD
     User([Desktop User]) <-->|Queries & Streaming Telemetry| UI[Flutter Desktop UI]
-    UI <-->|Bidirectional WebSockets /ws| BE[Embedded FastAPI Backend]
+    UI <-->|Bidirectional WebSockets /ws & REST| BE[Embedded FastAPI Backend - deskmate_engine]
 
-    subgraph "Local Python Engine (100% Offline)"
+    subgraph "DeskMate Tri-Agent Engine"
         BE --> Router{Agent Mode Router}
         Router -->|Personal Agent| PA[Personal Assistant SmolAgent]
         Router -->|File Copilot| FC[File Copilot SmolAgent]
+        Router -->|Meeting Scribe| MS[Meeting Intelligence Pipeline]
 
         PA <--> LocalDB[(SQLite Vault\nTasks, Notes, Memories)]
-        PA <--> GWorkspace[Google Workspace Tools\nGmail, Calendar, Drive, Docs]
+        PA <--> GWorkspace[Google Workspace Tools\nGmail, Calendar, Drive]
 
         FC <--> LocalFiles[(Local Filesystem\nPDF, Code, Docs, TXT)]
         FC <--> Qdrant[(Qdrant Vector DB\nRAG Semantic Search)]
 
+        MS --> Screen[ScreenCapture - MSS 2.0 FPS]
+        MS --> CV8[8-Stage CV Detection & LocateAnything-3B]
+        MS --> Vox[Voxtral 4B Diarized Speech - Zero Whisper]
+        MS --> Sum[Multimodal Gemini 2.5 Flash / Ollama]
+        MS --> PDF[DeskMate Executive PDF Engine]
+        MS --> CloudSync[Google Drive Upload & Gmail Dispatch]
+
         PA <--> LLM[Local Ollama / Gemini BYOK]
         FC <--> LLM
+        Sum <--> LLM
     end
 ```
+
+---
+
+## 🌟 Open Source Technologies & Models
+
+DeskMate is built upon world-class open-source projects, models, and libraries. Below is the breakdown of technologies powering each subsystem:
+
+| Technology / Model | Official Repository / Model Page | Role in DeskMate | Implementation Location |
+| :--- | :--- | :--- | :--- |
+| **NVIDIA LocateAnything-3B** | [nvidia/LocateAnything-3B](https://huggingface.co/nvidia/LocateAnything-3B) | Visual UI Grounding & Parallel Box Decoding (PBD) for detecting buttons, menus, and controls | [`deskmate_engine/services/meeting_intelligence/modules/locate_anything.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/modules/locate_anything.py) |
+| **Mistral Voxtral 4B Realtime** | [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) | Real-time speech transcription with native multi-speaker diarization (*Zero Whisper*) | [`deskmate_engine/services/meeting_intelligence/transcriber/voxtral_service.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/transcriber/voxtral_service.py) |
+| **Hugging Face SmolAgents** | [huggingface/smolagents](https://github.com/huggingface/smolagents) | Autonomous multi-step tool execution, reasoning loops, and streaming thought telemetry | [`deskmate_engine/services/file_copilot/agent.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/file_copilot/agent.py), [`services/personal_assistant/agent.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/personal_assistant/agent.py) |
+| **Ollama** | [ollama/ollama](https://github.com/ollama/ollama) | 100% offline, air-gapped local LLM inference engine (`llama3.2`, `mistral`, `qwen2.5`, `deepseek-r1`) | [`deskmate_engine/core/models.py`](file:///Users/entrans/DeskMate/deskmate_engine/core/models.py) |
+| **Qdrant & FastEmbed** | [qdrant/qdrant](https://github.com/qdrant/qdrant) \| [qdrant/fastembed](https://github.com/qdrant/fastembed) | Embedded local vector database and fast ONNX embeddings for offline codebase semantic search | [`deskmate_engine/services/file_copilot/rag_tools.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/file_copilot/rag_tools.py) |
+| **FAISS** | [facebookresearch/faiss](https://github.com/facebookresearch/faiss) | Dense vector similarity search for personal assistant long-term episodic memory recall | [`deskmate_engine/services/personal_assistant/tools.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/personal_assistant/tools.py) |
+| **OpenCV (cv2)** | [opencv/opencv](https://github.com/opencv/opencv) | SSIM visual dedup, Canny edge detection, contour bounding box evaluation, and cursor tracking | [`deskmate_engine/services/meeting_intelligence/modules/`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/modules/) |
+| **MSS** | [BoboTiG/python-mss](https://github.com/BoboTiG/python-mss) | Ultra-fast, zero-overhead background screen capture at 2.0 FPS | [`deskmate_engine/services/meeting_intelligence/screen_capture.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/screen_capture.py) |
+| **SoundDevice & SoundFile** | [spatialaudio/python-sounddevice](https://github.com/spatialaudio/python-sounddevice) \| [bastibe/python-soundfile](https://github.com/bastibe/python-soundfile) | System loopback / earphone audio capture and real-time PCM microphone mute gating | [`deskmate_engine/services/meeting_intelligence/transcriber/live_audio_recorder.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/transcriber/live_audio_recorder.py) |
+| **FPDF2** | [py-pdf/fpdf2](https://github.com/py-pdf/fpdf2) | Production vector PDF layout engine for DeskMate executive meeting intelligence reports | [`deskmate_engine/services/meeting_intelligence/pdf_generator.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/pdf_generator.py) |
+| **FastAPI & Uvicorn** | [fastapi/fastapi](https://github.com/fastapi/fastapi) \| [encode/uvicorn](https://github.com/encode/uvicorn) | Asynchronous backend web framework and bidirectional WebSocket streaming (`/ws/*`) | [`deskmate_engine/backend.py`](file:///Users/entrans/DeskMate/deskmate_engine/backend.py), [`routers/`](file:///Users/entrans/DeskMate/deskmate_engine/routers/) |
+| **Flutter Desktop** | [flutter/flutter](https://github.com/flutter/flutter) | Cross-platform desktop interface styled with GitHub Primer design tokens and dark/light modes | [`deskmate_app/`](file:///Users/entrans/DeskMate/deskmate_app/) |
 
 ---
 
@@ -75,7 +141,7 @@ graph TD
 
 ### 1. Python Backend
 ```bash
-cd terminal-ai-agent
+cd deskmate_engine
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python backend.py --port 8080

@@ -11,6 +11,7 @@ import '../widgets/telemetry_accordion.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/credentials_setup_dialog.dart';
 import '../widgets/database_explorer_dialog.dart';
+import '../widgets/meeting_scribe_view.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -235,7 +236,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 actions: [
                   IconButton(
                     onPressed: _openSettings,
-                    icon: Icon(Icons.settings_outlined, color: theme.fgMuted),
+                    icon: Icon(Icons.settings_outlined, color: theme.accentFg),
                   ),
                   IconButton(
                     onPressed: () => provider.resetChat(),
@@ -284,44 +285,54 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: theme.bgCanvas,
                     child: Stack(
                       children: [
-                        Column(
-                          children: [
-                            Expanded(
-                              child: provider.messages.isEmpty
-                                  ? _buildEmptyState(theme)
-                                  : ListView.builder(
-                                      controller: _scrollController,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 24,
-                                        vertical: 24,
-                                      ),
-                                      itemCount:
-                                          provider.messages.length +
-                                          (provider.isSending ? 1 : 0),
-                                      itemBuilder: (context, index) {
-                                        if (index == provider.messages.length) {
-                                          return _buildTypingIndicator(
-                                            provider,
-                                            theme,
-                                          );
-                                        }
-                                        return ChatBubble(
-                                          message: provider.messages[index],
-                                          index: index,
-                                          isSending: provider.isSending,
-                                          onEdit: () {
-                                            _onEditMessage(
-                                              index,
-                                              provider.messages[index].content,
+                        if (provider.mode == AgentMode.meeting)
+                          MeetingScribeView(
+                            onOpenSetupGuide: ([mode]) {
+                              setState(() {
+                                _guideOverrideMode = mode ?? AgentMode.meeting;
+                                _isSetupGuideOpen = true;
+                              });
+                            },
+                          )
+                        else
+                          Column(
+                            children: [
+                              Expanded(
+                                child: provider.messages.isEmpty
+                                    ? _buildEmptyState(theme)
+                                    : ListView.builder(
+                                        controller: _scrollController,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 24,
+                                        ),
+                                        itemCount:
+                                            provider.messages.length +
+                                            (provider.isSending ? 1 : 0),
+                                        itemBuilder: (context, index) {
+                                          if (index == provider.messages.length) {
+                                            return _buildTypingIndicator(
+                                              provider,
+                                              theme,
                                             );
-                                          },
-                                        );
-                                      },
-                                    ),
-                            ),
-                            _buildInputArea(provider, theme),
-                          ],
-                        ),
+                                          }
+                                          return ChatBubble(
+                                            message: provider.messages[index],
+                                            index: index,
+                                            isSending: provider.isSending,
+                                            onEdit: () {
+                                              _onEditMessage(
+                                                index,
+                                                provider.messages[index].content,
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                              ),
+                              _buildInputArea(provider, theme),
+                            ],
+                          ),
                         if (_topNotificationMessage != null)
                           _buildTopNotificationBanner(
                             theme,

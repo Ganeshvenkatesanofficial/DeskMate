@@ -6,15 +6,17 @@ import '../services/api_service.dart';
 import '../services/agent_websocket_client.dart';
 import '../services/backend_manager.dart';
 
-enum AgentMode { deskMate, personal }
+enum AgentMode { deskMate, personal, meeting }
 
 class ChatProvider extends ChangeNotifier {
   List<ChatMessage> _fileMessages = [];
   List<ChatMessage> _personalMessages = [];
+  final List<ChatMessage> _meetingMessages = [];
   bool _isSending = false;
   String _errorMessage = '';
   String _fileConversationId = '';
   String _personalConversationId = '';
+  final String _meetingConversationId = '';
   String _backendUrl = 'http://127.0.0.1:2026';
   bool _isConnecting = true;
   bool _isBackendOnline = false;
@@ -22,6 +24,7 @@ class ChatProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.light;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
+  Map<String, dynamic> _fileAgentHealth = {'status': 'loading'};
   Map<String, dynamic> _personalCredentials = {'configured': false};
   Timer? _healthTimer;
 
@@ -38,13 +41,18 @@ class ChatProvider extends ChangeNotifier {
   // Gemini API key – persisted in SharedPreferences so it survives app restarts.
   String _geminiApiKey = '';
 
-  List<ChatMessage> get messages =>
-      _mode == AgentMode.personal ? _personalMessages : _fileMessages;
+  List<ChatMessage> get messages {
+    if (_mode == AgentMode.personal) return _personalMessages;
+    if (_mode == AgentMode.meeting) return _meetingMessages;
+    return _fileMessages;
+  }
   bool get isSending => _isSending;
   String get errorMessage => _errorMessage;
-  String get conversationId => _mode == AgentMode.personal
-      ? _personalConversationId
-      : _fileConversationId;
+  String get conversationId {
+    if (_mode == AgentMode.personal) return _personalConversationId;
+    if (_mode == AgentMode.meeting) return _meetingConversationId;
+    return _fileConversationId;
+  }
   String get backendUrl => _backendUrl;
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
@@ -52,6 +60,7 @@ class ChatProvider extends ChangeNotifier {
   AgentMode get mode => _mode;
   ThemeMode get themeMode => _themeMode;
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
+  Map<String, dynamic> get fileAgentHealth => _fileAgentHealth;
   Map<String, dynamic> get personalCredentials => _personalCredentials;
   String get geminiApiKey => _geminiApiKey;
   bool get isUsingGemini => _geminiApiKey.isNotEmpty;
@@ -106,7 +115,8 @@ class ChatProvider extends ChangeNotifier {
     _hasConfiguredAi =
         prefs.getBool('deskmate_has_configured_ai') ??
         (_selectedLocalModel.isNotEmpty);
-    _mode = AgentMode.values[prefs.getInt('deskmate_agent_mode') ?? 0];
+    // Always initially open the File Explorer feature on app startup
+    _mode = AgentMode.deskMate;
     final themeIndex =
         prefs.getInt('deskmate_theme_mode') ?? ThemeMode.light.index;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
@@ -205,6 +215,7 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('deskmate_agent_mode', _mode.index);
     if (_isBackendOnline) {
+      checkFileAgentStatus();
       checkPersonalAgentStatus();
     }
     notifyListeners();
@@ -217,6 +228,16 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('deskmate_backend_url', _backendUrl);
     _startStartupHealthCheck();
+    notifyListeners();
+  }
+
+  Future<void> checkFileAgentStatus() async {
+    try {
+      final status = await _apiService.checkFileHealth();
+      _fileAgentHealth = status;
+    } catch (_) {
+      _fileAgentHealth = {'status': 'offline'};
+    }
     notifyListeners();
   }
 
@@ -272,9 +293,9 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     final candidates = [
+      'http://127.0.0.1:8080',
       primaryCandidate,
       'http://127.0.0.1:2026',
-      'http://127.0.0.1:8080',
       'http://127.0.0.1:8000',
     ];
 
@@ -294,6 +315,7 @@ class ChatProvider extends ChangeNotifier {
             _errorMessage = '';
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('deskmate_backend_url', _backendUrl);
+            checkFileAgentStatus();
             checkPersonalAgentStatus();
             fetchAvailableModels();
             notifyListeners();
@@ -320,9 +342,9 @@ class ChatProvider extends ChangeNotifier {
       var health = await _apiService.checkHealth();
       if (health['status'] != 'ok') {
         for (final candidate in [
+          'http://127.0.0.1:8080',
           BackendManager.backendUrl,
           'http://127.0.0.1:2026',
-          'http://127.0.0.1:8080',
           'http://127.0.0.1:8000',
         ]) {
           if (candidate != _backendUrl) {
@@ -357,6 +379,7 @@ class ChatProvider extends ChangeNotifier {
           if (_availableLocalModels.isEmpty) {
             fetchAvailableModels();
           }
+          checkFileAgentStatus();
           checkPersonalAgentStatus();
         }
         notifyListeners();

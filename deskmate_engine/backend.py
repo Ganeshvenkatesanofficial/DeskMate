@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import socket
 import sys
 from contextlib import asynccontextmanager
@@ -20,6 +21,8 @@ from core.config import setup_stdio_logging, start_parent_watchdog
 from routers.api_routes import router as api_router
 from routers.ws_file_agent import router as ws_file_router
 from routers.ws_personal_agent import router as ws_personal_router
+from routers.meeting_routes import router as meeting_router
+from routers.ws_meeting_agent import router as ws_meeting_router
 
 # Initialize system standard I/O redirection and watchdog
 setup_stdio_logging()
@@ -42,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="DeskMate AI Server",
-    description="Dual-Service Copilot & Personal Assistant with Real-Time WebSockets & Telemetry",
+    description="Triple-Service Copilot, Personal Assistant & Meeting Intelligence with Real-Time WebSockets & Telemetry",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -59,7 +62,9 @@ app.add_middleware(
 # Mount WebSockets & REST Endpoints
 app.include_router(ws_file_router)
 app.include_router(ws_personal_router)
+app.include_router(ws_meeting_router)
 app.include_router(api_router)
+app.include_router(meeting_router)
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -82,6 +87,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DeskMate Backend Server")
     parser.add_argument("--port", type=int, default=None, help="Port to bind backend server (default: 2026)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host interface")
+    parser.add_argument("--reload", action="store_true", default=False, help="Enable auto-reload on code changes")
     args, _ = parser.parse_known_args()
 
     if args.port:
@@ -97,7 +103,15 @@ if __name__ == "__main__":
     print(f"DESKMATE_BACKEND_PORT={port}", flush=True)
 
     is_frozen = getattr(sys, "frozen", False)
-    if is_frozen:
+    if is_frozen or not args.reload:
         uvicorn.run(app, host=host, port=port)
     else:
-        uvicorn.run("backend:app", host=host, port=port, reload=True)
+        root_dir = os.path.dirname(os.path.abspath(__file__))
+        uvicorn.run(
+            "backend:app",
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=[root_dir],
+            reload_excludes=[".venv*", "output*", "__pycache__*", "*.db", "assets*"],
+        )

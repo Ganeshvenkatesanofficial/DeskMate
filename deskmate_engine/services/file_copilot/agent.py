@@ -68,13 +68,15 @@ def get_file_copilot_agent(
         "4. TO PERFORM SEMANTIC VECTOR SEARCH ACROSS DOCUMENTS:\n"
         "   - Call `search_qdrant(query=...)` for semantic concepts, or `index_document(file_path=...)` to embed a document into local vector memory.\n\n"
         "OUTPUT & PRESENTATION STANDARDS:\n"
-        "- Scope Phrasing: The user's home directory ('~' or '/Users/<username>') encompasses their entire laptop environment and all development workspaces (such as Thunai, DeskMate, payilagam, Downloads, Desktop, Documents).\n"
+        "- Conversational Introduction & Context: NEVER dump a bare, dry list of bullet points without conversational explanation! Always introduce findings with an informative, natural opening sentence explaining what and where items were discovered (e.g. 'Here are the primary folders found across your laptop:').\n"
+        "- Summary & Next Steps: After listing files or folders, provide a concise summary or offer logical next steps (e.g. 'Found 16 folders. Let me know if you would like me to inspect any of these directories or search for specific files within them!').\n"
+        "- Scope Phrasing: The user's home directory ('~' or '/Users/<username>') encompasses their entire laptop environment and all development workspaces (such as DeskMate, Projects, Downloads, Desktop, Documents).\n"
         "- NEVER refer to the user's home directory as 'the current directory'!\n"
         "- When presenting files or search results across the laptop, ALWAYS state 'Found across your laptop and workspaces:' or 'All matching files across your laptop:'. NEVER say 'All ... files found in the current directory and its subdirectories'!\n"
         "- Completeness & Structure: When summarizing or extracting information from a document (e.g. experience, education, projects, certifications from a resume), provide a COMPLETE, DETAILED, and FULLY STRUCTURED answer.\n"
         "- Detail EVERY company, job title, duration, and key accomplishment mentioned. NEVER stop prematurely or leave unclosed markdown bullets!\n"
         "- Experience & Document Formatting: ALWAYS present resumes, experience, education, and career history as clean Markdown sections with headers (### Company Name), bold roles (**Role** (Duration)), and clean bullet points (• Accomplishment). NEVER format multi-line experiences as Markdown tables, and NEVER output HTML '<br>' or '<br/>' tags anywhere!\n"
-        "- Always present lists of files, folders, or search findings as clean, structured Markdown bullet points (one item per line) with exact paths.\n"
+        "- Clean Markdown: Present lists of files, folders, or search findings as clean, structured Markdown bullet points (one item per line) with exact paths.\n"
         "- When displaying file contents, use fenced code blocks with appropriate language highlighting.\n"
         "- Never dump raw JSON or system deliberation markers in your final answer.\n\n"
         "CONVERSATIONAL CONTINUITY & CONTEXT AWARENESS:\n"
@@ -130,3 +132,26 @@ def stream_file_copilot(
     prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_file_copilot_agent(api_key=api_key, model_id=model_id)
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id, on_event=on_event)
+
+
+def check_file_copilot_health() -> Dict[str, Any]:
+    """Dynamically verify filesystem read/write access and local Qdrant vector DB."""
+    import os
+    home_dir = os.path.expanduser("~")
+    has_fs_access = os.path.exists(home_dir) and os.access(home_dir, os.R_OK)
+
+    has_qdrant = False
+    try:
+        from services.file_copilot.rag_tools import check_qdrant_health
+        has_qdrant = check_qdrant_health()
+    except Exception:
+        has_qdrant = False
+
+    return {
+        "status": "online",
+        "checks": {
+            "filesystem_access": has_fs_access,
+            "qdrant_db": has_qdrant,
+            "privacy_mode": True,
+        },
+    }

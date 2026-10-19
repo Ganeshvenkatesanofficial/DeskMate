@@ -55,14 +55,14 @@ jobs:
           pip install flake8
 
       - name: Critical Flake8 checks
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           flake8 . \
             --select=E9,F63,F7,F82 \
             --exclude=.venv,venv,build,dist,__pycache__
 
       - name: Complexity and line length
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           flake8 . \
             --max-complexity=15 \
@@ -91,14 +91,14 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov
 
       - name: Run tests
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           pytest -v \
             --cov=. \
@@ -129,7 +129,7 @@ jobs:
           pip install bandit
 
       - name: Run Bandit
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           bandit -r . \
             -x .venv,venv,build,dist,__pycache__ \
@@ -155,14 +155,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           python -m pip install --upgrade pip setuptools
           pip install -r requirements.txt
           pip install pip-audit
 
       - name: Run pip-audit
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           pip-audit
 
@@ -268,13 +268,13 @@ jobs:
           filters: |
             windows:
               - 'deskmate_app/**'
-              - 'terminal-ai-agent/**'
+              - 'deskmate_engine/**'
               - 'deskmate_app/windows/**'
               - '.github/workflows/**'
 
             macos:
               - 'deskmate_app/**'
-              - 'terminal-ai-agent/**'
+              - 'deskmate_engine/**'
               - 'deskmate_app/macos/**'
               - '.github/workflows/**'
 
@@ -326,7 +326,7 @@ jobs:
           channel: stable
 
       - name: Create Python environment
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         shell: pwsh
         run: |
           python -m venv .venv
@@ -335,7 +335,7 @@ jobs:
           .\.venv\Scripts\pip.exe install pyinstaller
 
       - name: Build backend
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         shell: pwsh
         run: |
           .\.venv\Scripts\pyinstaller.exe deskmate_backend.spec --clean
@@ -345,7 +345,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "deskmate_app\assets\backend" -Force
           Copy-Item `
-            "terminal-ai-agent\dist\deskmate_backend.exe" `
+            "deskmate_engine\dist\deskmate_backend.exe" `
             "deskmate_app\assets\backend\deskmate_backend.exe" `
             -Force
 
@@ -447,7 +447,7 @@ jobs:
           channel: stable
 
       - name: Create Python environment
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
@@ -455,7 +455,7 @@ jobs:
           .venv/bin/pip install pyinstaller
 
       - name: Build backend
-        working-directory: terminal-ai-agent
+        working-directory: deskmate_engine
         run: |
           .venv/bin/pyinstaller deskmate_backend.spec --clean
 
@@ -463,7 +463,7 @@ jobs:
         run: |
           mkdir -p deskmate_app/assets/backend
           cp \
-            terminal-ai-agent/dist/deskmate_backend \
+            deskmate_engine/dist/deskmate_backend \
             deskmate_app/assets/backend/deskmate_backend
 
           chmod +x deskmate_app/assets/backend/deskmate_backend

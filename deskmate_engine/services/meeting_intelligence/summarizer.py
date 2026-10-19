@@ -1,0 +1,353 @@
+"""
+services.meeting_intelligence.summarizer — Multimodal Meeting Reasoner
+======================================================================
+Fuses screen interaction logs, key screenshot OCR data, and Voxtral 4B
+diarized audio transcripts into an executive report.
+
+Supported Engines:
+  - Google Gemini 2.5 Flash (Default Multimodal Vision Cloud)
+  - Local Ollama (100% Offline Fallback)
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import os
+import re
+import urllib.request
+import urllib.error
+from typing import Any, Dict, List, Optional, Tuple
+import cv2
+
+logger = logging.getLogger("deskmate.meeting_summarizer")
+
+
+class MeetingSummarizer:
+    """Production multimodal meeting summarizer for DeskMate."""
+
+    def __init__(
+        self,
+        gemini_api_key: Optional[str] = None,
+        gemini_model: str = "gemini-2.5-flash",
+        ollama_model: str = "llama3.2-vision",
+    ):
+        self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY", "")
+        self.gemini_model = gemini_model
+        self.ollama_model = ollama_model
+
+    INTERNAL_NOISE_KEYWORDS = {
+        "deskmate",
+        "meeting scribe",
+        "start meeting",
+        "end meeting",
+        "stop meeting",
+        "recording dashboard",
+        "telemetry",
+        "deskmate live",
+        "save to drive",
+        "download pdf",
+        "email pdf",
+        "sync to deskmate",
+        "app switcher",
+        "mission control",
+        "dock",
+        "taskbar",
+        "window switch",
+        "switching window",
+        "switch to",
+    }
+
+    def _is_noise_step(self, step: Dict[str, Any]) -> bool:
+        summary = (step.get("summary") or "").lower()
+        actions = step.get("actions", [])
+        combined = summary + " " + " ".join([
+            (a.get("target") or a.get("description") or a.get("event") or "").lower()
+            for a in actions
+        ])
+        for kw in self.INTERNAL_NOISE_KEYWORDS:
+            if kw in combined:
+                return True
+        return False
+
+    def summarize_meeting(
+        self,
+        steps: List[Dict[str, Any]],
+        transcript_data: Optional[Dict[str, Any]] = None,
+        custom_fields: Optional[List[Dict[str, str]]] = None,
+    ) -> Tuple[str, List[str], Dict[str, Any], Dict[str, Any]]:
+        """
+        Synthesize session into an executive summary report.
+
+        Returns:
+            Tuple of:
+              - Markdown summary text
+              - List of important step IDs (e.g. ['step_1', 'step_4'])
+              - Dict of step descriptions mapping step_id -> {title, description}
+              - Dict of custom fields analysis
+        """
+        if not steps:
+            return "No visual steps recorded in this meeting to summarize.", [], {}, {}
+
+        # 0. Filter out internal DeskMate tool interactions & transient window switches
+        clean_steps = [s for s in steps if not self._is_noise_step(s)]
+        effective_steps = clean_steps if clean_steps else steps
+
+        # 1. Build visual timeline text
+        timeline_blocks = []
+        for s in effective_steps:
+            s_id = s.get("step_id", "?")
+            s_summary = s.get("summary", "Screen interaction")
+            actions = s.get("actions", [])
+            s_ts = s.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
+            action_lines = []
+            for a in actions:
+                a_ts = a.get("timestamp", s_ts)
+                a_event = a.get("event") or a.get("type", "action")
+                a_target = a.get("target") or a.get("description", "")
+                desc = f"{a_event}: {a_target}" if a_target else a_event
+                action_lines.append(f"    - [{a_ts}] {desc}")
+            action_text = "\n".join(action_lines) if action_lines else "    - (UI interaction)"
+            summary_clean = s_summary
+            prefix = f"Step {s_id}: "
+            if summary_clean.startswith(prefix):
+                summary_clean = summary_clean[len(prefix):]
+            timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}\n{action_text}")
+        visual_timeline = "\n\n".join(timeline_blocks)
+
+        # 2. Format Voxtral transcript with speaker diarization
+        audio_section = self._format_transcript(transcript_data)
+
+        # 3. Build structured prompt
+        prompt = self._build_prompt(visual_timeline, audio_section, len(effective_steps), custom_fields)
+
+        # 4. Prepare multimodal parts with Base64 screenshot images
+        parts = [{"text": prompt}]
+        for step in effective_steps:
+            s_id = step.get("step_id", "?")
+            img_path = step.get("screenshot_path", "")
+            if not img_path:
+                actions = step.get("actions", [])
+                img_path = next((a.get("asset_path") for a in actions if a.get("asset_path")), "")
+
+            full_img_path = None
+            if img_path:
+                for cand in [img_path, os.path.abspath(img_path), os.path.join(os.getcwd(), img_path)]:
+                    if os.path.exists(cand):
+                        full_img_path = cand
+                        break
+
+            if full_img_path:
+                try:
+                    img = cv2.imread(full_img_path)
+                    if img is not None:
+                        h, w = img.shape[:2]
+                        if max(h, w) > 768:
+                            scale = 768.0 / max(h, w)
+                            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                        _, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                        b64 = base64.b64encode(buf).decode("utf-8")
+                        parts.append({"text": f"\n\n[SCREENSHOT FOR STEP {s_id}]"})
+                        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": b64}})
+                except Exception as e:
+                    logger.debug(f"Failed to attach screenshot for {s_id}: {e}")
+
+        # 5. Query Gemini 2.5 Flash (or fallback to local Ollama)
+        raw_response = self._query_llm(parts, prompt)
+
+        # 6. Parse structured blocks
+        return self._parse_structured_response(raw_response)
+
+    def _format_transcript(self, transcript_data: Optional[Dict[str, Any]]) -> str:
+        if not transcript_data:
+            return "AUDIO STATUS: No audio recorded or transcription inactive. Generate summary from visual events."
+
+        segments = transcript_data.get("segments", [])
+        if not segments:
+            full = transcript_data.get("full_transcript", "")
+            return f"AUDIO TRANSCRIPT:\n{full}" if full else "AUDIO STATUS: No speech detected."
+
+        lines = ["--- Voxtral Diarized Transcript ---"]
+        for seg in segments:
+            start = seg.get("start", 0.0)
+            end = seg.get("end", 0.0)
+            speaker = seg.get("speaker", "Speaker")
+            text = seg.get("text", "").strip()
+            if text:
+                start_m, start_s = int(start // 60), int(start % 60)
+                end_m, end_s = int(end // 60), int(end % 60)
+                lines.append(f"[{start_m:02d}:{start_s:02d} -> {end_m:02d}:{end_s:02d}] {speaker}: {text}")
+
+        return "\n".join(lines)
+
+    def _build_prompt(
+        self,
+        visual_timeline: str,
+        audio_section: str,
+        step_count: int,
+        custom_fields: Optional[List[Dict[str, str]]],
+    ) -> str:
+        custom_instructions = ""
+        custom_delimiters = ""
+        if custom_fields:
+            cf_list = []
+            for cf in custom_fields:
+                n = cf.get("name", "")
+                inst = cf.get("instruction", "")
+                cf_list.append(f"- Topic: \"{n}\"\n  Instructions: {inst}")
+            custom_instructions = (
+                "\n\n## SOURCE 3: User's Requested Custom Analysis Topics\n"
+                + "\n".join(cf_list)
+                + "\n\nProvide deep-dive analysis addressing each of the user's custom focus topics."
+            )
+            custom_delimiters = (
+                "\n\n===CUSTOM_FIELDS===\n"
+                '{"Topic Name": {"content": "Detailed markdown analysis for this topic...", "relevant_steps": ["step_1"]}}'
+            )
+
+        return f"""You are DeskMate's Senior Documentation & Meeting Intelligence Writer.
+Your task is to produce a comprehensive, structured meeting intelligence report by cross-referencing visual interaction timeline, screen image OCR content, and audio transcript.
+
+## SOURCE 1: Visual Event Log
+{visual_timeline}
+
+## SOURCE 2: Voxtral Audio Transcript
+{audio_section}
+{custom_instructions}
+
+---
+## STRICT EXCLUSION & FILTERING RULES:
+1. NEVER describe, mention, or include actions inside the DeskMate application itself (e.g. clicking 'Start Meeting Scribe', 'End Meeting', opening DeskMate, or viewing recording metrics). These are host tool operations, NOT meeting content.
+2. NEVER describe transient window switching, Alt-Tab/Cmd-Tab, Dock clicks, or minimizing/maximizing windows to switch into or out of the meeting.
+3. FOCUS EXCLUSIVELY on the substantive content presented: slides, web pages, software tools, code, diagrams, and spoken discussion.
+4. In ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===, NEVER include internal DeskMate steps or window-switch moments.
+
+---
+## INSTRUCTIONS:
+Highlight actionable decisions and next steps using uppercase block tags:
+- `**[HIGH PRIORITY]**` for urgent issues or blockers.
+- `**[ACTION ITEM]**` for assigned tasks and designated follow-ups.
+- `**[IMPORTANT]**` for key technical parameters or decisions.
+
+STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
+
+===SUMMARY===
+
+### Executive Overview
+Concise 3-5 sentence summary of the meeting's core purpose, platforms used, and primary outcome.
+
+### Detailed Actions Timeline
+Chronological narrative combining visual on-screen actions, screenshot text/OCR details, and spoken statements. Explain the purpose of each significant action.
+
+### Spoken Transcript Highlights
+Key spoken decisions, directions, answers, and verbal agreements extracted from the transcript.
+
+### Decisions & Outcomes
+- Accomplishments finalized.
+- Items designated for follow-up.
+
+### Technical & Domain Parameters
+Relevant code commands, configuration flags, client requests, or operational parameters.
+
+===IMPORTANT_STEPS===
+["step_1", "step_3"]
+
+===STEP_DESCRIPTIONS===
+{{"step_1": {{"title": "Descriptive Action Name", "description": "2-3 sentences explaining screen state and spoken context."}}}}
+{custom_delimiters}
+"""
+
+    def _query_llm(self, parts: List[Dict[str, Any]], plain_prompt: str) -> str:
+        """Query Gemini 2.5 Flash via REST or fallback to local Ollama."""
+        # 1. Gemini REST
+        if self.gemini_api_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+                req_data = {
+                    "contents": [{"parts": parts}],
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
+                }
+                body = json.dumps(req_data).encode("utf-8")
+                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=90) as response:
+                    res_json = json.loads(response.read().decode("utf-8"))
+                    candidates = res_json.get("candidates", [])
+                    if candidates:
+                        content_parts = candidates[0].get("content", {}).get("parts", [])
+                        if content_parts:
+                            return content_parts[0].get("text", "")
+            except Exception as e:
+                logger.warning(f"Gemini API request failed: {e}. Falling back to local Ollama.")
+
+        # 2. Local Ollama fallback
+        try:
+            import requests
+            ollama_base = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+            res = requests.post(
+                f"{ollama_base}/api/generate",
+                json={"model": self.ollama_model, "prompt": plain_prompt, "stream": False},
+                timeout=60,
+            )
+            if res.status_code == 200:
+                return res.json().get("response", "")
+        except Exception as oe:
+            logger.error(f"Local Ollama generation error: {oe}")
+
+        return "===SUMMARY===\n### Meeting Completed\nReview recorded session steps and audio transcript above.\n===IMPORTANT_STEPS===\n[]\n===STEP_DESCRIPTIONS===\n{}"
+
+    def _parse_structured_response(
+        self, raw: str
+    ) -> Tuple[str, List[str], Dict[str, Any], Dict[str, Any]]:
+        summary = "Meeting summary could not be extracted."
+        important_steps = []
+        step_descriptions = {}
+        custom_fields_dict = {}
+
+        try:
+            # Extract CUSTOM_FIELDS if present
+            if "===CUSTOM_FIELDS===" in raw:
+                raw, cf_block = raw.split("===CUSTOM_FIELDS===", 1)
+                cf_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", cf_block.strip(), flags=re.DOTALL)
+                try:
+                    custom_fields_dict = json.loads(cf_clean)
+                except Exception as cfe:
+                    logger.debug(f"Failed to parse custom fields JSON: {cfe}")
+
+            if "===SUMMARY===" in raw and "===IMPORTANT_STEPS===" in raw:
+                parts = raw.split("===IMPORTANT_STEPS===")
+                summary = parts[0].split("===SUMMARY===")[1].strip()
+
+                rest = parts[1]
+                if "===STEP_DESCRIPTIONS===" in rest:
+                    steps_raw, desc_raw = rest.split("===STEP_DESCRIPTIONS===")
+                    steps_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", steps_raw.strip(), flags=re.DOTALL)
+                    important_steps = json.loads(steps_clean)
+
+                    desc_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", desc_raw.strip(), flags=re.DOTALL)
+                    try:
+                        step_descriptions = json.loads(desc_clean)
+                    except Exception:
+                        pass
+                else:
+                    steps_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", rest.strip(), flags=re.DOTALL)
+                    important_steps = json.loads(steps_clean)
+            else:
+                summary = raw
+        except Exception as e:
+            logger.warning(f"Structured response parsing error: {e}")
+            summary = raw
+
+        # Post-filter: purge any internal DeskMate or window-switch steps returned by the model
+        clean_important = []
+        for sid in important_steps:
+            sid_str = str(sid).lower()
+            desc_meta = step_descriptions.get(sid) or step_descriptions.get(sid_str) or {}
+            title = (desc_meta.get("title") if isinstance(desc_meta, dict) else "").lower()
+            desc = (desc_meta.get("description") if isinstance(desc_meta, dict) else "").lower()
+            if any(kw in f"{title} {desc} {sid_str}" for kw in self.INTERNAL_NOISE_KEYWORDS):
+                continue
+            clean_important.append(sid)
+        important_steps = clean_important
+
+        return summary, important_steps, step_descriptions, custom_fields_dict

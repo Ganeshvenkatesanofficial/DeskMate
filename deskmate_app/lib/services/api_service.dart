@@ -157,6 +157,10 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> checkFileHealth() async {
+    return _getJson('/api/file/health', fallback: {'status': 'offline'});
+  }
+
   Future<Map<String, dynamic>> checkPersonalHealth() async {
     return _getJson('/api/personal/health', fallback: {'status': 'offline'});
   }
@@ -247,4 +251,100 @@ class ApiService {
       };
     }
   }
+
+  // --- Meeting Intelligence Endpoints ---
+
+  Future<Map<String, dynamic>> startMeeting({int monitor = 1, double fps = 2.0}) async {
+    final url = Uri.parse('$baseUrl/api/meeting/start');
+    return _postJson(url, {'monitor': monitor, 'fps': fps});
+  }
+
+  Future<Map<String, dynamic>> stopMeeting() async {
+    final url = Uri.parse('$baseUrl/api/meeting/stop');
+    return _postJson(url, {});
+  }
+
+  Future<Map<String, dynamic>> setMeetingMicMuted(bool muted) async {
+    final url = Uri.parse('$baseUrl/api/meeting/mute');
+    return _postJson(url, {'muted': muted});
+  }
+
+  Future<Map<String, dynamic>> getMeetingStatus() async {
+    return _getJson(
+      '/api/meeting/status',
+      timeout: const Duration(seconds: 3),
+      fallback: {
+        'state': 'idle',
+        'session_id': null,
+        'uptime_seconds': 0.0,
+        'frames_processed': 0,
+        'events_detected': 0,
+        'steps_count': 0,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> summarizeMeeting({
+    String? sessionId,
+    List<Map<String, String>>? customFields,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/meeting/summarize');
+    final payload = <String, dynamic>{
+      'session_id': sessionId,
+    };
+    if (customFields != null && customFields.isNotEmpty) {
+      payload['custom_fields'] = customFields;
+    }
+    return _postJson(
+      url,
+      payload,
+      timeout: const Duration(minutes: 5),
+    );
+  }
+
+  Future<Map<String, dynamic>> syncMeetingTasks({
+    required String sessionId,
+    required List<String> actionItems,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/meeting/sync-tasks');
+    return _postJson(url, {
+      'session_id': sessionId,
+      'action_items': actionItems,
+    });
+  }
+
+  String getMeetingPdfUrl(String sessionId) {
+    return '$baseUrl/api/meeting/pdf/$sessionId';
+  }
+
+  String getMeetingAssetUrl(String sessionId, String filename) {
+    return '$baseUrl/api/meeting/asset/$sessionId/$filename';
+  }
+
+  Future<Map<String, dynamic>> exportMeetingToDrive({
+    required String sessionId,
+    String folderName = 'DeskMate Meetings',
+  }) async {
+    final url = Uri.parse('$baseUrl/api/meeting/export-drive');
+    return _postJson(url, {
+      'session_id': sessionId,
+      'folder_name': folderName,
+    });
+  }
+
+  Future<Map<String, dynamic>> sendMeetingEmail({
+    required String sessionId,
+    required String toEmail,
+    String? subject,
+    String? ccEmail,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/meeting/send-email');
+    return _postJson(url, {
+      'session_id': sessionId,
+      'to_email': toEmail,
+      'subject': subject,
+      'cc_email': ccEmail,
+    });
+  }
 }
+

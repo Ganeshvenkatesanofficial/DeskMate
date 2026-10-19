@@ -103,7 +103,7 @@ class BackendManager {
       return;
     }
 
-    for (final port in [2026, 8080, 8000]) {
+    for (final port in [8080, 2026, 8000]) {
       if (await isBackendRunning(port)) {
         _assignedPort = port;
         debugPrint(

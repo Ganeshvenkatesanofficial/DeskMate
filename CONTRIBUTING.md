@@ -26,10 +26,10 @@ Please be respectful, collaborative, and constructive when interacting with fell
 ## Development Setup
 
 ### 1. Python Backend Setup
-The backend lives in `terminal-ai-agent/`.
+The backend lives in `deskmate_engine/`.
 
 ```bash
-cd terminal-ai-agent
+cd deskmate_engine
 
 # Create and activate virtual environment
 python3 -m venv .venv
@@ -90,7 +90,7 @@ flutter test
 
 ### Backend (Python):
 ```bash
-cd terminal-ai-agent
+cd deskmate_engine
 
 # Critical lint checks
 flake8 . --select=E9,F63,F7,F82 --exclude=.venv,venv,build,dist,__pycache__
@@ -122,7 +122,7 @@ pytest -v
 
 ## Architectural Overview
 
-* **Embedded Backend Packaging**: PyInstaller compiles `terminal-ai-agent/backend.py` into a single binary (`deskmate_backend`) placed in `deskmate_app/assets/`.
+* **Embedded Backend Packaging**: PyInstaller compiles `deskmate_engine/backend.py` into a single binary (`deskmate_backend`) placed in `deskmate_app/assets/`.
 * **State & Communication**: `agent_websocket_client.dart` maintains bidirectional WebSockets with `/ws/file-agent` and `/ws/personal-agent`.
 * **Local Persistence**: SQLite database (`deskmate_agent.db`) stores user memories, tasks, and notes in the OS user data directory. It initializes dynamically at runtime and is never pre-bundled.
 * **Vector Storage**: Local Qdrant instance is used for semantic RAG retrieval of workspace documents.

@@ -136,15 +136,21 @@ class _SidebarState extends State<Sidebar> {
                             // --- STATUS CARD ---
                             _buildStatusCard(provider, theme),
 
-                            if (provider.mode == AgentMode.personal) ...[
+                            if (provider.mode == AgentMode.deskMate) ...[
+                              const SizedBox(height: 12),
+                              _buildFileAgentHealthCard(provider, theme),
+                            ] else if (provider.mode == AgentMode.personal) ...[
                               const SizedBox(height: 12),
                               _buildPersonalHealthCard(provider, theme),
+                            ] else if (provider.mode == AgentMode.meeting) ...[
+                              const SizedBox(height: 12),
+                              _buildMeetingHealthCard(provider, theme),
                             ],
 
                             const SizedBox(height: 12),
 
                             // --- AGENT GUIDES & DOCUMENTATION ---
-                            _buildAgentGuidesSection(theme),
+                            _buildAgentGuidesSection(provider, theme),
 
                             const Spacer(),
 
@@ -253,6 +259,14 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.person_rounded,
             isSelected: provider.mode == AgentMode.personal,
             onTap: () => provider.switchMode(AgentMode.personal),
+          ),
+          const SizedBox(height: 4),
+          _buildModeItem(
+            theme: theme,
+            title: 'Meeting Scribe',
+            icon: Icons.mic_rounded,
+            isSelected: provider.mode == AgentMode.meeting,
+            onTap: () => provider.switchMode(AgentMode.meeting),
           ),
         ],
       ),
@@ -479,12 +493,13 @@ class _SidebarState extends State<Sidebar> {
               ),
             ],
           ),
+
         ),
       ),
     );
   }
 
-  Widget _buildAgentGuidesSection(ThemeData theme) {
+  Widget _buildAgentGuidesSection(ChatProvider provider, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -493,7 +508,7 @@ class _SidebarState extends State<Sidebar> {
             Icon(Icons.menu_book_rounded, size: 12, color: theme.fgMuted),
             const SizedBox(width: 6),
             Text(
-              'AGENT GUIDES & DOCS',
+              'AGENT GUIDE & DOCS',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -505,27 +520,37 @@ class _SidebarState extends State<Sidebar> {
         ),
         const SizedBox(height: 8),
 
-        // File Explorer & Local LLM Guide
-        _buildSidebarGuideCard(
-          theme: theme,
-          icon: Icons.folder_open_rounded,
-          title: 'File Copilot & LLM Guide',
-          subtitle: 'Local models, RAG vector DB & Ollama',
-          badge: '100% Offline',
-          onTap: () => widget.onOpenSetupGuide?.call(AgentMode.deskMate),
-        ),
-
-        const SizedBox(height: 9),
-
-        // Personal Agent Setup Guide
-        _buildSidebarGuideCard(
-          theme: theme,
-          icon: Icons.person_rounded,
-          title: 'Personal Agent Guide',
-          subtitle: 'Google OAuth, Gmail, Calendar, Drive',
-          badge: 'Workspace',
-          onTap: () => widget.onOpenSetupGuide?.call(AgentMode.personal),
-        ),
+        if (provider.mode == AgentMode.deskMate) ...[
+          // File Explorer & Local LLM Guide
+          _buildSidebarGuideCard(
+            theme: theme,
+            icon: Icons.folder_open_rounded,
+            title: 'File Copilot & LLM Guide',
+            subtitle: 'Local models, RAG vector DB & Ollama',
+            badge: '100% Offline',
+            onTap: () => widget.onOpenSetupGuide?.call(AgentMode.deskMate),
+          ),
+        ] else if (provider.mode == AgentMode.personal) ...[
+          // Personal Agent Setup Guide
+          _buildSidebarGuideCard(
+            theme: theme,
+            icon: Icons.person_rounded,
+            title: 'Personal Agent Guide',
+            subtitle: 'Google OAuth, Gmail, Calendar, Drive',
+            badge: 'Workspace',
+            onTap: () => widget.onOpenSetupGuide?.call(AgentMode.personal),
+          ),
+        ] else if (provider.mode == AgentMode.meeting) ...[
+          // Meeting Scribe Setup Guide
+          _buildSidebarGuideCard(
+            theme: theme,
+            icon: Icons.mic_rounded,
+            title: 'Meeting Scribe Guide',
+            subtitle: 'Voxtral 4B, Drive PDF & Gmail Sync',
+            badge: 'Intelligence',
+            onTap: () => widget.onOpenSetupGuide?.call(AgentMode.meeting),
+          ),
+        ],
       ],
     );
   }
@@ -638,6 +663,88 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
+  Widget _buildFileAgentHealthCard(ChatProvider provider, ThemeData theme) {
+    final health = provider.fileAgentHealth;
+    final checks = health['checks'] as Map<String, dynamic>? ?? {};
+    final status = health['status'] as String? ?? 'loading';
+
+    if (status == 'loading') {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (status == 'offline') {
+      return Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: theme.dangerBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.dangerBorder, width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'File Copilot offline',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.dangerFg,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final hasFs = checks['filesystem_access'] ?? false;
+    final hasQdrant = checks['qdrant_db'] ?? false;
+    final hasPrivacy = checks['privacy_mode'] ?? true;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'FILE COPILOT HEALTH',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.fgMuted,
+              letterSpacing: 0.08,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildHealthRow(theme, 'Filesystem Access', hasFs),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Qdrant Vector DB', hasQdrant),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Privacy Mode', hasPrivacy),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPersonalHealthCard(ChatProvider provider, ThemeData theme) {
     final health = provider.personalAgentHealth;
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
@@ -723,25 +830,129 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-  Widget _buildHealthRow(ThemeData theme, String label, bool isOk) {
+  Widget _buildMeetingHealthCard(ChatProvider provider, ThemeData theme) {
+    final health = provider.personalAgentHealth;
+    final checks = health['checks'] as Map<String, dynamic>? ?? {};
+    final status = health['status'] as String? ?? 'loading';
+
+    if (status == 'loading') {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.accentFg,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (status == 'offline') {
+      return Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: theme.dangerBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.dangerBorder, width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Meeting Scribe offline',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.dangerFg,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final hasCredsFile = checks['google_credentials_file'] ?? false;
+    final hasGmailToken = checks['gmail_token'] ?? false;
+    final hasDriveToken = checks['drive_token'] ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.bgCanvas,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MEETING SCRIBE HEALTH',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.fgMuted,
+              letterSpacing: 0.08,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildHealthRow(theme, 'Google OAuth', hasCredsFile),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Drive Cloud Sync', hasDriveToken),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Gmail Dispatch', hasGmailToken),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'Voxtral 4B Audio', true),
+          const SizedBox(height: 4),
+          _buildHealthRow(theme, 'LocateAnything-3B', true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHealthRow(ThemeData theme, String label, bool isOk, [String? statusText]) {
+    final displayStatus = statusText ?? (isOk ? 'Online' : 'Offline');
     return Row(
       children: [
-        Icon(
-          isOk
-              ? Icons.check_circle_rounded
-              : Icons.radio_button_unchecked_rounded,
-          size: 13,
-          color: isOk ? theme.successFg : theme.fgMuted,
+        Container(
+          width: 13,
+          height: 13,
+          decoration: BoxDecoration(
+            color: isOk ? theme.successFg : theme.dangerFg,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            isOk ? Icons.check_rounded : Icons.close_rounded,
+            size: 9.5,
+            color: Colors.white,
+          ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 7),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isOk ? theme.fgDefault : theme.fgMuted,
-              fontWeight: isOk ? FontWeight.w600 : FontWeight.normal,
+              color: isOk
+                  ? theme.fgDefault
+                  : (theme.isDark ? const Color(0xFFFFA198) : theme.dangerFg),
+              fontWeight: isOk ? FontWeight.w600 : FontWeight.w500,
             ),
+          ),
+        ),
+        Text(
+          displayStatus,
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            color: isOk ? theme.successFg : theme.dangerFg,
           ),
         ),
       ],
@@ -766,7 +977,7 @@ class _SidebarState extends State<Sidebar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.settings_outlined, size: 16, color: theme.fgMuted),
+              Icon(Icons.settings_outlined, size: 16, color: theme.accentFg),
               const SizedBox(width: 8),
               Text(
                 'Settings',

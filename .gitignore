@@ -33,3 +33,9 @@ terminal-ai-agent/dist/
 .DS_Store
 *.swp
 
+# DeskMate Session & Meeting Outputs
+output/
+deskmate_engine/output/
+*.wav
+terminal-ai-agent
+

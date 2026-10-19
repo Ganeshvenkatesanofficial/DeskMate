@@ -94,6 +94,13 @@ def get_models():
     return {"models": get_installed_chat_models()}
 
 
+@router.get("/api/file/health")
+def file_health():
+    """Check local filesystem permissions and Qdrant vector DB status."""
+    from services.file_copilot.agent import check_file_copilot_health
+    return check_file_copilot_health()
+
+
 @router.get("/api/personal/health")
 def personal_health():
     """Check Google OAuth tokens and database connectivity."""

@@ -22,6 +22,14 @@ def get_qdrant_client():
         _client = QdrantClient(path=QDRANT_PATH)
     return _client
 
+def check_qdrant_health() -> bool:
+    """Dynamically verify that the local embedded Qdrant vector database is responsive."""
+    try:
+        c = get_qdrant_client()
+        return c is not None
+    except Exception:
+        return False
+
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
     """Simple text chunking utility."""
     chunks = []

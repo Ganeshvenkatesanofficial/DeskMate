@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
@@ -253,6 +252,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         : math.min(940.0, screenHeight * 0.95);
 
     final isPersonal = _currentMode == AgentMode.personal;
+    final isMeeting = _currentMode == AgentMode.meeting;
 
     return Center(
       child: Material(
@@ -322,7 +322,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isPersonal
+                            isMeeting
+                                ? 'Meeting Scribe & Audio Intelligence Guide'
+                                : isPersonal
                                 ? 'Personal Assistant Credentials & Setup Guide'
                                 : 'File Explorer & Local LLM Setup Guide',
                             style: TextStyle(
@@ -334,7 +336,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isPersonal
+                            isMeeting
+                                ? 'Voxtral 4B Audio Extraction, LocateAnything-3B Vision Grounding, Google Drive Cloud PDF Export & Gmail Dispatch.'
+                                : isPersonal
                                 ? 'Configure Google Workspace OAuth (Gmail, Calendar, Drive), local SQLite storage, and personal tools.'
                                 : 'Install Ollama, configure local models, understand Vector RAG search, and explore offline tools.',
                             style: TextStyle(
@@ -366,7 +370,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                             theme: theme,
                             title: 'File Copilot & LLM',
                             icon: Icons.folder_open_rounded,
-                            isSelected: !isPersonal,
+                            isSelected: _currentMode == AgentMode.deskMate,
                             onTap: () {
                               if (_currentMode != AgentMode.deskMate) {
                                 setState(() {
@@ -381,11 +385,26 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                             theme: theme,
                             title: 'Personal Guide',
                             icon: Icons.person_rounded,
-                            isSelected: isPersonal,
+                            isSelected: _currentMode == AgentMode.personal,
                             onTap: () {
                               if (_currentMode != AgentMode.personal) {
                                 setState(() {
                                   _currentMode = AgentMode.personal;
+                                  _selectedTabIndex = 0;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 3),
+                          _buildDialogModeButton(
+                            theme: theme,
+                            title: 'Meeting Scribe Guide',
+                            icon: Icons.mic_rounded,
+                            isSelected: _currentMode == AgentMode.meeting,
+                            onTap: () {
+                              if (_currentMode != AgentMode.meeting) {
+                                setState(() {
+                                  _currentMode = AgentMode.meeting;
                                   _selectedTabIndex = 0;
                                 });
                               }
@@ -441,25 +460,70 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   vertical: 8,
                 ),
                 color: theme.isDark ? theme.bgSubtle : const Color(0xFFF6F8FA),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      Text(
-                        'LIVE STATUS:',
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: theme.fgMuted,
-                        ),
+                child: Row(
+                  children: [
+                    Text(
+                      'LIVE STATUS:',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: theme.fgMuted,
                       ),
-                      const SizedBox(width: 8),
-                      if (isPersonal) ...[
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (isMeeting) ...[
                         _buildStatusPill(
                           theme,
-                          'OAuth',
-                          hasCreds ? 'Configured' : 'Missing',
+                          'Google Config',
+                          hasCreds ? 'Configured Online' : 'Not Configured (Offline)',
+                          hasCreds,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusPill(
+                          theme,
+                          'Drive Export',
+                          hasDrive ? 'Connected Online' : 'Offline / Setup Needed',
+                          hasDrive,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusPill(
+                          theme,
+                          'Gmail Dispatch',
+                          hasGmail ? 'Connected Online' : 'Offline / Setup Needed',
+                          hasGmail,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusPill(
+                          theme,
+                          'Voxtral 4B',
+                          'In-Memory (16kHz)',
+                          true,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusPill(
+                          theme,
+                          'LocateAnything',
+                          'Vision Grounding',
+                          true,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildStatusPill(
+                          theme,
+                          'Audio Gating',
+                          'Active Room Silence',
+                          true,
+                        ),
+                      ] else if (isPersonal) ...[
+                        _buildStatusPill(
+                          theme,
+                          'Google Config',
+                          hasCreds ? 'Configured Online' : 'Not Configured (Offline)',
                           hasCreds,
                         ),
                         const SizedBox(width: 6),
@@ -527,6 +591,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
               Divider(height: 1, color: theme.borderDefault),
 
               // ─── Navigation Tabs ─────────────────────────────────────────
@@ -566,7 +633,42 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (isPersonal) ...[
+                                if (isMeeting) ...[
+                                  _buildTabButton(
+                                    0,
+                                    'Quick Start & Pipeline',
+                                    Icons.rocket_launch_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    1,
+                                    'Google Drive Export',
+                                    Icons.add_to_drive_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    2,
+                                    'Gmail Summary Dispatch',
+                                    Icons.mark_email_read_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    3,
+                                    'Audio Loopback & Gating',
+                                    Icons.headset_mic_rounded,
+                                    theme,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  _buildTabButton(
+                                    4,
+                                    'Master Reference & API',
+                                    Icons.menu_book_rounded,
+                                    theme,
+                                  ),
+                                ] else if (isPersonal) ...[
                                   _buildTabButton(
                                     0,
                                     'Quick Setup',
@@ -649,25 +751,18 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
 
               // ─── Tab Content Body ────────────────────────────────────────
               Expanded(
-                child: IndexedStack(
-                  index: _selectedTabIndex.clamp(0, 4),
-                  children: isPersonal
-                      ? [
-                          _buildQuickSetupTab(theme),
-                          SelectionArea(child: _buildGcpGuideTab(theme)),
-                          SelectionArea(child: _buildOfflineToolsTab(theme)),
-                          SelectionArea(child: _buildEnvConfigTab(theme)),
-                          SelectionArea(child: _buildPersonalReadmeTab(theme)),
-                        ]
-                      : [
-                          SelectionArea(child: _buildFileAgentGuideTab(theme)),
-                          SelectionArea(child: _buildRagArchitectureTab(theme)),
-                          SelectionArea(
-                            child: _buildFileCopilotToolsTab(theme),
-                          ),
-                          SelectionArea(child: _buildFileEnvConfigTab(theme)),
-                          SelectionArea(child: _buildFileReadmeTab(theme)),
-                        ],
+                child: KeyedSubtree(
+                  key: ValueKey('$_currentMode-$_selectedTabIndex'),
+                  child: SelectionArea(
+                    child: _buildActiveTabContent(
+                      theme: theme,
+                      isMeeting: isMeeting,
+                      isPersonal: isPersonal,
+                      hasDrive: hasDrive,
+                      hasGmail: hasGmail,
+                      hasCreds: hasCreds,
+                    ),
+                  ),
                 ),
               ),
 
@@ -757,6 +852,60 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     );
   }
 
+  Widget _buildActiveTabContent({
+    required ThemeData theme,
+    required bool isMeeting,
+    required bool isPersonal,
+    required bool hasDrive,
+    required bool hasGmail,
+    required bool hasCreds,
+  }) {
+    final tabIndex = _selectedTabIndex.clamp(0, 4);
+    if (isMeeting) {
+      switch (tabIndex) {
+        case 0:
+          return _buildMeetingQuickStartTab(theme);
+        case 1:
+          return _buildMeetingDriveExportTab(theme, hasDrive, hasCreds);
+        case 2:
+          return _buildMeetingGmailDispatchTab(theme, hasGmail, hasCreds);
+        case 3:
+          return _buildMeetingAudioGatingTab(theme);
+        case 4:
+        default:
+          return _buildMeetingMasterReferenceTab(theme);
+      }
+    } else if (isPersonal) {
+      switch (tabIndex) {
+        case 0:
+          return _buildQuickSetupTab(theme);
+        case 1:
+          return _buildGcpGuideTab(theme);
+        case 2:
+          return _buildOfflineToolsTab(theme);
+        case 3:
+          return _buildEnvConfigTab(theme);
+        case 4:
+        default:
+          return _buildPersonalReadmeTab(theme);
+      }
+    } else {
+      switch (tabIndex) {
+        case 0:
+          return _buildFileAgentGuideTab(theme);
+        case 1:
+          return _buildRagArchitectureTab(theme);
+        case 2:
+          return _buildFileCopilotToolsTab(theme);
+        case 3:
+          return _buildFileEnvConfigTab(theme);
+        case 4:
+        default:
+          return _buildFileReadmeTab(theme);
+      }
+    }
+  }
+
   Widget _buildStatusPill(
     ThemeData theme,
     String label,
@@ -767,15 +916,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: isOk
-            ? const Color(0xFF2DA44E).withValues(alpha: 0.12)
-            : theme.isDark
-            ? const Color(0xFF21262D)
-            : const Color(0xFFEAEEF2),
+            ? const Color(0xFF2DA44E).withValues(alpha: 0.15)
+            : const Color(0xFFCF222E).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: isOk
-              ? const Color(0xFF2DA44E).withValues(alpha: 0.35)
-              : theme.borderDefault,
+              ? const Color(0xFF2DA44E).withValues(alpha: 0.45)
+              : const Color(0xFFCF222E).withValues(alpha: 0.45),
           width: 0.8,
         ),
       ),
@@ -783,11 +930,11 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 5,
-            height: 5,
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isOk ? const Color(0xFF2DA44E) : theme.fgMuted,
+              color: isOk ? const Color(0xFF2DA44E) : const Color(0xFFCF222E),
             ),
           ),
           const SizedBox(width: 4),
@@ -800,7 +947,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   ? (theme.isDark
                         ? const Color(0xFF7EE787)
                         : const Color(0xFF1A7F37))
-                  : theme.fgMuted,
+                  : (theme.isDark
+                        ? const Color(0xFFFFA198)
+                        : const Color(0xFFCF222E)),
             ),
           ),
         ],
@@ -1956,8 +2105,8 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: RichText(
-                          text: TextSpan(
+                        child: Text.rich(
+                          TextSpan(
                             style: TextStyle(
                               fontSize: 11.5,
                               height: 1.4,
@@ -2004,8 +2153,8 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: RichText(
-                          text: TextSpan(
+                        child: Text.rich(
+                          TextSpan(
                             style: TextStyle(
                               fontSize: 11.5,
                               height: 1.4,
@@ -3001,8 +3150,8 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: RichText(
-            text: TextSpan(
+          child: Text.rich(
+            TextSpan(
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.4,
@@ -3284,60 +3433,290 @@ GITHUB_TOKEN=ghp_your_github_token_here
     );
   }
 
-  // ─── TAB 4 (Personal): Personal Assistant Guide (README) ───────────────
+  // ─── TAB 4 (Personal): Personal Assistant Guide ────────────────────────
   Widget _buildPersonalReadmeTab(ThemeData theme) {
-    const markdownData = """# DeskMate — Personal Workspace Assistant Guide
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Hero card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: theme.isDark
+                    ? [const Color(0xFF1C2128), const Color(0xFF161B22)]
+                    : [const Color(0xFFF0F7FF), const Color(0xFFE8F4FD)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.accentFg.withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(Icons.person_rounded, color: theme.accentFg, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Personal Workspace Assistant Guide',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Direct desktop integration with Google Workspace and local SQLite productivity database with strict zero-cloud-leakage privacy guarantees.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: theme.fgMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-DeskMate's **Personal Workspace Assistant** connects your desktop directly to your Google Workspace and local productivity databases with strict privacy guarantees.
+          const SizedBox(height: 16),
 
----
+          // Privacy & Security Section
+          Row(
+            children: [
+              Icon(Icons.shield_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'PRIVACY & SECURITY GUARANTEES',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-### 🛡️ Privacy & Security Architecture
-- **Zero Cloud Data Leakage**: Your SQLite tasks, notes, and local vector memory (`deskmate_agent.db`) are stored 100% on your device.
-- **Direct OAuth Communication**: DeskMate never routes your emails, calendar events, or documents through intermediary servers. All requests communicate directly between your machine and official Google API endpoints.
-- **Local Credential Storage**: OAuth client credentials and tokens are stored in your user configuration directory and never transmitted elsewhere.
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.storage_rounded,
+            color: const Color(0xFF1F883D),
+            label: 'Zero Cloud Data Leakage',
+            badge: '100% Local Device',
+            desc: 'Your SQLite tasks, notes, and local vector memory (deskmate_agent.db) are stored 100% on your device with no external telemetry.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.sync_alt_rounded,
+            color: const Color(0xFF0969DA),
+            label: 'Direct Google OAuth',
+            badge: 'Direct End-to-End',
+            desc: 'DeskMate never routes your emails, calendar events, or documents through intermediary servers. All requests communicate directly between your machine and official Google API endpoints.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.lock_rounded,
+            color: const Color(0xFF8957E5),
+            label: 'Local Credential Storage',
+            badge: 'Secure Environment',
+            desc: 'OAuth client credentials and tokens are stored in your user configuration directory (~/.deskmate/.env) and never transmitted elsewhere.',
+          ),
 
----
+          const SizedBox(height: 16),
 
-### 👤 Core Personal Assistant Capabilities
+          // Google Workspace Automation Section
+          Row(
+            children: [
+              Icon(Icons.cloud_done_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'GOOGLE WORKSPACE SUITE (OAUTH REQUIRED)',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-#### 1. Google Workspace Suite (OAuth Required)
-- **Gmail Automation**: Search recent threads, summarize unread messages, draft replies, and send emails securely.
-- **Google Calendar Management**: List today's agenda, check availability, create new calendar events with attendees, and calculate relative scheduling.
-- **Google Drive & Docs Search**: Search Drive files by keyword, download and summarize document contents, and query shared files.
-- **Google Tasks Sync**: Create, list, check off, and synchronize task lists.
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.mark_email_read_rounded,
+            title: 'Gmail Automation',
+            desc: 'Search recent threads, summarize unread messages, draft replies, and send emails securely directly from the chat prompt.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.calendar_today_rounded,
+            title: 'Google Calendar Management',
+            desc: 'List today\'s agenda, check availability, create new calendar events with attendees, and calculate relative scheduling automatically.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.add_to_drive_rounded,
+            title: 'Google Drive & Docs Search',
+            desc: 'Search Drive files by keyword, download and summarize document contents, and query shared files across your organization.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.task_alt_rounded,
+            title: 'Google Tasks Sync',
+            desc: 'Create, list, check off, and synchronize task lists across Google devices in real-time.',
+          ),
 
-#### 2. Offline Productivity Suite (Zero Setup)
-- **Local SQLite Tasks (`deskmate_agent.db`)**: Add, complete, and track local to-dos without requiring any internet connection.
-- **Tagged Markdown Notes**: Save quick ideas, meeting minutes, and code snippets with full-text search.
-- **FAISS L2 Semantic Memory**: Persistent vector memory allows the assistant to remember your project preferences and context across days.
-- **Live Weather & Web Research**: Real-time DuckDuckGo searches and wttr.in weather forecasts without requiring an API key.
+          const SizedBox(height: 16),
 
-#### 3. Smart Multi-Turn Conversations (Zero-Bloat Contextualizer)
-- **Natural Dynamic Follow-ups**: Ask follow-up queries naturally (e.g. *"What is the weather in SF this weekend?"* → *"in chennai"* or *"what about tomorrow?"*).
-- **Zero Token Bloat**: The assistant dynamically resolves follow-ups into standalone commands using sub-80ms models instead of injecting raw conversation logs, saving >85% tokens and preventing tool hallucinations.
-- **Strict Session Isolation**: Resetting conversation via "New Chat" completely isolates your session with zero context bleeding.
+          // Offline Productivity Suite Section
+          Row(
+            children: [
+              Icon(Icons.offline_bolt_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'OFFLINE PRODUCTIVITY SUITE (ZERO SETUP)',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-#### 4. In-App Credentials & Settings Management
-- **One-Click Configuration**: Enter your Google OAuth Client ID & Secret in the **Quick Setup Tab** or via the **Settings Drawer (Gear Icon ⚙️)**.
-- **Permanent Sync**: Credentials persist in your local `.env` and `credentials.json` with automatic token refresh.
-- **Unified Purple Theme**: Clean aesthetics with matching purple accents across both light and dark modes.
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.checklist_rounded,
+            title: 'Local SQLite Tasks (deskmate_agent.db)',
+            desc: 'Add, complete, and track local to-dos without requiring an internet connection. Stored permanently in SQLite.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.note_alt_outlined,
+            title: 'Tagged Markdown Notes',
+            desc: 'Save quick ideas, meeting minutes, and code snippets with full-text search and category tags.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.psychology_rounded,
+            title: 'FAISS L2 Semantic Memory',
+            desc: 'Persistent vector memory allows the assistant to remember your project preferences and context across days.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.travel_explore_rounded,
+            title: 'Live Weather & Web Research',
+            desc: 'Real-time DuckDuckGo searches and wttr.in weather forecasts without requiring any API key or subscription.',
+          ),
 
----
+          const SizedBox(height: 16),
 
-### 🚀 Example Personal Assistant Prompts
+          // Smart Multi-Turn Section
+          Row(
+            children: [
+              Icon(Icons.forum_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'SMART MULTI-TURN CONVERSATIONS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-- *"What's the weather forecast for San Francisco this weekend?"*
-- *(Follow-up)* *"in chennai"* → automatically resolves to *"What is the weather in Chennai this weekend?"*
-- *(Follow-up)* *"what about tomorrow?"*
-- *"What is on my calendar for tomorrow afternoon?"*
-- *"Check my unread emails from the last 24 hours and summarize anything urgent."*
-- *"Schedule a meeting called 'Sprint Retro' for Friday at 3 PM."*
-- *"Add a task to my local list: 'Review pull request #42 before EOD'."*
-- *"Save a note tagged #meeting: Team agreed on adopting Qdrant for local vector indexing."*
-""";
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Zero-Bloat Contextualizer transforms follow-up queries into complete standalone prompts in sub-80ms:',
+                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                _buildMultiTurnStep(theme, 'Turn 1', '"What is the weather in SF this weekend?"', 'Assistant answers with San Francisco forecast.'),
+                _buildMultiTurnStep(theme, 'Turn 2', '"in chennai"', 'Auto-resolved to: "What is the weather in Chennai this weekend?"'),
+                _buildMultiTurnStep(theme, 'Turn 3', '"what about tomorrow?"', 'Auto-resolved to: "What is the weather in Chennai tomorrow?"'),
+              ],
+            ),
+          ),
 
-    return _buildMarkdownViewer(theme, markdownData);
+          const SizedBox(height: 16),
+
+          // Example Prompts Section
+          Row(
+            children: [
+              Icon(Icons.lightbulb_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'EXAMPLE PERSONAL ASSISTANT PROMPTS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildExampleInquiry(theme, '"Weather Forecast"', 'What\'s the weather forecast for San Francisco this weekend?'),
+                _buildExampleInquiry(theme, '"Follow-up Query"', 'in chennai  (dynamically resolves without conversational bloat)'),
+                _buildExampleInquiry(theme, '"Calendar Agenda"', 'What is on my calendar for tomorrow afternoon?'),
+                _buildExampleInquiry(theme, '"Email Digest"', 'Check my unread emails from the last 24 hours and summarize anything urgent.'),
+                _buildExampleInquiry(theme, '"Meeting Schedule"', 'Schedule a meeting called "Sprint Retro" for Friday at 3 PM.'),
+                _buildExampleInquiry(theme, '"Local Task"', 'Add a task to my local list: "Review pull request #42 before EOD".'),
+                _buildExampleInquiry(theme, '"Tagged Note"', 'Save a note tagged #meeting: Team agreed on adopting Qdrant for local vector indexing.'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ─── TAB 1 (File Explorer): Vector DB & RAG Architecture ───────────────
@@ -3808,131 +4187,1596 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  // ─── TAB 4 (File Explorer): File Copilot Guide (README) ───────────────────
+  // ─── TAB 4 (File Explorer): File Copilot Guide ──────────────────────────
   Widget _buildFileReadmeTab(ThemeData theme) {
-    const markdownData = """# DeskMate — File Explorer Copilot Guide
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Hero card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: theme.isDark
+                    ? [const Color(0xFF1C2128), const Color(0xFF161B22)]
+                    : [const Color(0xFFF0F7FF), const Color(0xFFE8F4FD)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.accentFg.withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(Icons.folder_special_rounded, color: theme.accentFg, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'File Explorer Copilot & Local LLM Guide',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Air-gapped, privacy-first coding assistant and local repository intelligence executing on your device via Ollama and FastEmbed vector RAG.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: theme.fgMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-DeskMate's **File Explorer Copilot** provides an air-gapped, privacy-first coding assistant executing locally on your device via Ollama.
+          const SizedBox(height: 16),
 
----
+          // Architecture & Air-Gap Section
+          Row(
+            children: [
+              Icon(Icons.verified_user_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'AIR-GAP & ARCHITECTURE GUARANTEES',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-### 🏛️ Architecture & Air-Gap Guarantee
-- **100% Offline Execution**: All model inference is processed on your local CPU/GPU by Ollama (`http://127.0.0.1:11434`).
-- **No Cloud Code Transmissions**: Your proprietary source files, sensitive configs, and tokens are never sent over the internet.
-- **Embedded Vector Database**: FastEmbed and Qdrant store codebase representations in `~/.deskmate/.qdrant_data`.
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.wifi_off_rounded,
+            color: const Color(0xFF1F883D),
+            label: '100% Offline Execution',
+            badge: 'Local CPU / GPU',
+            desc: 'All model inference is processed on your local device by Ollama (http://127.0.0.1:11434). Zero internet required for inference.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.lock_rounded,
+            color: const Color(0xFF0969DA),
+            label: 'No Cloud Code Transmission',
+            badge: '100% Air-Gapped',
+            desc: 'Your proprietary source files, sensitive configs, and tokens are never sent over the internet or logged to third-party providers.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.hub_rounded,
+            color: const Color(0xFF8957E5),
+            label: 'Embedded Vector Database',
+            badge: 'Qdrant & FastEmbed',
+            desc: 'FastEmbed and Qdrant store codebase representations in ~/.deskmate/.qdrant_data with sub-second hybrid semantic search.',
+          ),
 
----
+          const SizedBox(height: 16),
 
-### 🦙 Quick Setup in 2 Commands
-1. **Install Ollama**:
-   - macOS: `brew install ollama`
-   - Windows: Download from `https://ollama.com/download/windows`
-   - Linux: `curl -fsSL https://ollama.com/install.sh | sh`
-2. **Download Model**:
-   - Fast 3B: `ollama run llama3.2`
-   - Code-specialized 7B: `ollama run qwen2.5-coder`
-   - Reasoning 8B: `ollama run deepseek-r1:8b`
+          // Quick Terminal Setup Section
+          Row(
+            children: [
+              Icon(Icons.terminal_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'QUICK TERMINAL SETUP',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
----
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '1',
+            title: 'Install Ollama Locally',
+            description: 'Download and install Ollama for your operating system:',
+            customContent: Column(
+              children: [
+                _buildCommandRow(theme, 'macOS', 'brew install ollama', 'ollama_mac'),
+                const SizedBox(height: 6),
+                _buildCommandRow(theme, 'Linux', 'curl -fsSL https://ollama.com/install.sh | sh', 'ollama_linux'),
+                const SizedBox(height: 6),
+                _buildCommandRow(theme, 'Windows', 'https://ollama.com/download/windows', 'ollama_win', isUrl: true),
+              ],
+            ),
+          ),
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '2',
+            title: 'Pull Your Preferred Local Model',
+            description: 'Run any of the following models in your terminal to start coding immediately:',
+            customContent: Column(
+              children: [
+                _buildCommandRow(theme, 'Fast 3B (General)', 'ollama run llama3.2', 'model_llama'),
+                const SizedBox(height: 6),
+                _buildCommandRow(theme, 'Code 7B (Specialized)', 'ollama run qwen2.5-coder', 'model_qwen'),
+                const SizedBox(height: 6),
+                _buildCommandRow(theme, 'Reasoning 8B', 'ollama run deepseek-r1:8b', 'model_deepseek'),
+              ],
+            ),
+          ),
 
-### 🎛️ Interactive Resizable Sidebar & Settings Drawer
-- **Draggable Sidebar**: Drag the vertical splitter on the right edge of the sidebar to widen or narrow your view anytime (min 255px, max 450px). Double-click to reset.
-- **Model Switcher**: When multiple Ollama models are installed, hot-swap between models instantly with zero application restart.
-- **Settings Drawer (Gear Icon ⚙️)**: Inspect FastAPI backend URL, verify local LLM engine status, and configure theme preferences.
+          const SizedBox(height: 16),
 
----
+          // Workspace & Controls Section
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'WORKSPACE & CONTROLS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-### 💬 Smart Multi-Turn File Exploration (Zero-Bloat Contextualizer)
-- **Natural Directory Navigation**: Explore files and directories conversationally without retyping long paths.
-  - Turn 1: *"What files are in the core directory?"*
-  - Turn 2: *"and in services?"* → dynamically resolves to *"What files are in the services directory?"*
-  - Turn 3: *"read telemetry.py"* → dynamically resolves to *"Read the content of telemetry.py"*
-  - Turn 4: *"what is inside it?"*
-- **100% Local Inference & Sub-80ms Latency**: Contextualization runs on fast local Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`) with \$0 token cost and zero cloud reliance.
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.view_sidebar_rounded,
+            title: 'Draggable Resizable Sidebar',
+            desc: 'Drag the vertical splitter on the right edge of the sidebar to widen or narrow your view anytime (min 255px, max 450px). Double-click to reset.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.swap_horiz_rounded,
+            title: 'Instant Model Switcher',
+            desc: 'When multiple Ollama models are installed, hot-swap between models instantly with zero application restart.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.settings_rounded,
+            title: 'Settings Drawer (Gear Icon ⚙️)',
+            desc: 'Inspect FastAPI backend URL, verify local LLM engine status, and configure theme preferences with live telemetry.',
+          ),
 
----
+          const SizedBox(height: 16),
 
-### 📁 Supported Code & Text Formats
-File Explorer Copilot supports reading, writing, and semantic indexing for:
-- **Languages**: Python (`.py`), Dart/Flutter (`.dart`), TypeScript/JavaScript (`.ts`, `.js`), Rust (`.rs`), Go (`.go`), C/C++ (`.c`, `.cpp`), SQL (`.sql`).
-- **Configs & Markup**: JSON, YAML, TOML, Markdown (`.md`), HTML, CSS, `.env`.
+          // Smart Multi-Turn Section
+          Row(
+            children: [
+              Icon(Icons.forum_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'ZERO-BLOAT MULTI-TURN EXPLORATION',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
----
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Explore repositories conversationally without retyping long paths. Contextualizer resolves follow-ups locally in sub-80ms:',
+                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                _buildMultiTurnStep(theme, 'Turn 1', '"What files are in the core directory?"', 'Lists directory contents.'),
+                _buildMultiTurnStep(theme, 'Turn 2', '"and in services?"', 'Auto-resolved to: "What files are in the services directory?"'),
+                _buildMultiTurnStep(theme, 'Turn 3', '"read telemetry.py"', 'Auto-resolved to: "Read the content of telemetry.py"'),
+                _buildMultiTurnStep(theme, 'Turn 4', '"what is inside it?"', 'Auto-resolved to: "Explain the implementation in telemetry.py"'),
+              ],
+            ),
+          ),
 
-### 💡 Example File Copilot Prompts
-- *"What files are in the core directory?"*
-- *(Follow-up)* *"and in services?"*
-- *(Follow-up)* *"read telemetry.py and explain how streaming works."*
-- *"List all files in the current repository and show the folder layout."*
-- *"Search for all files defining API routers."*
-- *"Index backend.py into Qdrant vector database."*
-- *"Search the vector DB for how local LLM tags are discovered."*
-""";
+          const SizedBox(height: 16),
 
-    return _buildMarkdownViewer(theme, markdownData);
+          // Supported Code & Text Formats
+          Row(
+            children: [
+              Icon(Icons.code_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'SUPPORTED CODE & TEXT FORMATS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'File Copilot supports reading, editing, and semantic indexing for:',
+                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _buildFormatBadge(theme, 'Python (.py)', const Color(0xFF8957E5)),
+                    _buildFormatBadge(theme, 'Dart / Flutter (.dart)', const Color(0xFF0969DA)),
+                    _buildFormatBadge(theme, 'TypeScript / JavaScript', const Color(0xFFD29922)),
+                    _buildFormatBadge(theme, 'Rust (.rs)', const Color(0xFFCF222E)),
+                    _buildFormatBadge(theme, 'Go (.go)', const Color(0xFF1F883D)),
+                    _buildFormatBadge(theme, 'C / C++ (.c, .cpp)', const Color(0xFF0969DA)),
+                    _buildFormatBadge(theme, 'SQL (.sql)', const Color(0xFF8957E5)),
+                    _buildFormatBadge(theme, 'JSON / YAML / TOML', const Color(0xFF57606A)),
+                    _buildFormatBadge(theme, 'Markdown (.md)', const Color(0xFF1F883D)),
+                    _buildFormatBadge(theme, 'HTML / CSS', const Color(0xFFD29922)),
+                    _buildFormatBadge(theme, 'Environment (.env)', const Color(0xFFCF222E)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Example Prompts Section
+          Row(
+            children: [
+              Icon(Icons.lightbulb_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text(
+                'EXAMPLE FILE COPILOT PROMPTS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildExampleInquiry(theme, '"Directory Listing"', 'What files are in the core directory?'),
+                _buildExampleInquiry(theme, '"Follow-up Exploration"', 'and in services?  (dynamically resolves without conversational bloat)'),
+                _buildExampleInquiry(theme, '"Code Inspection"', 'read telemetry.py and explain how streaming works.'),
+                _buildExampleInquiry(theme, '"Repository Layout"', 'List all files in the current repository and show the folder layout.'),
+                _buildExampleInquiry(theme, '"Router Search"', 'Search for all files defining API routers.'),
+                _buildExampleInquiry(theme, '"Vector Indexing"', 'Index backend.py into Qdrant vector database.'),
+                _buildExampleInquiry(theme, '"Semantic RAG Search"', 'Search the vector DB for how local LLM tags are discovered.'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildMarkdownViewer(ThemeData theme, String markdownData) {
+  // ─── MEETING SCRIBE TABS ───────────────────────────────────────────────────
+
+  Widget _buildMeetingQuickStartTab(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Hero card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: theme.isDark
+                    ? [const Color(0xFF1C2128), const Color(0xFF161B22)]
+                    : [const Color(0xFFF0F7FF), const Color(0xFFE8F4FD)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: theme.accentFg.withValues(alpha: 0.3), width: 0.8),
+                  ),
+                  child: Icon(Icons.mic_rounded, color: theme.accentFg, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Meeting Scribe & Audio Intelligence',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Enterprise-grade live visual & audio intelligence. Runs 100% on your local machine.',
+                        style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Neural Architecture Section
+          Row(
+            children: [
+              Icon(Icons.psychology_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('CORE NEURAL PIPELINE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          _buildMeetingEngineRow(theme, icon: Icons.graphic_eq_rounded, color: const Color(0xFF8957E5),
+            label: 'Mistral Voxtral 4B', badge: 'Speech Extraction',
+            desc: 'Native speaker diarization — no Whisper dependency. Runs in-memory on MPS/CUDA.'),
+          _buildMeetingEngineRow(theme, icon: Icons.grid_on_rounded, color: const Color(0xFF1F883D),
+            label: 'NVIDIA LocateAnything-3B', badge: 'Vision Grounding',
+            desc: 'Dense bounding-box coordinate tracking of UI interactions, buttons, and windows.'),
+          _buildMeetingEngineRow(theme, icon: Icons.headphones_rounded, color: const Color(0xFF0969DA),
+            label: 'macOS Loopback + Mic', badge: 'Audio Routing',
+            desc: 'Simultaneous earphone loopback + microphone capture at native 16,000 Hz Mono PCM.'),
+          _buildMeetingEngineRow(theme, icon: Icons.block_rounded, color: const Color(0xFFCF222E),
+            label: 'Real-Time Buffer Gating', badge: 'Room Noise Block',
+            desc: 'When mic is muted, buffer frames are zeroed at hardware level. Room chatter cannot enter the recording.'),
+          _buildMeetingEngineRow(theme, icon: Icons.auto_awesome_rounded, color: theme.accentFg,
+            label: 'Gemini 2.5 Flash / Ollama', badge: 'NeuroSummarizer',
+            desc: 'Generates executive takeaways, action items, speaker attribution, and structured briefing.'),
+
+          const SizedBox(height: 16),
+
+          // Quick Start Steps
+          Row(
+            children: [
+              Icon(Icons.rocket_launch_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('QUICK START', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          _buildStepCard(theme: theme, stepNumber: '1',
+            title: 'Add Custom Focus Topics (Optional)',
+            description: 'Before starting, click "Add Inquiry / Column" to track specific topics like "Engineering Roadblocks", "Budget Decisions", or "Actions for Sarah". Each topic becomes a dedicated section in your summary.',
+          ),
+          _buildStepCard(theme: theme, stepNumber: '2',
+            title: 'Start Meeting Scribe',
+            description: 'Click the Start Meeting Scribe button. A 2.0-second settling window ensures DeskMate application clicks are never recorded as meeting steps.',
+          ),
+          _buildStepCard(theme: theme, stepNumber: '3',
+            title: 'Control Room Noise with Mic Toggle',
+            description: 'Use the Mic Active / Mic Muted button in the header:\n• Mic Active (green): User voice is mixed with earphone audio.\n• Mic Muted (orange): Surrounding room chatter and background noise are mathematically zeroed. Attendee audio from earphones continues recording cleanly.',
+          ),
+          _buildStepCard(theme: theme, stepNumber: '4',
+            title: 'End Meeting & Review Report',
+            description: 'Click End Meeting. The engine automatically diarizes audio, correlates visual moments with speaker statements, generates action items, and compiles an executive PDF report ready for export.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingEngineRow(
+    ThemeData theme, {
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String badge,
+    required String desc,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      child: Markdown(
-        data: markdownData,
-        selectable: true,
-        styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-          p: TextStyle(fontSize: 12, height: 1.5, color: theme.fgDefault),
-          h1: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: theme.fgDefault,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
+            ),
+            child: Icon(icon, size: 14, color: color),
           ),
-          h2: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            color: theme.fgDefault,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
+                      ),
+                      child: Text(badge, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+              ],
+            ),
           ),
-          h3: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: theme.fgDefault,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingDriveExportTab(ThemeData theme, bool hasDrive, bool hasCreds) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status Banner
+          _buildGoogleConfigBanner(
+            theme: theme,
+            isOnline: hasDrive,
+            onlineTitle: 'Google Drive: Online & Ready',
+            offlineTitle: 'Google Drive: Not Configured (Offline)',
+            onlineDesc: 'Your Google Drive OAuth token is verified. One-click export uploads full meeting PDFs to your Google Drive automatically.',
+            offlineDesc: 'Google Drive is offline. Configure your Google OAuth credentials in the Personal Guide to enable one-click cloud PDF export.',
+            icon: Icons.add_to_drive_rounded,
           ),
-          h4: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            color: theme.fgDefault,
+
+          const SizedBox(height: 16),
+
+          // Section: How it Works
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('HOW DRIVE EXPORT WORKS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
           ),
-          code: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 11,
-            color: theme.accentFg,
+          const SizedBox(height: 8),
+
+          _buildStepCard(theme: theme, stepNumber: '1',
+            title: 'Shared Google OAuth Credentials',
+            description: 'Meeting Scribe reuses the same credentials.json and OAuth tokens as the Personal Assistant. You do not need a separate Google Cloud project for meeting exports.',
           ),
-          codeblockDecoration: BoxDecoration(
-            color: theme.isDark
-                ? const Color(0xFF161B22)
-                : const Color(0xFFF6F8FA),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: theme.borderDefault),
+          _buildStepCard(theme: theme, stepNumber: '2',
+            title: 'Dedicated "DeskMate Meeting Summaries" Folder',
+            description: 'On first export, DeskMate automatically creates a folder named "DeskMate Meeting Summaries" in your Google Drive root. All subsequent meeting PDFs are organized there.',
           ),
-          tableBody: TextStyle(fontSize: 11, color: theme.fgDefault),
-          tableHead: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: theme.fgDefault,
+          _buildStepCard(theme: theme, stepNumber: '3',
+            title: 'Multi-Page Executive PDF Contents',
+            description: 'The exported PDF includes:\n• Complete executive summary and meeting takeaways\n• High-resolution visual screenshots with LocateAnything-3B bounding boxes\n• Diarized speaker transcript with exact timestamps\n• Action items checklist with assignees and due dates',
           ),
-          tableBorder: TableBorder.all(color: theme.borderDefault, width: 0.5),
-          blockquote: TextStyle(
-            fontSize: 11.5,
-            fontStyle: FontStyle.italic,
-            color: theme.fgMuted,
+          _buildStepCard(theme: theme, stepNumber: '4',
+            title: 'Instant Shareable Link',
+            description: 'Once uploaded, DeskMate generates a direct shareable Google Drive link so you can immediately share the report with meeting stakeholders.',
           ),
-          blockquoteDecoration: BoxDecoration(
-            color: theme.isDark
-                ? const Color(0xFF161B22)
-                : const Color(0xFFF6F8FA),
+
+          const SizedBox(height: 4),
+
+          // OAuth Scope Info Card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.shield_outlined, size: 14, color: theme.accentFg),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Required Google OAuth Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      const SizedBox(height: 4),
+                      Text('drive.file', style: TextStyle(fontFamily: 'monospace', fontSize: 11.5, color: theme.accentFg, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('Allows DeskMate to create and upload meeting PDFs without access to your entire Drive.', style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                    ],
+                  ),
+                ),
+                if (!hasDrive) ...[
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => setState(() { _currentMode = AgentMode.personal; _selectedTabIndex = 0; }),
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.accentFg, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    child: const Text('Setup OAuth'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingGmailDispatchTab(ThemeData theme, bool hasGmail, bool hasCreds) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status Banner
+          _buildGoogleConfigBanner(
+            theme: theme,
+            isOnline: hasGmail,
+            onlineTitle: 'Gmail: Online & Ready',
+            offlineTitle: 'Gmail: Not Configured (Offline)',
+            onlineDesc: 'Gmail integration is live. Email formatted executive summaries, diarized transcripts, and action items directly to attendees with one click.',
+            offlineDesc: 'Gmail is offline. Set up your Google Workspace credentials in the Personal Guide to enable automated meeting email dispatch.',
+            icon: Icons.mark_email_read_rounded,
+          ),
+
+          const SizedBox(height: 16),
+
+          // Section: Email Contents
+          Row(
+            children: [
+              Icon(Icons.drafts_outlined, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('AUTOMATED EMAIL FORMAT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          _buildMeetingInfoCard(theme, icon: Icons.table_rows_outlined, title: 'Meeting Header', desc: 'Date, time, session duration, and attendee list (derived from Voxtral 4B speaker diarization).'),
+          _buildMeetingInfoCard(theme, icon: Icons.format_list_bulleted_rounded, title: 'Executive Takeaways', desc: 'Concise 3-5 bullet point briefing authored by the NeuroSummarizer. Structured for quick stakeholder review.'),
+          _buildMeetingInfoCard(theme, icon: Icons.task_alt_rounded, title: 'Action Items & Ownership', desc: 'High-priority task checklist with assignees extracted from speaker statements and conversation context.'),
+          _buildMeetingInfoCard(theme, icon: Icons.link_rounded, title: 'PDF Download / Drive Link', desc: 'A direct link to the full cloud PDF report on Google Drive is embedded in the email for complete archival access.'),
+
+          const SizedBox(height: 4),
+
+          // Security & Scopes
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.lock_outlined, size: 13, color: theme.accentFg),
+                    const SizedBox(width: 6),
+                    Text('Security & OAuth Scopes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _buildOAuthScopeRow(theme, 'gmail.send', 'Send summary emails directly via your Google account.'),
+                const SizedBox(height: 4),
+                _buildOAuthScopeRow(theme, 'gmail.readonly', 'Optional: look up attendee email addresses for auto-fill.'),
+                const SizedBox(height: 6),
+                Text('Emails are never proxied through third-party servers. Zero hallucination dispatch — emails only send when you confirm.',
+                  style: TextStyle(fontSize: 10.5, fontStyle: FontStyle.italic, height: 1.4, color: theme.fgMuted)),
+                if (!hasGmail) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => setState(() { _currentMode = AgentMode.personal; _selectedTabIndex = 0; }),
+                      icon: const Icon(Icons.vpn_key_rounded, size: 14),
+                      label: const Text('Configure OAuth in Personal Guide'),
+                      style: ElevatedButton.styleFrom(backgroundColor: theme.accentFg, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 9), textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingAudioGatingTab(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0969DA).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF0969DA).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0969DA).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.headset_mic_rounded, color: Color(0xFF0969DA), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('macOS Audio Loopback & Room Noise Gating', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      const SizedBox(height: 2),
+                      Text('Captures earphone audio from remote attendees while mathematically blocking ambient room noise when muted.', style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Section 1: Loopback
+          _buildMeetingSection(theme, '1', Icons.router_rounded, 'Automated System Audio (Earphone Loopback)', const Color(0xFF0969DA)),
+          const SizedBox(height: 8),
+          _buildMeetingInfoCard(theme, icon: Icons.settings_input_composite_rounded, title: 'Virtual Loopback Devices', desc: 'DeskMate scans for BlackHole 2ch, Loopback (Rogue Amoeba), or custom Aggregate Devices to capture system/earphone audio.'),
+          _buildMeetingInfoCard(theme, icon: Icons.device_hub_rounded, title: 'Native Hardware Fallback', desc: 'If no virtual loopback driver is found, falls back cleanly to the default macOS system input with no configuration needed.'),
+          _buildMeetingInfoCard(theme, icon: Icons.graphic_eq_rounded, title: 'Target Specification', desc: 'Records at native 16,000 Hz, 16-bit Mono PCM — matching Voxtral 4B training weights for zero-resampling, maximum accuracy.'),
+
+          const SizedBox(height: 12),
+
+          // Section 2: Mic Gating
+          _buildMeetingSection(theme, '2', Icons.mic_off_rounded, 'Real-Time Microphone Gating (Room Noise Rejection)', const Color(0xFFCF222E)),
+          const SizedBox(height: 8),
+
+          // State table as structured cards
+          Container(
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              children: [
+                _buildMicStateRow(theme, isActive: true,
+                  label: 'Mic Active',
+                  badge: 'Earphones + Microphone',
+                  desc: 'User speech is recorded and diarized alongside remote attendee audio.',
+                ),
+                Divider(height: 1, color: theme.borderDefault),
+                _buildMicStateRow(theme, isActive: false,
+                  label: 'Mic Muted',
+                  badge: 'Earphone Audio Only',
+                  desc: 'Microphone buffer frames are zeroed at hardware level. Room chatter, background music, and echo CANNOT enter the recording.',
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Section 3: DeskMate Noise Filter
+          _buildMeetingSection(theme, '3', Icons.filter_alt_rounded, 'DeskMate Host App Noise Filtering', const Color(0xFF8957E5)),
+          const SizedBox(height: 8),
+          _buildMeetingInfoCard(theme, icon: Icons.timer_outlined, title: '2.0-Second Grace Period', desc: 'When you click "Start Meeting Scribe" inside DeskMate, recording is suppressed for the first 2 seconds so DeskMate UI interactions are never captured.'),
+          _buildMeetingInfoCard(theme, icon: Icons.filter_list_rounded, title: 'Heuristic Keyword Filter', desc: 'DeskMate UI clicks ("Meeting Scribe", "End Meeting", "Mic Muted") and macOS Dock / Alt-Tab switcher frames are automatically rejected from visual moments and transcripts.'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingMasterReferenceTab(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.borderDefault, width: 1),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: theme.accentFg.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                  child: Icon(Icons.api_rounded, color: theme.accentFg, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Meeting Scribe REST API', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      const SizedBox(height: 2),
+                      Text('All endpoints are available at http://127.0.0.1:2026 (port-forwarded from backend :8080).', style: TextStyle(fontFamily: 'monospace', fontSize: 10.5, color: theme.fgMuted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // API Endpoints
+          Row(
+            children: [
+              Icon(Icons.cloud_circle_outlined, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('REST ENDPOINTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/start',
+            title: 'Start Meeting Recording',
+            description: 'Launches non-blocking screen capture (MSS at 2.0 FPS) and initializes the 8-stage computer vision detection thread.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/start" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"monitor": 1, "fps": 2.0}\'',
+            responseJson: '{\n  "status": "recording",\n  "session_id": "20261020_113000",\n  "fps": 2.0,\n  "monitor": 1\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'GET',
+            endpoint: '/api/meeting/status',
+            title: 'Live Telemetry Metrics',
+            description: 'Returns real-time recording metrics including session uptime, total frames processed, unique events detected, and steps count. Polled by the UI timer card every second.',
+            curlCommand: 'curl -X GET "http://127.0.0.1:2026/api/meeting/status"',
+            responseJson: '{\n  "state": "running",\n  "session_id": "20261020_113000",\n  "uptime_seconds": 124.5,\n  "frames_processed": 248,\n  "frames_skipped": 192,\n  "events_detected": 14,\n  "steps_count": 5\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/mute',
+            title: 'Mic Mute Gating',
+            description: 'Toggles real-time microphone audio capture. When muted, silence is piped into the audio pipeline to protect confidential room discussions.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/mute" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"muted": true}\'',
+            responseJson: '{\n  "status": "success",\n  "muted": true\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/stop',
+            title: 'Finalize Session Recording',
+            description: 'Halts screen capture, joins consumer threads, finalizes chronological steps in StepBuilder, and saves session_{session_id}.json.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/stop"',
+            responseJson: '{\n  "status": "completed",\n  "session_id": "20261020_113000",\n  "steps_count": 6,\n  "duration_seconds": 132.8\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/summarize',
+            title: 'Multimodal Summarization & PDF',
+            description: 'Executes the multimodal reasoning pipeline: Voxtral 4B speaker diarization, LocateAnything-3B vision grounding, Gemini / Ollama timeline fusion, and executive PDF generation.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/summarize" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "purge_raw_assets_after": true}\'',
+            responseJson: '{\n  "session_id": "20261020_113000",\n  "summary": "### Executive Overview\\nDiscussed Q4 roadmap and architecture...",\n  "important_steps": ["step_1", "step_4"],\n  "pdf_generated": true,\n  "pdf_url": "/api/meeting/pdf/20261020_113000"\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'GET',
+            endpoint: '/api/meeting/pdf/{session_id}',
+            title: 'Download Compiled Meeting PDF',
+            description: 'Streams the compiled DeskMate executive PDF report directly to the client for local viewing, archival, or sharing.',
+            curlCommand: 'curl -X GET "http://127.0.0.1:2026/api/meeting/pdf/20261020_113000" -O',
+            responseJson: '// Binary Application/PDF Stream\n// Saved as: deskmate_report_20261020_113000.pdf',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/export-drive',
+            title: 'Upload to Google Drive',
+            description: 'Automatically locates or creates "DeskMate Meeting Summaries" folder in Google Drive root, uploads the executive PDF report, and returns a direct shareable link.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/export-drive" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000"}\'',
+            responseJson: '{\n  "status": "success",\n  "file_id": "1A2B3C4D5E...",\n  "file_name": "DeskMate_Report_20261020_113000.pdf",\n  "view_link": "https://drive.google.com/file/d/1A2B3C4D5E.../view"\n}',
+          ),
+          _buildApiEndpointCard(
+            theme,
+            method: 'POST',
+            endpoint: '/api/meeting/send-email',
+            title: 'Email Summary & PDF Dispatch',
+            description: 'Sends an email via Gmail API with the executive meeting briefing in the HTML body and the full DeskMate PDF attached.',
+            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/send-email" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "recipient": "team@example.com"}\'',
+            responseJson: '{\n  "status": "sent",\n  "recipient": "team@example.com",\n  "session_id": "20261020_113000"\n}',
+          ),
+
+          const SizedBox(height: 14),
+
+          // Custom Columns
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('CUSTOM FOCUS INQUIRIES', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault, width: 0.8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Add inquiry columns before starting a session to track specific topics:', style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4)),
+                const SizedBox(height: 8),
+                _buildExampleInquiry(theme, '"Technical Blockers"', 'Extract any mentioned timeline delays or server capacity constraints.'),
+                _buildExampleInquiry(theme, '"Budget Approval"', 'Identify any numbers, approvals, or sign-off decisions discussed.'),
+                _buildExampleInquiry(theme, '"Actions for Sarah"', 'List all tasks or follow-ups assigned to or mentioned for Sarah.'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // macOS Permissions
+          Row(
+            children: [
+              Icon(Icons.security_rounded, size: 14, color: theme.accentFg),
+              const SizedBox(width: 6),
+              Text('MACOS PERMISSIONS REQUIRED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildMeetingInfoCard(theme, icon: Icons.screen_share_rounded, title: 'Screen & System Audio Recording', desc: 'System Settings > Privacy & Security > Screen Recording. Grant access to DeskMate to enable visual frame capture.'),
+          _buildMeetingInfoCard(theme, icon: Icons.mic_rounded, title: 'Microphone Access', desc: 'System Settings > Privacy & Security > Microphone. Grant access to DeskMate to capture user voice for speaker diarization.'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoogleConfigBanner({
+    required ThemeData theme,
+    required bool isOnline,
+    required String onlineTitle,
+    required String offlineTitle,
+    required String onlineDesc,
+    required String offlineDesc,
+    required IconData icon,
+  }) {
+    final color = isOnline ? const Color(0xFF2DA44E) : const Color(0xFFCF222E);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.40), width: 1.0),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        isOnline ? onlineTitle : offlineTitle,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: theme.isDark
+                              ? (isOnline ? const Color(0xFF7EE787) : const Color(0xFFFFA198))
+                              : color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(isOnline ? onlineDesc : offlineDesc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingInfoCard(ThemeData theme, {required IconData icon, required String title, required String desc}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: theme.accentFg),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                const SizedBox(height: 2),
+                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingSection(ThemeData theme, String number, IconData icon, String title, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
-            border: Border(left: BorderSide(color: theme.accentFg, width: 3)),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
           ),
+          child: Text(number, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+        ),
+        const SizedBox(width: 8),
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 6),
+        Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault))),
+      ],
+    );
+  }
+
+  Widget _buildMicStateRow(ThemeData theme, {required bool isActive, required String label, required String badge, required String desc}) {
+    final color = isActive ? const Color(0xFF2DA44E) : const Color(0xFFCF222E);
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 3),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
+                      ),
+                      child: Text(badge, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExampleInquiry(ThemeData theme, String name, String instruction) {
+    final keyId = 'inquiry_${name}_${instruction.hashCode}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.label_outline_rounded, size: 12, color: theme.accentFg),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$name  ',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: theme.fgDefault,
+                    ),
+                  ),
+                  TextSpan(
+                    text: instruction,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.fgMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            mouseCursor: SystemMouseCursors.click,
+            onTap: () => _copy(instruction, keyId, name),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _copiedKey == keyId
+                        ? Icons.check_rounded
+                        : Icons.copy_rounded,
+                    size: 11,
+                    color: _copiedKey == keyId
+                        ? const Color(0xFF2DA44E)
+                        : theme.accentFg,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    _copiedKey == keyId ? 'Copied' : 'Copy',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _copiedKey == keyId
+                          ? const Color(0xFF2DA44E)
+                          : theme.accentFg,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommandRow(
+    ThemeData theme,
+    String label,
+    String command,
+    String keyId, {
+    bool isUrl = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.borderDefault, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.accentFg.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: theme.accentFg,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              command,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 11,
+                color: theme.isDark
+                    ? const Color(0xFF7EE787)
+                    : const Color(0xFF116329),
+              ),
+            ),
+          ),
+          InkWell(
+            mouseCursor: SystemMouseCursors.click,
+            onTap: () => _copy(command, keyId, label),
+            child: Row(
+              children: [
+                Icon(
+                  _copiedKey == keyId
+                      ? Icons.check_rounded
+                      : (isUrl ? Icons.open_in_new_rounded : Icons.copy_rounded),
+                  size: 11,
+                  color: _copiedKey == keyId
+                      ? const Color(0xFF2DA44E)
+                      : theme.accentFg,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _copiedKey == keyId ? 'Copied' : (isUrl ? 'Open' : 'Copy'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: _copiedKey == keyId
+                        ? const Color(0xFF2DA44E)
+                        : theme.accentFg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultiTurnStep(
+    ThemeData theme,
+    String step,
+    String prompt,
+    String resolution,
+  ) {
+    final cleanPrompt = prompt.replaceAll('"', '');
+    final keyId = 'step_${step}_${cleanPrompt.hashCode}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.accentFg.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: theme.accentFg.withValues(alpha: 0.35),
+                width: 0.6,
+              ),
+            ),
+            child: Text(
+              step,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: theme.accentFg,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$prompt  ➔  ',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: theme.fgDefault,
+                    ),
+                  ),
+                  TextSpan(
+                    text: resolution,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.fgMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            mouseCursor: SystemMouseCursors.click,
+            onTap: () => _copy(cleanPrompt, keyId, step),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _copiedKey == keyId
+                        ? Icons.check_rounded
+                        : Icons.copy_rounded,
+                    size: 11,
+                    color: _copiedKey == keyId
+                        ? const Color(0xFF2DA44E)
+                        : theme.accentFg,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    _copiedKey == keyId ? 'Copied' : 'Copy',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _copiedKey == keyId
+                          ? const Color(0xFF2DA44E)
+                          : theme.accentFg,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormatBadge(ThemeData theme, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.30), width: 0.8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          color: theme.isDark ? color.withValues(alpha: 0.9) : color,
         ),
       ),
+    );
+  }
+
+
+  Widget _buildApiEndpointCard(
+    ThemeData theme, {
+    required String method,
+    required String endpoint,
+    required String title,
+    required String description,
+    String? curlCommand,
+    String? responseJson,
+  }) {
+    final isPost = method == 'POST';
+    final methodColor = isPost ? const Color(0xFF8957E5) : const Color(0xFF0969DA);
+    final keyId = 'curl_$endpoint';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: theme.isDark ? const Color(0xFF161B22) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.borderDefault, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: theme.isDark ? 0.25 : 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.isDark
+                  ? const Color(0xFF1C2128)
+                  : const Color(0xFFF6F8FA),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(9),
+                topRight: Radius.circular(9),
+              ),
+              border: Border(
+                bottom: BorderSide(color: theme.borderDefault, width: 0.8),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: methodColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: methodColor.withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    method,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: methodColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  endpoint,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '— $title',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: theme.fgMuted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: theme.fgDefault,
+                  ),
+                ),
+                if (curlCommand != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'CURL REQUEST',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: theme.fgMuted,
+                        ),
+                      ),
+                      InkWell(
+                        mouseCursor: SystemMouseCursors.click,
+                        onTap: () => _copy(curlCommand, keyId, 'cURL command'),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _copiedKey == keyId
+                                  ? Icons.check_rounded
+                                  : Icons.copy_rounded,
+                              size: 11,
+                              color: _copiedKey == keyId
+                                  ? const Color(0xFF2DA44E)
+                                  : theme.accentFg,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _copiedKey == keyId ? 'Copied' : 'Copy cURL',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: _copiedKey == keyId
+                                    ? const Color(0xFF2DA44E)
+                                    : theme.accentFg,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: theme.borderDefault, width: 0.8),
+                    ),
+                    child: SelectableText(
+                      curlCommand,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        height: 1.4,
+                        color: theme.isDark ? const Color(0xFF7EE787) : const Color(0xFF116329),
+                      ),
+                    ),
+                  ),
+                ],
+                if (responseJson != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'SAMPLE RESPONSE',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: theme.fgMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: theme.borderDefault, width: 0.8),
+                    ),
+                    child: SelectableText(
+                      responseJson,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        height: 1.4,
+                        color: theme.isDark ? const Color(0xFF79C0FF) : const Color(0xFF0550AE),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOAuthScopeRow(ThemeData theme, String scope, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.accentFg.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(scope, style: TextStyle(fontFamily: 'monospace', fontSize: 10, fontWeight: FontWeight.w700, color: theme.accentFg)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(desc, style: TextStyle(fontSize: 11, height: 1.35, color: theme.fgMuted))),
+      ],
     );
   }
 }
