@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../core/constants.dart';
 import '../services/gemini_service.dart';
 
 class ApiService {
@@ -339,5 +340,42 @@ class ApiService {
       'subject': subject,
       'cc_email': ccEmail,
     });
+  }
+
+  Future<List<Map<String, dynamic>>> getMeetingSessions() async {
+    final res = await _getJson(
+      ApiPaths.meetingSessions,
+      timeout: const Duration(seconds: 4),
+      fallback: {'status': 'ok', 'sessions': []},
+    );
+    final list = res['sessions'];
+    if (list is List) {
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> getMeetingSessionReport(
+    String sessionId,
+  ) async {
+    final res = await _getJson(
+      ApiPaths.meetingSession(sessionId),
+      timeout: const Duration(seconds: 6),
+      fallback: {'status': 'error'},
+    );
+    if (res['status'] == 'ok' && res['session'] is Map) {
+      return Map<String, dynamic>.from(res['session'] as Map);
+    }
+    return null;
+  }
+
+  Future<bool> deleteMeetingSession(String sessionId) async {
+    try {
+      final url = Uri.parse('$baseUrl${ApiPaths.meetingSession(sessionId)}');
+      final resp = await http.delete(url).timeout(const Duration(seconds: 5));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
   }
 }

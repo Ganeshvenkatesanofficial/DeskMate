@@ -79,7 +79,7 @@ DEFAULT_SCREEN_FPS: float = float(os.getenv("DEFAULT_SCREEN_FPS", "2.0"))
 # ─── Database & Local Storage Settings ──────────────────────────────────────
 LOCAL_AGENT_DB: str = os.getenv("LOCAL_AGENT_DB", str(USER_DATA_DIR / "deskmate_agent.db"))
 SESSIONS_OUTPUT_DIR: str = os.getenv("SESSIONS_OUTPUT_DIR", "output/sessions")
-MAX_RETAINED_SESSIONS: int = int(os.getenv("MAX_RETAINED_SESSIONS", "15"))
+MAX_RETAINED_SESSIONS: int = int(os.getenv("MAX_RETAINED_SESSIONS", "10"))
 
 # ─── Google Workspace Credentials & Tokens ──────────────────────────────────
 GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")

@@ -62,6 +62,8 @@ abstract final class ApiPaths {
       '/api/meeting/asset/$sid/$file';
   static const String meetingExportDrive = '/api/meeting/export-drive';
   static const String meetingSendEmail = '/api/meeting/send-email';
+  static const String meetingSessions = '/api/meeting/sessions';
+  static String meetingSession(String id) => '/api/meeting/session/$id';
 
   static const String wsFileAgent = '/ws/file-agent';
   static const String wsPersonalAgent = '/ws/personal-agent';

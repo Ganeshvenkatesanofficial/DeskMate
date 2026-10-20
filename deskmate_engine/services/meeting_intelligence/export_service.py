@@ -15,6 +15,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
+from datetime import datetime
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -31,7 +32,7 @@ class MeetingExportService:
     and automatic local asset retention.
     """
 
-    def __init__(self, output_dir: str = "output/sessions", max_retained_sessions: int = 15):
+    def __init__(self, output_dir: str = "output/sessions", max_retained_sessions: int = 10):
         self.output_dir = Path(output_dir)
         self.max_retained_sessions = max_retained_sessions
 
@@ -253,3 +254,142 @@ Generated with DeskMate Meeting Scribe.
         """
         logger.info(f"Retaining step screenshots for session: {session_id} (disk managed by retention policy)")
         return True
+
+    @staticmethod
+    def _safe_session_id(session_id: str) -> str:
+        """Strip path separators to prevent directory traversal."""
+        return session_id.replace("/", "").replace("\\", "").replace("..", "").replace("\0", "")
+
+    def delete_session(self, session_id: str) -> dict[str, Any]:
+        """
+        Permanently deletes a single session directory, all its screenshot frames,
+        audio files, PDF report, and session report JSON from local disk.
+        """
+        try:
+            session_id = self._safe_session_id(session_id)
+            if not session_id:
+                return {"status": "error", "message": "Invalid session ID", "session_id": session_id}
+            session_dir = self.output_dir / session_id
+            json_file = self.output_dir / f"session_{session_id}.json"
+
+            deleted_dir = False
+            deleted_json = False
+
+            if session_dir.exists() and session_dir.is_dir():
+                shutil.rmtree(session_dir, ignore_errors=True)
+                deleted_dir = True
+
+            if json_file.exists() and json_file.is_file():
+                json_file.unlink(missing_ok=True)
+                deleted_json = True
+
+            logger.info(f"Deleted meeting session {session_id}: dir={deleted_dir}, json={deleted_json}")
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "deleted_directory": deleted_dir,
+                "deleted_json": deleted_json,
+            }
+        except Exception as e:
+            logger.exception(f"Failed to delete session {session_id}: {e}")
+            return {"status": "error", "message": str(e), "session_id": session_id}
+
+    def get_session_data(self, session_id: str) -> Optional[dict[str, Any]]:
+        """
+        Retrieves the complete report JSON for a given session.
+        """
+        session_id = self._safe_session_id(session_id)
+        if not session_id:
+            return None
+        json_file = self.output_dir / f"session_{session_id}.json"
+        if not json_file.exists():
+            return None
+
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["session_id"] = session_id
+            return data
+        except Exception as e:
+            logger.error(f"Failed to read session file {json_file}: {e}")
+            return None
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        """
+        Lists all locally stored meeting sessions sorted newest to oldest.
+        Gathers session metadata (title, preview, speaker count, pdf availability).
+        """
+        if not self.output_dir.exists():
+            return []
+
+        sessions: dict[str, dict[str, Any]] = {}
+
+        # 1. Inspect all session_<id>.json report files
+        for json_file in self.output_dir.glob("session_*.json"):
+            try:
+                sid = json_file.stem.replace("session_", "")
+                mtime = json_file.stat().st_mtime
+                with open(json_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                summary = str(data.get("summary") or "")
+                # Extract first clean headline or snippet for title
+                first_line = summary.strip().split("\n")[0].replace("#", "").strip() if summary else ""
+                title = first_line if first_line and len(first_line) < 80 else f"Meeting {sid}"
+
+                preview = summary.replace("#", "").strip()
+                if len(preview) > 160:
+                    preview = preview[:160].rstrip() + "..."
+
+                transcript = data.get("transcript") or {}
+                segments = transcript.get("segments") or []
+                unique_speakers = {
+                    s.get("speaker") for s in segments if isinstance(s, dict) and s.get("speaker")
+                }
+
+                session_dir = self.output_dir / sid
+                has_pdf = (session_dir / f"deskmate_report_{sid}.pdf").exists()
+                has_audio = (session_dir / "audio.wav").exists() or (session_dir / "meeting_audio.wav").exists()
+
+                sessions[sid] = {
+                    "session_id": sid,
+                    "title": title,
+                    "summary_preview": preview,
+                    "created_at": datetime.fromtimestamp(mtime).strftime("%b %d, %Y • %I:%M %p"),
+                    "timestamp": mtime,
+                    "has_summary": bool(summary),
+                    "has_pdf": has_pdf,
+                    "has_audio": has_audio,
+                    "steps_count": len(data.get("steps") or data.get("important_steps") or []),
+                    "speakers_count": len(unique_speakers),
+                    "dialogue_turns": len(segments),
+                }
+            except Exception as e:
+                logger.warning(f"Error reading session JSON {json_file}: {e}")
+
+        # 2. Inspect session directories without corresponding JSON (if any)
+        for item in self.output_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("."):
+                sid = item.name
+                if sid not in sessions:
+                    mtime = item.stat().st_mtime
+                    has_pdf = (item / f"deskmate_report_{sid}.pdf").exists()
+                    has_audio = (item / "audio.wav").exists() or (item / "meeting_audio.wav").exists()
+                    sessions[sid] = {
+                        "session_id": sid,
+                        "title": f"Meeting {sid}",
+                        "summary_preview": "In-progress or raw recorded meeting session.",
+                        "created_at": datetime.fromtimestamp(mtime).strftime("%b %d, %Y • %I:%M %p"),
+                        "timestamp": mtime,
+                        "has_summary": False,
+                        "has_pdf": has_pdf,
+                        "has_audio": has_audio,
+                        "steps_count": 0,
+                        "speakers_count": 0,
+                        "dialogue_turns": 0,
+                    }
+
+        # Sort newest first
+        sorted_list = sorted(sessions.values(), key=lambda s: s.get("timestamp", 0), reverse=True)
+        return sorted_list
+

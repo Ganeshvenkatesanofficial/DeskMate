@@ -426,3 +426,36 @@ async def sync_action_items_to_tasks(req: SyncTasksRequest):
         logger.exception(f"Failed to sync action items to tasks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/sessions")
+async def get_saved_sessions():
+    """Retrieve metadata list of all locally stored meeting sessions (up to 10 retained)."""
+    exporter: MeetingExportService = _SESSION_STATE["export_service"]
+    sessions = await asyncio.to_thread(exporter.list_sessions)
+    return {"status": "ok", "sessions": sessions, "count": len(sessions)}
+
+
+@router.get("/session/{session_id}")
+async def get_session_details(session_id: str):
+    """Retrieve complete report JSON for a specific meeting session to restore in UI."""
+    if "/" in session_id or "\\" in session_id or ".." in session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    exporter: MeetingExportService = _SESSION_STATE["export_service"]
+    data = await asyncio.to_thread(exporter.get_session_data, session_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Session report not found")
+    return {"status": "ok", "session": data}
+
+
+@router.delete("/session/{session_id}")
+async def delete_saved_session(session_id: str):
+    """Permanently delete a meeting session and all its disk files."""
+    if "/" in session_id or "\\" in session_id or ".." in session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    exporter: MeetingExportService = _SESSION_STATE["export_service"]
+    res = await asyncio.to_thread(exporter.delete_session, session_id)
+    if res.get("status") == "error":
+        raise HTTPException(status_code=500, detail="Deletion failed")
+    return res
+
+

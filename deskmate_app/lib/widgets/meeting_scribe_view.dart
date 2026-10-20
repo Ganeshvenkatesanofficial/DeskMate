@@ -59,6 +59,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       TextEditingController();
   bool _showTopicInput = false;
 
+  // Past sessions archive state
+  List<Map<String, dynamic>> _savedSessions = [];
+  bool _isLoadingSessions = false;
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +83,476 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     super.dispose();
   }
 
+  List<String> _extractActionItemsFromSummary(String summaryText) {
+    final extractedActions = <String>[];
+    for (final line in summaryText.split('\n')) {
+      if (line.contains('[ACTION ITEM]') || line.contains('[HIGH PRIORITY]')) {
+        extractedActions.add(line.replaceAll('**', '').trim());
+      }
+    }
+    return extractedActions;
+  }
+
+  Future<void> _loadSavedSessions({bool autoLoadLatest = false}) async {
+    if (!mounted) return;
+    setState(() => _isLoadingSessions = true);
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    try {
+      final sessions = await provider.apiService.getMeetingSessions();
+      if (mounted) {
+        setState(() {
+          _savedSessions = sessions;
+          _isLoadingSessions = false;
+        });
+
+        // If user opened/reopened the app, automatically restore latest completed meeting!
+        if (autoLoadLatest &&
+            sessions.isNotEmpty &&
+            _executiveSummary == null &&
+            !_isRecording) {
+          final latestId = sessions.first['session_id']?.toString();
+          if (latestId != null) {
+            await _restoreSession(latestId, showNotification: false);
+          }
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingSessions = false);
+      }
+    }
+  }
+
+  Future<void> _restoreSession(
+    String sessionId, {
+    bool showNotification = true,
+  }) async {
+    final provider = Provider.of<ChatProvider>(context, listen: false);
+    try {
+      final sessionData = await provider.apiService.getMeetingSessionReport(
+        sessionId,
+      );
+      if (sessionData != null && mounted) {
+        final summaryText = sessionData['summary']?.toString() ?? '';
+        setState(() {
+          _currentSessionId = sessionId;
+          _executiveSummary = summaryText;
+          _importantSteps =
+              (sessionData['important_steps'] as List?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+          _stepDescriptions = Map<String, dynamic>.from(
+            sessionData['step_descriptions'] ?? {},
+          );
+          _transcriptData = sessionData['transcript'] is Map
+              ? Map<String, dynamic>.from(sessionData['transcript'])
+              : null;
+          _customFieldsAnalysis = Map<String, dynamic>.from(
+            sessionData['custom_fields'] ?? {},
+          );
+          _meetingSteps = (sessionData['steps'] as List?) ?? [];
+          _pdfUrl = provider.apiService.getMeetingPdfUrl(sessionId);
+          _actionItems = _extractActionItemsFromSummary(summaryText);
+        });
+        if (showNotification) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Loaded meeting report: $sessionId'),
+              backgroundColor: AppTheme.emerald,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (showNotification && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load session: $e'),
+            backgroundColor: AppTheme.recordingRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmAndDeleteSession(String sessionId) async {
+    final theme = Theme.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.bgSubtle,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: theme.borderDefault),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.recordingRed.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.delete_forever_rounded,
+                color: AppTheme.recordingRed,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Delete Session?',
+              style: TextStyle(
+                color: theme.fgDefault,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will permanently delete session "$sessionId" and purge all audio recordings, screenshots, and the PDF report completely from your local disk.\n\nThis cannot be undone.',
+          style: TextStyle(color: theme.fgMuted, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: theme.fgMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.recordingRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete from Disk'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final provider = Provider.of<ChatProvider>(context, listen: false);
+      final ok = await provider.apiService.deleteMeetingSession(sessionId);
+      if (ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Permanently deleted session $sessionId from disk'),
+            backgroundColor: AppTheme.emerald,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        if (_currentSessionId == sessionId) {
+          setState(() {
+            _executiveSummary = null;
+            _transcriptData = null;
+            _importantSteps = [];
+            _meetingSteps = [];
+            _customFieldsAnalysis = {};
+            _actionItems = [];
+            _currentSessionId = null;
+            _pdfUrl = null;
+          });
+        }
+        await _loadSavedSessions(autoLoadLatest: false);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete session from disk'),
+            backgroundColor: AppTheme.recordingRed,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showSavedSessionsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final theme = Theme.of(context);
+          return Dialog(
+            backgroundColor: theme.bgSubtle,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: theme.borderDefault),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680, maxHeight: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.accentFg.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.history_rounded,
+                            color: theme.accentFg,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Saved Meeting Archives',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.fgDefault,
+                                ),
+                              ),
+                              Text(
+                                '${_savedSessions.length} session(s) available • Retained on disk for re-analysis & export',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.fgMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                          tooltip: 'Refresh',
+                          onPressed: () async {
+                            setDialogState(() => _isLoadingSessions = true);
+                            await _loadSavedSessions(autoLoadLatest: false);
+                            setDialogState(() {});
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    if (_isLoadingSessions)
+                      const Expanded(
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_savedSessions.isEmpty)
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.folder_open_rounded,
+                                size: 48,
+                                color: theme.fgMuted,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No saved meeting sessions found',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: theme.fgMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: _savedSessions.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, idx) {
+                            final s = _savedSessions[idx];
+                            final id = (s['session_id'] ?? '').toString();
+                            final dt = s['created_at'] != null
+                                ? s['created_at']
+                                      .toString()
+                                      .substring(0, 19)
+                                      .replaceAll('T', ' ')
+                                : id;
+                            final hasSummary = s['has_summary'] == true;
+                            final hasPdf = s['has_pdf'] == true;
+                            final isCurrent = _currentSessionId == id;
+
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isCurrent
+                                    ? theme.accentFg.withValues(alpha: 0.08)
+                                    : theme.bgCanvas,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? theme.accentFg.withValues(alpha: 0.4)
+                                      : theme.borderDefault,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          (hasSummary
+                                                  ? AppTheme.emerald
+                                                  : Colors.amber)
+                                              .withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      hasSummary
+                                          ? Icons.check_circle_outline_rounded
+                                          : Icons.pending_outlined,
+                                      color: hasSummary
+                                          ? AppTheme.emerald
+                                          : Colors.amber,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              id,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: theme.fgDefault,
+                                              ),
+                                            ),
+                                            if (isCurrent) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: theme.accentFg
+                                                      .withValues(alpha: 0.15),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  'ACTIVE',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: theme.accentFg,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          dt,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: theme.fgMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (hasPdf) ...[
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.picture_as_pdf_rounded,
+                                        size: 18,
+                                      ),
+                                      tooltip: 'Download PDF Report',
+                                      color: AppTheme.recordingRed,
+                                      onPressed: () {
+                                        final provider =
+                                            Provider.of<ChatProvider>(
+                                              context,
+                                              listen: false,
+                                            );
+                                        final url = provider.apiService
+                                            .getMeetingPdfUrl(id);
+                                        openExternal(url);
+                                      },
+                                    ),
+                                  ],
+                                  OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      side: BorderSide(
+                                        color: theme.borderDefault,
+                                      ),
+                                    ),
+                                    onPressed: isCurrent
+                                        ? null
+                                        : () {
+                                            Navigator.pop(ctx);
+                                            _restoreSession(id);
+                                          },
+                                    child: Text(
+                                      isCurrent ? 'Viewing' : 'Load',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isCurrent
+                                            ? theme.fgMuted
+                                            : theme.fgDefault,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 18,
+                                    ),
+                                    tooltip: 'Delete Session',
+                                    color: AppTheme.recordingRed,
+                                    onPressed: () async {
+                                      await _confirmAndDeleteSession(id);
+                                      setDialogState(() {});
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _checkInitialStatus() async {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     try {
@@ -97,9 +571,15 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         });
         if (_isRecording) {
           _startPolling();
+        } else {
+          await _loadSavedSessions(autoLoadLatest: true);
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        await _loadSavedSessions(autoLoadLatest: true);
+      }
+    }
   }
 
   void _startPolling() {
@@ -285,6 +765,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             _pdfUrl = provider.apiService.getMeetingPdfUrl(_currentSessionId!);
           }
         });
+        _loadSavedSessions(autoLoadLatest: false);
       }
     } catch (e) {
       if (mounted) {
@@ -664,6 +1145,26 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       widget.onOpenSetupGuide?.call(AgentMode.meeting),
                   icon: const Icon(Icons.menu_book_rounded, size: 16),
                   label: const Text('User Guide'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.fgDefault,
+                    side: BorderSide(color: theme.borderDefault),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _loadSavedSessions();
+                    _showSavedSessionsDialog();
+                  },
+                  icon: const Icon(Icons.history_rounded, size: 16),
+                  label: const Text('Past Meetings'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: theme.fgDefault,
                     side: BorderSide(color: theme.borderDefault),

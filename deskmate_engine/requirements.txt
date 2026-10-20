@@ -21,6 +21,7 @@ Pillow>=10.0.0
 mss>=9.0.1
 fpdf2>=2.7.9
 opencv-python-headless>=4.8.0
+sounddevice>=0.4.6
 soundfile>=0.12.1
 python-multipart>=0.0.20
 
