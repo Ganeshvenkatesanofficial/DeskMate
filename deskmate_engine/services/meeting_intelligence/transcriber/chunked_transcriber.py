@@ -11,7 +11,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any
 
 from .voxtral_service import VoxtralSpeechEngine
 
@@ -38,7 +39,7 @@ class ChunkedTranscriber:
 
     async def transcribe_long_file(self, audio_path: str) -> Dict[str, Any]:
         """Transcribe short files directly, or partition long files into chunks."""
-        if not os.path.exists(audio_path):
+        if not Path(audio_path).exists():
             return {
                 "full_transcript": "",
                 "segments": [],
@@ -72,10 +73,11 @@ class ChunkedTranscriber:
 
             # Cleanup temporary chunk file
             try:
-                if os.path.exists(chunk.path) and chunk.path != audio_path:
-                    os.remove(chunk.path)
-            except Exception:
-                pass
+                chunk_p = Path(chunk.path)
+                if chunk_p.exists() and str(chunk_p) != str(Path(audio_path)):
+                    chunk_p.unlink(missing_ok=True)
+            except Exception as e:
+                logger.debug(f"Failed to unlink temp chunk file {chunk_p}: {e}")
 
         return {
             "full_transcript": " ".join(transcript_parts),
@@ -90,7 +92,7 @@ class ChunkedTranscriber:
             info = sf.info(audio_path)
             return float(info.duration)
         except Exception:
-            size = os.path.getsize(audio_path)
+            size = Path(audio_path).stat().st_size
             return max(1.0, size / 32000.0)
 
     def _split_audio(self, audio_path: str, total_duration: float) -> List[AudioChunk]:
@@ -106,12 +108,12 @@ class ChunkedTranscriber:
 
             idx = 0
             start_samp = 0
-            base_dir = os.path.dirname(audio_path)
+            base_dir = Path(audio_path).parent
 
             while start_samp < total_samples:
                 end_samp = min(start_samp + chunk_samples, total_samples)
                 chunk_data = data[start_samp:end_samp]
-                chunk_file = os.path.join(base_dir, f"temp_chunk_{idx}.wav")
+                chunk_file = str(base_dir / f"temp_chunk_{idx}.wav")
                 sf.write(chunk_file, chunk_data, sr)
 
                 chunks.append(AudioChunk(

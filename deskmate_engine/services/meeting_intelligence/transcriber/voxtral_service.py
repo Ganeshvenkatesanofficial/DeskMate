@@ -15,7 +15,10 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any
+
+from settings import MISTRAL_API_KEY, VOXTRAL_LOCAL_MODEL
 
 logger = logging.getLogger("deskmate.voxtral")
 
@@ -33,16 +36,16 @@ class VoxtralSpeechEngine:
 
     def __init__(
         self,
-        model_name: str = "mistralai/Voxtral-Mini-4B-Realtime-2602",
-        mistral_api_key: Optional[str] = None,
+        model_name: str = VOXTRAL_LOCAL_MODEL,
+        mistral_api_key: str | None = None,
     ):
         self.model_name = model_name
-        self.api_key = mistral_api_key or os.getenv("MISTRAL_API_KEY", "")
+        self.api_key = mistral_api_key or MISTRAL_API_KEY
         self._model = None
         self._processor = None
         self._initialized = False
 
-    async def transcribe_file(self, audio_path: str) -> Dict[str, Any]:
+    async def transcribe_file(self, audio_path: str) -> dict[str, Any]:
         """
         Transcribe audio file asynchronously using Voxtral 4B.
 
@@ -53,7 +56,7 @@ class VoxtralSpeechEngine:
                 - duration_seconds: float
                 - language: str
         """
-        if not os.path.exists(audio_path):
+        if not Path(audio_path).exists():
             logger.error(f"Audio file not found: {audio_path}")
             return {
                 "full_transcript": "",
@@ -66,7 +69,7 @@ class VoxtralSpeechEngine:
         logger.info(f"Voxtral 4B transcribing: {audio_path}...")
 
         # Run transcription in thread to ensure zero UI event-loop blockage
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._transcribe_sync, audio_path)
 
         elapsed = round(time.time() - start_time, 2)
@@ -113,7 +116,7 @@ class VoxtralSpeechEngine:
         # 3. Native audio inspection fallback
         return self._generate_audio_analysis_fallback(audio_path)
 
-    def _transcribe_via_mistral_api(self, audio_path: str) -> Optional[Dict[str, Any]]:
+    def _transcribe_via_mistral_api(self, audio_path: str) -> dict[str, Any] | None:
         """Call Mistral AI Voxtral API endpoint directly."""
         try:
             import requests
@@ -122,7 +125,7 @@ class VoxtralSpeechEngine:
             url = "https://api.mistral.ai/v1/audio/transcriptions"
 
             with open(audio_path, "rb") as f:
-                files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
+                files = {"file": (Path(audio_path).name, f, "audio/wav")}
                 data = {
                     "model": "voxtral-mini-latest",
                     "diarization": "true",
@@ -178,21 +181,13 @@ class VoxtralSpeechEngine:
             logger.error(f"Local Voxtral inference error: {e}")
             return self._generate_audio_analysis_fallback(audio_path)
 
-    def _generate_audio_analysis_fallback(self, audio_path: str) -> Dict[str, Any]:
-        """Provides clean acoustic segment metadata when offline weights are downloading."""
-        file_size = os.path.getsize(audio_path)
-        est_duration = max(1.0, round(file_size / 32000.0, 1))
-
+    def _generate_audio_analysis_fallback(self, audio_path: str) -> dict[str, Any]:
+        """Return an empty transcript with a clear unavailable status indicator."""
         return {
-            "full_transcript": "Meeting session audio captured with Voxtral 4B engine.",
-            "segments": [
-                {
-                    "start": 0.0,
-                    "end": est_duration,
-                    "speaker": "Speaker 1",
-                    "text": "Meeting audio recorded and synchronized with visual events.",
-                }
-            ],
-            "duration_seconds": est_duration,
+            "full_transcript": "",
+            "segments": [],
+            "duration_seconds": 0.0,
             "language": "en",
+            "status": "unavailable",
+            "reason": "No transcription engine configured (set MISTRAL_API_KEY or install local Voxtral weights).",
         }

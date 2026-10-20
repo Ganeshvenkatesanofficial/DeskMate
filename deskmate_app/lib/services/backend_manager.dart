@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
+import '../core/constants.dart';
 
 class BackendManager {
   static Process? _process;
-  static int _assignedPort = 2026;
+  static int _assignedPort = AppConstants.defaultPort;
 
-  static const int defaultPort = 2026;
+  static const int defaultPort = AppConstants.defaultPort;
 
   static int get assignedPort => _assignedPort;
   static String get backendUrl => 'http://127.0.0.1:$_assignedPort';
@@ -84,9 +86,9 @@ class BackendManager {
         // Strip quarantine attributes so it opens cleanly without Gatekeeper bounce
         await Process.run('/usr/bin/xattr', ['-cr', targetApp]);
         await Process.run('/bin/chmod', ['-R', 'u+rwX,go+rX', targetApp]);
-        // Launch the /Applications copy and exit current instance
         await Process.run('/usr/bin/open', [targetApp]);
-        exit(0);
+        await stop();
+        SystemNavigator.pop();
       }
     } catch (e) {
       debugPrint('Failed to copy DeskMate to Applications: $e');
@@ -103,7 +105,7 @@ class BackendManager {
       return;
     }
 
-    for (final port in [8080, 2026, 8000]) {
+    for (final port in AppConstants.legacyPorts) {
       if (await isBackendRunning(port)) {
         _assignedPort = port;
         debugPrint(
@@ -284,7 +286,12 @@ class BackendManager {
     if (!Platform.isWindows && !Platform.isMacOS) return;
     if (_process == null) return;
     try {
-      _process!.kill(ProcessSignal.sigkill);
+      _process!.kill(ProcessSignal.sigterm);
+      try {
+        await _process!.exitCode.timeout(const Duration(seconds: 2));
+      } catch (_) {
+        _process!.kill(ProcessSignal.sigkill);
+      }
       if (Platform.isWindows) {
         await Process.run('taskkill', [
           '/F',

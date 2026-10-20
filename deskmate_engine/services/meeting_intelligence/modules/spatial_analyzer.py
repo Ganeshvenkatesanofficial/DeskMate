@@ -44,11 +44,3 @@ class SpatialAnalyzer:
         mask[:, w-right_w:w] = 0
         
         return mask
-
-    def apply_safety_mask(self, frame_bgr):
-        """Crops/Masks the frame to only valid regions."""
-        h, w = frame_bgr.shape[:2]
-        mask = self.get_safety_mask(h, w)
-        # We don't necessarily want to CROP yet, just return the mask 
-        # so other modules (CursorDetector) can use it for searching.
-        return mask

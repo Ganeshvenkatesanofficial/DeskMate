@@ -11,15 +11,28 @@ import json
 import logging
 import re
 import time
-import uuid
 from typing import Any, Callable, Dict, Generator, List, Optional
 
 import litellm
 from smolagents import ActionStep, FinalAnswerStep, ToolCall, ToolCallingAgent, ToolOutput
 
+from core.config import DEFAULT_GEMINI_MODEL, generate_conversation_id
 from core.models import chat_local_llm, get_default_model, get_installed_chat_models
 
 logger = logging.getLogger("deskmate.telemetry")
+
+_RE_ALL_FILES_SCOPE = re.compile(
+    r"(?i)\bAll\s+([^\n]+?)\s+files\s+found\s+in\s+the\s+current\s+directory\s+and\s+its\s+subdirectories:?"
+)
+_RE_CURRENT_DIR_SUBDIRS = re.compile(
+    r"(?i)\b(in|from)\s+the\s+current\s+directory\s+and\s+its\s+subdirectories\b"
+)
+_RE_CURRENT_DIR = re.compile(
+    r"(?i)\b(in|from)\s+the\s+current\s+directory\b"
+)
+_RE_BR_TAG = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_RE_BR_BULLET = re.compile(r"\s*<br\s*/?>\s*•?\s*", re.IGNORECASE)
+_RE_BR_NEWLINE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
 
 
 def clean_final_answer(raw_answer: str) -> str:
@@ -46,32 +59,20 @@ def clean_final_answer(raw_answer: str) -> str:
             parsed = json.loads(res_str)
             if isinstance(parsed, dict) and "answer" in parsed:
                 res_str = str(parsed["answer"]).strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Telemetry JSON answer unwrapping failed: {e}")
 
     # Sanitize incorrect scope phrasing: user home directory is the entire laptop workspace, NOT "current directory"
-    res_str = re.sub(
-        r"(?i)\bAll\s+([^\n]+?)\s+files\s+found\s+in\s+the\s+current\s+directory\s+and\s+its\s+subdirectories:?",
-        r"All \1 files found across your laptop and workspaces:",
-        res_str,
-    )
-    res_str = re.sub(
-        r"(?i)\b(in|from)\s+the\s+current\s+directory\s+and\s+its\s+subdirectories\b",
-        "across your laptop and workspaces",
-        res_str,
-    )
-    res_str = re.sub(
-        r"(?i)\b(in|from)\s+the\s+current\s+directory\b",
-        "across your laptop and workspaces",
-        res_str,
-    )
+    res_str = _RE_ALL_FILES_SCOPE.sub(r"All \1 files found across your laptop and workspaces:", res_str)
+    res_str = _RE_CURRENT_DIR_SUBDIRS.sub("across your laptop and workspaces", res_str)
+    res_str = _RE_CURRENT_DIR.sub("across your laptop and workspaces", res_str)
 
     # Convert cramped Markdown tables containing <br> into clean, structured Markdown sections
-    if re.search(r"<br\s*/?>", res_str, flags=re.IGNORECASE):
+    if _RE_BR_TAG.search(res_str):
         res_str = _convert_br_tables_to_markdown_sections(res_str)
         # Any residual <br> converted to clean newlines and bullets
-        res_str = re.sub(r"\s*<br\s*/?>\s*•?\s*", r"\n• ", res_str, flags=re.IGNORECASE)
-        res_str = re.sub(r"\s*<br\s*/?>\s*", r"\n\n", res_str, flags=re.IGNORECASE)
+        res_str = _RE_BR_BULLET.sub(r"\n• ", res_str)
+        res_str = _RE_BR_NEWLINE.sub(r"\n\n", res_str)
 
     return res_str.strip() or "Task completed successfully."
 
@@ -251,31 +252,24 @@ def resolve_contextual_query(
 
     # 2. Build lean few-shot contextualizer prompt with strict system & user separation
     system_instruction = (
-        "You are a strict, ultra-concise query contextualizer. "
-        "Given previous turns and a follow-up query, combine them into a single, self-contained standalone search or action query.\n"
-        "CRITICAL RULES:\n"
-        "1. If the Follow-up Query is ALREADY complete, self-contained, or asks for a new task/file/location (e.g. 'can you find my resume in lap'), return it EXACTLY as-is without altering it or blending previous directories into it.\n"
-        "2. Only resolve missing context for incomplete fragments (e.g. 'in backend?', 'how about tomorrow?', 'show me all').\n"
-        "3. NEVER use the phrase 'current directory' when referring to the user's laptop or home folder. Always state 'across your laptop and workspaces'.\n"
-        "4. NEVER change the search scope if the user explicitly specified a new scope like 'in lap', 'in laptop', or 'in Desktop'.\n"
-        "5. Output ONLY the Standalone Query, zero conversational filler.\n\n"
+        "You are a query contextualizer. Merge a follow-up with its prior turn into one standalone query.\n\n"
+        "Rules:\n"
+        "1. If the follow-up is already self-contained or introduces a new topic/scope, return it EXACTLY as-is.\n"
+        "2. Only fill in missing context for incomplete fragments ('in backend?', 'how about tomorrow?', 'show me all').\n"
+        "3. Preserve the user's explicit scope — never override 'in lap', 'in Desktop', 'in Downloads' with a prior directory.\n"
+        "4. Say 'across your laptop' instead of 'current directory' when referencing '~' or home.\n"
+        "5. Output ONLY the standalone query. No explanation, no filler.\n\n"
         "Examples:\n"
-        "- Previous User: Show details of requirements.txt\n"
-        "  Previous Assistant: I found 43 files named requirements.txt across your laptop.\n"
-        "  Follow-up Query: show me all.\n"
-        "  Standalone Query: List all requirements.txt files found across your laptop and workspaces\n"
-        "- Previous User: Show details of requirements.txt\n"
-        "  Follow-up Query: in backend directory check?\n"
-        "  Standalone Query: Check and show details of requirements files in the backend directory and its subfolders\n"
-        "- Previous User: What is the weather in London?\n"
-        "  Follow-up Query: in New York?\n"
-        "  Standalone Query: What is the weather in New York?\n"
-        "- Previous User: Find PDF files larger than 10MB\n"
-        "  Follow-up Query: in Downloads\n"
-        "  Standalone Query: Find PDF files larger than 10MB in Downloads\n"
-        "- Previous User: Check files in verdex-backend\n"
-        "  Follow-up Query: can you find my resume in lap\n"
-        "  Standalone Query: can you find my resume in lap\n"
+        "  User: Show details of requirements.txt | Assistant: Found 43 files. | Follow-up: show me all\n"
+        "  → List all requirements.txt files found across your laptop\n"
+        "  User: Show details of requirements.txt | Follow-up: in backend directory check?\n"
+        "  → Check and show details of requirements files in the backend directory\n"
+        "  User: Weather in London? | Follow-up: in New York?\n"
+        "  → What is the weather in New York?\n"
+        "  User: Find PDF files > 10MB | Follow-up: in Downloads\n"
+        "  → Find PDF files larger than 10MB in Downloads\n"
+        "  User: Check files in verdex-backend | Follow-up: can you find my resume in lap\n"
+        "  → can you find my resume in lap\n"
     )
     user_turn_content = (
         f"Previous User: {last_user}\n"
@@ -336,7 +330,7 @@ def resolve_contextual_query(
                 {"role": "user", "content": user_turn_content},
             ]
             resp = litellm.completion(
-                model="gemini/gemini-2.5-flash",
+                model=DEFAULT_GEMINI_MODEL,
                 api_key=api_key.strip(),
                 messages=messages,
                 max_tokens=48,
@@ -443,8 +437,8 @@ def build_chat_prompt(
         )
         if resolved and resolved.strip().lower() != clean_input.lower():
             query_hint = f"\n[Context Clarification: The user is referring to: {resolved.strip()}]\n"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Telemetry contextual query resolution failed: {e}")
 
     return (
         f"### CONVERSATION HISTORY (Previous turns in this chat session):\n"
@@ -510,7 +504,7 @@ def stream_agent_steps(
     active_conv_id = (
         conversation_id.strip()
         if conversation_id and str(conversation_id).strip()
-        else f"conv_{uuid.uuid4().hex[:12]}"
+        else generate_conversation_id()
     )
     start_time = time.time()
     collected_steps: List[Dict[str, Any]] = []

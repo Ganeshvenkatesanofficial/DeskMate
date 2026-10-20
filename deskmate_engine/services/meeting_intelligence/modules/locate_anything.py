@@ -69,6 +69,7 @@ class LocateAnythingDetector:
         if roi_frame is None or roi_frame.size == 0:
             return []
 
+        # Neural model provides supplementary text-based grounding (logged for future coordinate parsing)
         if self._ensure_model_loaded() and self._model is not None:
             try:
                 rgb = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2RGB)
@@ -80,9 +81,8 @@ class LocateAnythingDetector:
                     if decoded:
                         logger.debug(f"LocateAnything text output: {decoded[0][:60]}")
             except Exception as e:
-                logger.debug(f"PBD inference error: {e}")
+                logger.debug(f"LocateAnything inference error: {e}")
 
-        # High-precision Parallel Box Decoding geometry localization
         return self._parallel_box_decode(roi_frame, confidence_threshold)
 
     def _parallel_box_decode(self, roi_frame, threshold=0.35):

@@ -14,25 +14,25 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from sqlalchemy import create_engine, text
 
-from core.config import get_user_data_dir
+from settings import LOCAL_AGENT_DB, get_user_data_dir
 
 logger = logging.getLogger("deskmate.database")
 
 # ─── Configuration & Paths ───────────────────────────────────────────────────
 
-_DEFAULT_DB = str(get_user_data_dir() / "deskmate_agent.db")
-_DB_PATH = os.getenv("LOCAL_AGENT_DB", _DEFAULT_DB)
+_DB_PATH = LOCAL_AGENT_DB
 
 
 def get_db_path() -> str:
     """Return the absolute path to the local SQLite database file."""
-    return os.getenv("LOCAL_AGENT_DB", _DEFAULT_DB)
+    return LOCAL_AGENT_DB
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -114,6 +114,7 @@ def db_add_task(title: str, priority: Optional[str] = "medium", due_date: Option
         conn.commit()
         task_id = cursor.lastrowid
         return {
+            "status": "success",
             "id": task_id,
             "title": title,
             "priority": clean_priority,
@@ -165,7 +166,7 @@ def db_search_notes(query: str, limit: int = 20) -> List[Dict[str, Any]]:
 def db_save_memory(content: str, tags: Optional[str] = "", created_at: Optional[str] = None) -> Dict[str, Any]:
     """Persist a semantic memory snippet to SQLite."""
     clean_tags = tags or ""
-    iso_date = created_at or datetime.utcnow().isoformat()
+    iso_date = created_at or datetime.now(timezone.utc).isoformat()
     with get_db_connection() as conn:
         cursor = conn.execute(
             "INSERT INTO memories (content, tags, created_at) VALUES (?, ?, ?)",
@@ -194,12 +195,25 @@ def db_run_sql_query(query: str, db_url: Optional[str] = "") -> List[Dict[str, A
     Execute a read-only SELECT query against the local SQLite database or an external database.
     Only SELECT statements are permitted for safety.
     """
-    clean_query = query.strip()
-    if not clean_query.upper().startswith("SELECT"):
+    clean_query = query.strip().rstrip(";").strip()
+    normalized = re.sub(r"/\*.*?\*/", " ", clean_query, flags=re.DOTALL)
+    normalized = re.sub(r"--[^\n]*", " ", normalized)
+    upper = normalized.upper()
+    if not upper.strip().startswith("SELECT"):
         raise ValueError("Error: only SELECT queries are permitted for safety.")
+    dangerous = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "TRUNCATE", "ATTACH", "DETACH"}
+    tokens = set(upper.split())
+    if tokens & dangerous:
+        raise ValueError("Error: query contains forbidden write/DDL keywords.")
+    dangerous_funcs = ("LOAD_EXTENSION", "WRITEFILE", "FTS3_TOKENIZER", "EDIT(")
+    if any(fn in upper for fn in dangerous_funcs):
+        raise ValueError("Error: query contains forbidden SQLite function.")
 
     # If external db_url or SQLAlchemy requested
     if db_url and not db_url.startswith("sqlite:///"):
+        allowed_schemes = ("sqlite:", "postgresql:", "mysql:", "mssql:")
+        if not any(db_url.startswith(s) for s in allowed_schemes):
+            raise ValueError(f"Unsupported database scheme. Allowed: {', '.join(allowed_schemes)}")
         engine = create_engine(db_url)
         with engine.connect() as conn:
             result = conn.execute(text(clean_query))

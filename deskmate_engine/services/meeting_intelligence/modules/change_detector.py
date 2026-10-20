@@ -5,11 +5,23 @@ from .. import config
 
 logger = logging.getLogger(__name__)
 
-try:
-    from skimage.metrics import structural_similarity as skimage_ssim
-    HAS_SKIMAGE = True
-except ImportError:
-    HAS_SKIMAGE = False
+def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
+    """Fast, native OpenCV SSIM calculation without external scikit-image dependency."""
+    c1 = (0.01 * 255) ** 2
+    c2 = (0.03 * 255) ** 2
+    f1 = img1.astype(np.float64)
+    f2 = img2.astype(np.float64)
+    mu1 = cv2.GaussianBlur(f1, (11, 11), 1.5)
+    mu2 = cv2.GaussianBlur(f2, (11, 11), 1.5)
+    mu1_sq = mu1 ** 2
+    mu2_sq = mu2 ** 2
+    mu1_mu2 = mu1 * mu2
+    sigma1_sq = cv2.GaussianBlur(f1 ** 2, (11, 11), 1.5) - mu1_sq
+    sigma2_sq = cv2.GaussianBlur(f2 ** 2, (11, 11), 1.5) - mu2_sq
+    sigma12 = cv2.GaussianBlur(f1 * f2, (11, 11), 1.5) - mu1_mu2
+    ssim_map = ((2 * mu1_mu2 + c1) * (2 * sigma12 + c2)) / ((mu1_sq + mu2_sq + c1) * (sigma1_sq + sigma2_sq + c2))
+    return float(ssim_map.mean())
+
 
 class ChangeDetector:
     """Fast dual-layer change detector: Pixel Diff + SSIM."""
@@ -34,15 +46,10 @@ class ChangeDetector:
         diff_score = np.count_nonzero(thresh) / gray.size
 
         # Layer 2: SSIM
-        ssim_score = 1.0
-        ssim_drop = 0.0
-        if HAS_SKIMAGE:
-            curr_small = self._get_small(gray)
-            ssim_score = skimage_ssim(self.prev_frame_small, curr_small)
-            ssim_drop = 1.0 - ssim_score
-            self.prev_frame_small = curr_small
-        else:
-            ssim_drop = diff_score
+        curr_small = self._get_small(gray)
+        ssim_score = compute_ssim(self.prev_frame_small, curr_small)
+        ssim_drop = 1.0 - ssim_score
+        self.prev_frame_small = curr_small
 
         is_candidate = (
             diff_score > config.PIXEL_DIFF_THRESHOLD and

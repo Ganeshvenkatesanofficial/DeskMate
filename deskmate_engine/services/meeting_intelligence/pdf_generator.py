@@ -10,9 +10,22 @@ import os
 import re
 import logging
 import datetime
+from pathlib import Path
 from fpdf import FPDF
 
 logger = logging.getLogger("deskmate.pdf_generator")
+
+# Pre-compiled regular expressions for Markdown and text processing
+_RE_BOLD_SPLIT = re.compile(r'(\*\*.*?\*\*)')
+_RE_BOLD_STRIP = re.compile(r'\*\*')
+_RE_TAGS_STRIP = re.compile(r'\[ACTION ITEM\]|\[HIGH PRIORITY\]|\[IMPORTANT\]', re.IGNORECASE)
+_RE_TAGS_STAR_STRIP = re.compile(r'\*?\*?\[ACTION ITEM\]\*?\*?|\*?\*?\[HIGH PRIORITY\]\*?\*?|\*?\*?\[IMPORTANT\]\*?\*?', re.IGNORECASE)
+_RE_BULLET_MATCH = re.compile(r'^\s*[-*]\s')
+_RE_BULLET_STRIP = re.compile(r'^\s*[-*]\s*')
+_RE_BULLET_LINE_STRIP = re.compile(r'^\s*[-*]\s+')
+_RE_ORDERED_MATCH = re.compile(r'^\s*\d+\.\s')
+_RE_ORDERED_PARSE = re.compile(r'^\s*(\d+)\.\s+(.*)')
+_RE_DIGITS = re.compile(r'\d+')
 
 # ── DeskMate AI Color Palette (GitHub Primer Purple & Dark Canvas) ────────────
 _DESKMATE_PRIMARY = (106, 53, 245)      # #6A35F5 — Signature DeskMate Purple
@@ -39,14 +52,15 @@ _IMG_X = _LEFT_MARGIN + (_CONTENT_WIDTH - _IMG_WIDTH) / 2
 
 
 def _resolve_logo_path() -> str:
+    base = Path(__file__).resolve().parent
     candidates = [
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "deskmate_app", "assets", "app_icon.png"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "images", "deskmate_hero.png"),
-        os.path.abspath("deskmate_app/assets/app_icon.png"),
+        base / ".." / ".." / ".." / "deskmate_app" / "assets" / "app_icon.png",
+        base / ".." / ".." / ".." / "docs" / "images" / "deskmate_hero.png",
+        Path("deskmate_app/assets/app_icon.png").resolve(),
     ]
     for p in candidates:
-        if os.path.exists(p):
-            return os.path.abspath(p)
+        if p.exists():
+            return str(p.resolve())
     return ""
 
 
@@ -58,7 +72,7 @@ class MeetingReportPDF(FPDF):
 
     def header(self):
         # Logo on left
-        if _LOGO_PATH and os.path.exists(_LOGO_PATH):
+        if _LOGO_PATH and Path(_LOGO_PATH).exists():
             try:
                 self.image(_LOGO_PATH, x=_LEFT_MARGIN, y=4.5, w=10.0)
                 self.set_font('Helvetica', 'B', 10)
@@ -207,7 +221,7 @@ class MeetingPDFGenerator:
                         pdf.ln(4)
                         self._render_screenshots(pdf, steps, str_rel, step_descriptions)
 
-            os.makedirs(os.path.dirname(os.path.abspath(output_pdf_path)), exist_ok=True)
+            Path(output_pdf_path).parent.mkdir(parents=True, exist_ok=True)
             pdf.output(output_pdf_path)
             logger.info(f"Successfully compiled DeskMate PDF report to {output_pdf_path}")
             return True
@@ -285,7 +299,7 @@ class MeetingPDFGenerator:
         """Write text with inline **bold** formatting."""
         if not text:
             return
-        tokens = re.split(r'(\*\*.*?\*\*)', text)
+        tokens = _RE_BOLD_SPLIT.split(text)
         for token in tokens:
             if not token:
                 continue
@@ -308,11 +322,11 @@ class MeetingPDFGenerator:
         key_items = []
         for raw_line in lines:
             line = raw_line.rstrip()
-            stripped = re.sub(r'\*\*', '', line)
+            stripped = _RE_BOLD_STRIP.sub('', line)
             for tag in ['[ACTION ITEM]', '[HIGH PRIORITY]', '[IMPORTANT]']:
                 if tag in stripped.upper() or tag in line.upper():
-                    clean = re.sub(r'\[ACTION ITEM\]|\[HIGH PRIORITY\]|\[IMPORTANT\]', '', stripped, flags=re.IGNORECASE).strip()
-                    clean = re.sub(r'^[-*]\s*', '', clean).strip()
+                    clean = _RE_TAGS_STRIP.sub('', stripped).strip()
+                    clean = _RE_BULLET_STRIP.sub('', clean).strip()
                     if clean and len(clean) > 5:
                         key_items.append((tag, clean))
                     break
@@ -339,23 +353,23 @@ class MeetingPDFGenerator:
                 pdf.set_fill_color(*_DIVIDER)
                 pdf.rect(_LEFT_MARGIN, pdf.get_y() + 2, _CONTENT_WIDTH, 0.4, 'F')
                 pdf.ln(5)
-            elif re.match(r'^\s*[-*]\s', line):
+            elif _RE_BULLET_MATCH.match(line):
                 indent = len(line) - len(line.lstrip())
                 level = 1 if indent < 4 else (2 if indent < 8 else 3)
-                bullet_text = re.sub(r'^\s*[-*]\s+', '', line)
+                bullet_text = _RE_BULLET_LINE_STRIP.sub('', line)
 
                 # Detect and render callout box for tagged bullet lines
                 upper = bullet_text.upper()
                 if '[ACTION ITEM]' in upper or '[HIGH PRIORITY]' in upper or '[IMPORTANT]' in upper:
                     tag = '[ACTION ITEM]' if '[ACTION ITEM]' in upper else ('[HIGH PRIORITY]' if '[HIGH PRIORITY]' in upper else '[IMPORTANT]')
-                    clean_text = re.sub(r'\*?\*?\[ACTION ITEM\]\*?\*?|\*?\*?\[HIGH PRIORITY\]\*?\*?|\*?\*?\[IMPORTANT\]\*?\*?', '', bullet_text, flags=re.IGNORECASE).strip()
+                    clean_text = _RE_TAGS_STAR_STRIP.sub('', bullet_text).strip()
                     self._render_callout_box(pdf, tag, clean_text)
                 else:
                     self._render_bullet(pdf, bullet_text, level=level)
-            elif re.match(r'^\s*\d+\.\s', line):
+            elif _RE_ORDERED_MATCH.match(line):
                 indent = len(line) - len(line.lstrip())
                 level = 1 if indent < 4 else 2
-                match = re.match(r'^\s*(\d+)\.\s+(.*)', line)
+                match = _RE_ORDERED_PARSE.match(line)
                 if match:
                     num = match.group(1)
                     item_text = match.group(2)
@@ -365,7 +379,7 @@ class MeetingPDFGenerator:
                 upper = line.upper()
                 if '[ACTION ITEM]' in upper or '[HIGH PRIORITY]' in upper or '[IMPORTANT]' in upper:
                     tag = '[ACTION ITEM]' if '[ACTION ITEM]' in upper else ('[HIGH PRIORITY]' if '[HIGH PRIORITY]' in upper else '[IMPORTANT]')
-                    clean_text = re.sub(r'\*?\*?\[ACTION ITEM\]\*?\*?|\*?\*?\[HIGH PRIORITY\]\*?\*?|\*?\*?\[IMPORTANT\]\*?\*?', '', line.strip(), flags=re.IGNORECASE).strip()
+                    clean_text = _RE_TAGS_STAR_STRIP.sub('', line.strip()).strip()
                     self._render_callout_box(pdf, tag, clean_text)
                 else:
                     self._render_rich_paragraph(pdf, line.strip())
@@ -581,7 +595,7 @@ class MeetingPDFGenerator:
 
         normalized = set()
         for sid in important_step_ids:
-            m = re.search(r'\d+', str(sid))
+            m = _RE_DIGITS.search(str(sid))
             if m:
                 normalized.add(int(m.group()))
 
@@ -589,7 +603,7 @@ class MeetingPDFGenerator:
         for step in steps:
             step_id_val = step.get("step_id", 0)
             try:
-                step_num = int(re.search(r'\d+', str(step_id_val)).group())
+                step_num = int(_RE_DIGITS.search(str(step_id_val)).group())
             except Exception:
                 step_num = None
 
@@ -608,9 +622,10 @@ class MeetingPDFGenerator:
                 continue
 
             full_img_path = None
-            for cand in [asset_rel_path, os.path.abspath(asset_rel_path), os.path.join(os.getcwd(), asset_rel_path)]:
-                if os.path.exists(cand):
-                    full_img_path = cand
+            cand_p = Path(asset_rel_path)
+            for cand in [cand_p, cand_p.resolve(), Path.cwd() / asset_rel_path]:
+                if cand.exists():
+                    full_img_path = str(cand)
                     break
 
             if not full_img_path:
@@ -661,7 +676,7 @@ class MeetingPDFGenerator:
         if not step_descriptions:
             return ""
         cand = [str(step_id_val), f"step_{step_id_val}"]
-        m = re.search(r'\d+', str(step_id_val))
+        m = _RE_DIGITS.search(str(step_id_val))
         if m:
             cand.append(f"step_{m.group()}")
         for c in cand:
@@ -673,7 +688,7 @@ class MeetingPDFGenerator:
     def _find_step_title(self, step_id_val, step_descriptions: dict, default_summary: str) -> str:
         if step_descriptions:
             cand = [str(step_id_val), f"step_{step_id_val}"]
-            m = re.search(r'\d+', str(step_id_val))
+            m = _RE_DIGITS.search(str(step_id_val))
             if m:
                 cand.append(f"step_{m.group()}")
             for c in cand:
@@ -751,8 +766,25 @@ class MeetingPDFGenerator:
         pdf.set_right_margin(old_r)
         pdf.set_y(desc_y + box_h)
 
+    _UNICODE_MAP = str.maketrans({
+        "‘": "'", "’": "'", "“": '"', "”": '"',
+        "–": "-", "—": "-", "…": "...",
+        "→": "->", "←": "<-", "↔": "<->",
+        "•": "-", "‣": "-", "●": "-", "○": "o",
+        "✓": "[x]", "✔": "[x]", "✗": "[ ]", "✘": "[ ]",
+        " ": " ", "​": "", "‌": "", "‍": "",
+        "﻿": "", "­": "",
+        "′": "'", "″": '"',
+        "₹": "INR", "€": "EUR", "£": "GBP", "¥": "JPY",
+        "™": "(TM)", "®": "(R)", "©": "(c)",
+        "×": "x", "÷": "/",
+        "≈": "~", "≠": "!=", "≤": "<=", "≥": ">=",
+        "∞": "inf",
+    })
+
     @staticmethod
     def _make_safe(text: str) -> str:
         if not text:
             return ""
-        return text.encode('ascii', 'replace').decode('ascii')
+        text = text.translate(MeetingPDFGenerator._UNICODE_MAP)
+        return text.encode("latin-1", "replace").decode("latin-1")

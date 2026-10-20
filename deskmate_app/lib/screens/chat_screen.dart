@@ -35,6 +35,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSettingsModelDropdownOpen = false;
   final TextEditingController _geminiKeyController = TextEditingController();
   final FocusNode _geminiKeyFocusNode = FocusNode();
+  late final FocusNode _shortcutFocusNode = FocusNode();
   final TextEditingController _googleClientIdController =
       TextEditingController();
   final TextEditingController _googleClientSecretController =
@@ -42,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isGoogleClientSecretObscured = true;
   bool _isSavingAllSettings = false;
   String? _googleCredsError;
+  final TextEditingController _tempGeminiCtrl = TextEditingController();
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
@@ -115,7 +117,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _googleClientIdController.dispose();
     _googleClientSecretController.dispose();
     _backendUrlController.dispose();
+    _tempGeminiCtrl.dispose();
     _backendUrlFocusNode.dispose();
+    _shortcutFocusNode.dispose();
     super.dispose();
   }
 
@@ -204,7 +208,8 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
+      focusNode: _shortcutFocusNode,
+      autofocus: true,
       onKeyEvent: (event) {
         if (event.logicalKey.keyLabel == 'Escape') {
           if (_editingMessageIndex != null) {
@@ -521,9 +526,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: theme.isDark
-                                ? const Color(0xFF7EE787)
-                                : const Color(0xFF1A7F37),
+                            color: theme.successText,
                           ),
                         ),
                       ),
@@ -540,18 +543,14 @@ class _ChatScreenState extends State<ChatScreen> {
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                               color:
-                                  (theme.isDark
-                                          ? const Color(0xFF7EE787)
-                                          : const Color(0xFF1A7F37))
+                                  theme.successText
                                       .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Icon(
                               Icons.close_rounded,
                               size: 14,
-                              color: theme.isDark
-                                  ? const Color(0xFF7EE787)
-                                  : const Color(0xFF1A7F37),
+                              color: theme.successText,
                             ),
                           ),
                         ),
@@ -814,7 +813,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: theme.isDark ? theme.bgSubtle : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: theme.borderDefault, width: 0.8),
             ),
@@ -828,7 +827,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   color: provider.isUsingGemini
                       ? theme.accentFg
                       : (provider.isLocalLlmOnline
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.dangerFg),
                 ),
                 const SizedBox(width: 8),
@@ -1217,8 +1216,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 mouseCursor: SystemMouseCursors.click,
                 icon: Icon(
                   _isGoogleClientSecretObscured
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
                   size: 14,
                   color: theme.fgMuted,
                 ),
@@ -1270,20 +1269,20 @@ class _ChatScreenState extends State<ChatScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF2DA44E).withValues(alpha: 0.15),
+                color: theme.statusOk.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: const Color(0xFF2DA44E).withValues(alpha: 0.35),
+                  color: theme.statusOk.withValues(alpha: 0.35),
                   width: 0.8,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.check_circle_rounded,
                     size: 11,
-                    color: Color(0xFF2DA44E),
+                    color: theme.statusOk,
                   ),
                   const SizedBox(width: 5),
                   Text(
@@ -1291,9 +1290,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: theme.isDark
-                          ? const Color(0xFF7EE787)
-                          : const Color(0xFF1A7F37),
+                      color: theme.successText,
                     ),
                   ),
                 ],
@@ -1336,7 +1333,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: provider.isBackendOnline
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.dangerFg,
                     ),
                   ),
@@ -1347,9 +1344,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: provider.isBackendOnline
-                          ? (theme.isDark
-                                ? const Color(0xFF7EE787)
-                                : const Color(0xFF1A7F37))
+                          ? theme.successText
                           : theme.dangerFg,
                     ),
                   ),
@@ -1632,7 +1627,7 @@ class _ChatScreenState extends State<ChatScreen> {
     ThemeData theme,
   ) {
     String tempSelected = provider.effectiveModel;
-    final tempGeminiCtrl = TextEditingController(text: provider.geminiApiKey);
+    _tempGeminiCtrl.text = provider.geminiApiKey;
     bool obscureGemini = true;
 
     return StatefulBuilder(
@@ -1741,14 +1736,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         decoration: BoxDecoration(
                           color:
                               (provider.isLocalLlmOnline
-                                      ? const Color(0xFF2DA44E)
+                                      ? theme.statusOk
                                       : theme.dangerFg)
                                   .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color:
                                 (provider.isLocalLlmOnline
-                                        ? const Color(0xFF2DA44E)
+                                        ? theme.statusOk
                                         : theme.dangerFg)
                                     .withValues(alpha: 0.35),
                             width: 0.8,
@@ -1762,9 +1757,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             color: provider.isLocalLlmOnline
-                                ? (theme.isDark
-                                      ? const Color(0xFF7EE787)
-                                      : const Color(0xFF1A7F37))
+                                ? theme.successText
                                 : theme.dangerFg,
                           ),
                         ),
@@ -1853,9 +1846,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: theme.isDark
-                            ? const Color(0xFF0D1117)
-                            : const Color(0xFFF6F8FA),
+                        color: theme.bgCode,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
                           color: theme.borderDefault,
@@ -1940,7 +1931,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   SizedBox(
                     height: 38,
                     child: TextField(
-                      controller: tempGeminiCtrl,
+                      controller: _tempGeminiCtrl,
                       obscureText: obscureGemini,
                       style: TextStyle(fontSize: 12.5, color: theme.fgDefault),
                       decoration: InputDecoration(
@@ -2012,12 +2003,12 @@ class _ChatScreenState extends State<ChatScreen> {
                               : provider.effectiveModel;
                           await provider.saveAiConfiguration(
                             model: modelToSave,
-                            geminiApiKey: tempGeminiCtrl.text,
+                            geminiApiKey: _tempGeminiCtrl.text,
                           );
                           _showTopNotification(
                             _formatAiConfigSummary(
                               model: modelToSave,
-                              hasGeminiKey: tempGeminiCtrl.text.isNotEmpty,
+                              hasGeminiKey: _tempGeminiCtrl.text.isNotEmpty,
                             ),
                           );
                         },

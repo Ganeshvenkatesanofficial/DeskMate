@@ -35,13 +35,3 @@ def get_inference_device() -> Tuple[str, str]:
         pass
 
     return "cpu", "Multi-Threaded CPU Fallback"
-
-
-def log_hardware_status() -> str:
-    """Logs the detected hardware accelerator status."""
-    device, desc = get_inference_device()
-    if device in ("cuda", "mps"):
-        logger.info(f"Hardware Acceleration ACTIVE: Using {desc} [device='{device}']")
-    else:
-        logger.info(f"Hardware Acceleration: Running on CPU [device='{device}']")
-    return device

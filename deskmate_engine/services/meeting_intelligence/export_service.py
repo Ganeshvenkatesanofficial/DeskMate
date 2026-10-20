@@ -13,11 +13,14 @@ import base64
 import json
 import logging
 import os
+from pathlib import Path
 import shutil
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
+from settings import DRIVE_TOKEN_PATH, GMAIL_TOKEN_PATH
 
 logger = logging.getLogger("deskmate.export_service")
 
@@ -29,7 +32,7 @@ class MeetingExportService:
     """
 
     def __init__(self, output_dir: str = "output/sessions", max_retained_sessions: int = 15):
-        self.output_dir = output_dir
+        self.output_dir = Path(output_dir)
         self.max_retained_sessions = max_retained_sessions
 
     def _get_google_service(self, scopes: List[str], token_filename: str, api: str, version: str) -> Any:
@@ -46,10 +49,10 @@ class MeetingExportService:
         Uploads the generated meeting PDF to the user's Google Drive.
         Creates a 'DeskMate Meetings' folder if one does not exist.
         """
-        session_dir = os.path.join(self.output_dir, session_id)
-        pdf_path = os.path.join(session_dir, f"deskmate_report_{session_id}.pdf")
+        session_dir = self.output_dir / session_id
+        pdf_path = session_dir / f"deskmate_report_{session_id}.pdf"
 
-        if not os.path.exists(pdf_path):
+        if not pdf_path.exists():
             return {
                 "status": "error",
                 "message": f"PDF report not found at {pdf_path}. Please summarize first.",
@@ -60,7 +63,7 @@ class MeetingExportService:
 
             svc = self._get_google_service(
                 ["https://www.googleapis.com/auth/drive"],
-                os.getenv("DRIVE_TOKEN_PATH", "token_drive.json"),
+                DRIVE_TOKEN_PATH,
                 "drive",
                 "v3",
             )
@@ -87,7 +90,7 @@ class MeetingExportService:
             if folder_id:
                 file_meta["parents"] = [folder_id]
 
-            media = MediaFileUpload(pdf_path, mimetype="application/pdf", resumable=True)
+            media = MediaFileUpload(str(pdf_path), mimetype="application/pdf", resumable=True)
             uploaded = (
                 svc.files()
                 .create(
@@ -123,11 +126,11 @@ class MeetingExportService:
         """
         Sends an email with the executive meeting summary and attached PDF.
         """
-        session_dir = os.path.join(self.output_dir, session_id)
-        pdf_path = os.path.join(session_dir, f"deskmate_report_{session_id}.pdf")
-        report_path = os.path.join(self.output_dir, f"session_{session_id}.json")
+        session_dir = self.output_dir / session_id
+        pdf_path = session_dir / f"deskmate_report_{session_id}.pdf"
+        report_path = self.output_dir / f"session_{session_id}.json"
 
-        if not os.path.exists(pdf_path):
+        if not pdf_path.exists():
             return {
                 "status": "error",
                 "message": f"PDF not found at {pdf_path}. Run summarization first.",
@@ -135,13 +138,12 @@ class MeetingExportService:
 
         # Retrieve summary if not passed
         body_text = summary_text
-        if not body_text and os.path.exists(report_path):
+        if not body_text and report_path.exists():
             try:
-                with open(report_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    body_text = data.get("summary", "")
-            except Exception:
-                pass
+                data = json.loads(report_path.read_text(encoding="utf-8"))
+                body_text = data.get("summary", "")
+            except Exception as e:
+                logger.debug(f"Failed to read summary from report {report_path}: {e}")
 
         if not body_text:
             body_text = "Please find attached the DeskMate Executive Meeting Intelligence Report."
@@ -149,7 +151,7 @@ class MeetingExportService:
         try:
             svc = self._get_google_service(
                 ["https://www.googleapis.com/auth/gmail.send"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
+                GMAIL_TOKEN_PATH,
                 "gmail",
                 "v1",
             )
@@ -181,15 +183,14 @@ Generated with DeskMate Meeting Scribe.
             msg.attach(MIMEText(email_body, "plain"))
 
             # Attach PDF
-            with open(pdf_path, "rb") as f:
-                pdf_data = f.read()
-                part = MIMEApplication(pdf_data, _subtype="pdf")
-                part.add_header(
-                    "Content-Disposition",
-                    "attachment",
-                    filename=f"DeskMate_Meeting_Report_{session_id}.pdf",
-                )
-                msg.attach(part)
+            pdf_data = pdf_path.read_bytes()
+            part = MIMEApplication(pdf_data, _subtype="pdf")
+            part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=f"DeskMate_Meeting_Report_{session_id}.pdf",
+            )
+            msg.attach(part)
 
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
             sent = svc.users().messages().send(userId="me", body={"raw": raw}).execute()
@@ -211,17 +212,16 @@ Generated with DeskMate Meeting Scribe.
         Retains the latest `max_keep` sessions.
         """
         max_keep = max_keep or self.max_retained_sessions
-        if not os.path.exists(self.output_dir):
+        if not self.output_dir.exists():
             return {"status": "ok", "deleted_count": 0}
 
         try:
             # Find all session directories
             session_dirs = []
-            for item in os.listdir(self.output_dir):
-                full_path = os.path.join(self.output_dir, item)
-                if os.path.isdir(full_path) and not item.startswith("."):
-                    mtime = os.path.getmtime(full_path)
-                    session_dirs.append((mtime, full_path, item))
+            for item in self.output_dir.iterdir():
+                if item.is_dir() and not item.name.startswith("."):
+                    mtime = item.stat().st_mtime
+                    session_dirs.append((mtime, item, item.name))
 
             # Sort oldest first
             session_dirs.sort(key=lambda x: x[0])
@@ -232,9 +232,9 @@ Generated with DeskMate Meeting Scribe.
                 for _, s_path, s_name in to_delete:
                     try:
                         shutil.rmtree(s_path, ignore_errors=True)
-                        json_file = os.path.join(self.output_dir, f"session_{s_name}.json")
-                        if os.path.exists(json_file):
-                            os.remove(json_file)
+                        json_file = self.output_dir / f"session_{s_name}.json"
+                        if json_file.exists():
+                            json_file.unlink()
                         deleted_count += 1
                         logger.info(f"Auto-cleaned old session: {s_name}")
                     except Exception as err:

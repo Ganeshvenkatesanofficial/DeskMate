@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/constants.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
 import '../services/agent_websocket_client.dart';
@@ -11,13 +12,11 @@ enum AgentMode { deskMate, personal, meeting }
 class ChatProvider extends ChangeNotifier {
   List<ChatMessage> _fileMessages = [];
   List<ChatMessage> _personalMessages = [];
-  final List<ChatMessage> _meetingMessages = [];
   bool _isSending = false;
   String _errorMessage = '';
   String _fileConversationId = '';
   String _personalConversationId = '';
-  final String _meetingConversationId = '';
-  String _backendUrl = 'http://127.0.0.1:2026';
+  String _backendUrl = AppConstants.defaultUrl;
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
@@ -43,14 +42,12 @@ class ChatProvider extends ChangeNotifier {
 
   List<ChatMessage> get messages {
     if (_mode == AgentMode.personal) return _personalMessages;
-    if (_mode == AgentMode.meeting) return _meetingMessages;
     return _fileMessages;
   }
   bool get isSending => _isSending;
   String get errorMessage => _errorMessage;
   String get conversationId {
     if (_mode == AgentMode.personal) return _personalConversationId;
-    if (_mode == AgentMode.meeting) return _meetingConversationId;
     return _fileConversationId;
   }
   String get backendUrl => _backendUrl;
@@ -98,27 +95,26 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    _fileConversationId = prefs.getString('deskmate_conversation_id') ?? '';
+    _fileConversationId = prefs.getString(PrefsKeys.conversationId) ?? '';
     _personalConversationId =
-        prefs.getString('deskmate_personal_conversation_id') ?? '';
-    final savedUrl = prefs.getString('deskmate_backend_url');
+        prefs.getString(PrefsKeys.personalConversationId) ?? '';
+    final savedUrl = prefs.getString(PrefsKeys.backendUrl);
     if (savedUrl == null ||
         savedUrl.isEmpty ||
-        savedUrl == 'http://127.0.0.1:2026' ||
-        savedUrl == 'http://127.0.0.1:8080') {
+        AppConstants.isBuiltInUrl(savedUrl)) {
       _backendUrl = BackendManager.backendUrl;
     } else {
       _backendUrl = savedUrl;
     }
-    _selectedLocalModel = prefs.getString('deskmate_selected_model') ?? '';
-    _geminiApiKey = prefs.getString('deskmate_gemini_api_key') ?? '';
+    _selectedLocalModel = prefs.getString(PrefsKeys.selectedModel) ?? '';
+    _geminiApiKey = prefs.getString(PrefsKeys.geminiApiKey) ?? '';
     _hasConfiguredAi =
-        prefs.getBool('deskmate_has_configured_ai') ??
+        prefs.getBool(PrefsKeys.hasConfiguredAi) ??
         (_selectedLocalModel.isNotEmpty);
     // Always initially open the File Explorer feature on app startup
     _mode = AgentMode.deskMate;
     final themeIndex =
-        prefs.getInt('deskmate_theme_mode') ?? ThemeMode.light.index;
+        prefs.getInt(PrefsKeys.themeMode) ?? ThemeMode.light.index;
     if (themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
       _themeMode = ThemeMode.values[themeIndex];
     } else {
@@ -139,7 +135,7 @@ class ChatProvider extends ChangeNotifier {
         if (_selectedLocalModel.isEmpty) {
           _selectedLocalModel = _availableLocalModels.first;
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('deskmate_selected_model', _selectedLocalModel);
+          await prefs.setString(PrefsKeys.selectedModel, _selectedLocalModel);
         }
       }
       // On the first time loading alone, only pop up in center if more than one model is available
@@ -160,10 +156,10 @@ class ChatProvider extends ChangeNotifier {
     _showModelSelectionDialog = false;
     final prefs = await SharedPreferences.getInstance();
     if (_selectedLocalModel.isNotEmpty) {
-      await prefs.setString('deskmate_selected_model', _selectedLocalModel);
+      await prefs.setString(PrefsKeys.selectedModel, _selectedLocalModel);
     }
-    await prefs.setString('deskmate_gemini_api_key', _geminiApiKey);
-    await prefs.setBool('deskmate_has_configured_ai', true);
+    await prefs.setString(PrefsKeys.geminiApiKey, _geminiApiKey);
+    await prefs.setBool(PrefsKeys.hasConfiguredAi, true);
     notifyListeners();
   }
 
@@ -173,9 +169,9 @@ class ChatProvider extends ChangeNotifier {
     _hasConfiguredAi = true;
     final prefs = await SharedPreferences.getInstance();
     if (_selectedLocalModel.isNotEmpty) {
-      await prefs.setString('deskmate_selected_model', _selectedLocalModel);
+      await prefs.setString(PrefsKeys.selectedModel, _selectedLocalModel);
     }
-    await prefs.setBool('deskmate_has_configured_ai', true);
+    await prefs.setBool(PrefsKeys.hasConfiguredAi, true);
     notifyListeners();
   }
 
@@ -188,7 +184,7 @@ class ChatProvider extends ChangeNotifier {
     _showModelSelectionDialog = false;
     _hasConfiguredAi = true;
     SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool('deskmate_has_configured_ai', true);
+      prefs.setBool(PrefsKeys.hasConfiguredAi, true);
     });
     notifyListeners();
   }
@@ -197,7 +193,7 @@ class ChatProvider extends ChangeNotifier {
     if (_themeMode == newMode) return;
     _themeMode = newMode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('deskmate_theme_mode', _themeMode.index);
+    await prefs.setInt(PrefsKeys.themeMode, _themeMode.index);
     notifyListeners();
   }
 
@@ -205,7 +201,7 @@ class ChatProvider extends ChangeNotifier {
   Future<void> setGeminiApiKey(String key) async {
     _geminiApiKey = key.trim();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('deskmate_gemini_api_key', _geminiApiKey);
+    await prefs.setString(PrefsKeys.geminiApiKey, _geminiApiKey);
     notifyListeners();
   }
 
@@ -213,7 +209,7 @@ class ChatProvider extends ChangeNotifier {
     if (_mode == newMode) return;
     _mode = newMode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('deskmate_agent_mode', _mode.index);
+    await prefs.setInt(PrefsKeys.agentMode, _mode.index);
     if (_isBackendOnline) {
       checkFileAgentStatus();
       checkPersonalAgentStatus();
@@ -226,7 +222,7 @@ class ChatProvider extends ChangeNotifier {
     _apiService = ApiService(baseUrl: _backendUrl);
     _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('deskmate_backend_url', _backendUrl);
+    await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
     _startStartupHealthCheck();
     notifyListeners();
   }
@@ -283,21 +279,14 @@ class ChatProvider extends ChangeNotifier {
 
     // Use BackendManager.backendUrl if valid, otherwise fallback candidates
     final primaryCandidate = BackendManager.backendUrl;
-    if (_backendUrl.isEmpty ||
-        _backendUrl == 'http://127.0.0.1:2026' ||
-        _backendUrl == 'http://127.0.0.1:8080') {
+    if (_backendUrl.isEmpty || AppConstants.isBuiltInUrl(_backendUrl)) {
       _backendUrl = primaryCandidate;
     }
     _apiService = ApiService(baseUrl: _backendUrl);
     _wsClient = AgentWebSocketClient(baseUrl: _backendUrl);
     notifyListeners();
 
-    final candidates = [
-      'http://127.0.0.1:8080',
-      primaryCandidate,
-      'http://127.0.0.1:2026',
-      'http://127.0.0.1:8000',
-    ];
+    final candidates = AppConstants.candidateUrls(primaryCandidate);
 
     const int maxAttempts = 15;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -314,7 +303,7 @@ class ChatProvider extends ChangeNotifier {
             _isConnecting = false;
             _errorMessage = '';
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('deskmate_backend_url', _backendUrl);
+            await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
             checkFileAgentStatus();
             checkPersonalAgentStatus();
             fetchAvailableModels();
@@ -341,12 +330,7 @@ class ChatProvider extends ChangeNotifier {
     _healthTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       var health = await _apiService.checkHealth();
       if (health['status'] != 'ok') {
-        for (final candidate in [
-          'http://127.0.0.1:8080',
-          BackendManager.backendUrl,
-          'http://127.0.0.1:2026',
-          'http://127.0.0.1:8000',
-        ]) {
+        for (final candidate in AppConstants.candidateUrls(BackendManager.backendUrl)) {
           if (candidate != _backendUrl) {
             try {
               final fbService = ApiService(baseUrl: candidate);
@@ -357,7 +341,7 @@ class ChatProvider extends ChangeNotifier {
                 _wsClient = AgentWebSocketClient(baseUrl: candidate);
                 health = fbHealth;
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('deskmate_backend_url', _backendUrl);
+                await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
                 break;
               }
             } catch (_) {}
@@ -408,14 +392,14 @@ class ChatProvider extends ChangeNotifier {
       if (newId != _personalConversationId) {
         _personalConversationId = newId;
         await prefs.setString(
-          'deskmate_personal_conversation_id',
+          PrefsKeys.personalConversationId,
           _personalConversationId,
         );
       }
     } else {
       if (newId != _fileConversationId) {
         _fileConversationId = newId;
-        await prefs.setString('deskmate_conversation_id', _fileConversationId);
+        await prefs.setString(PrefsKeys.conversationId, _fileConversationId);
       }
     }
   }
@@ -435,8 +419,8 @@ class ChatProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(
       isPersonal
-          ? 'deskmate_personal_conversation_id'
-          : 'deskmate_conversation_id',
+          ? PrefsKeys.personalConversationId
+          : PrefsKeys.conversationId,
     );
     if (prevId.isNotEmpty) {
       await _apiService.resetChat(prevId);

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/chat_message.dart';
 import '../theme/app_theme.dart';
+import '../utils/clipboard_utils.dart';
 import 'telemetry_accordion.dart';
 
 class ChatBubble extends StatefulWidget {
@@ -38,27 +38,18 @@ class _ChatBubbleState extends State<ChatBubble> {
   void _copyToClipboard() {
     final text = widget.message.content;
     if (text.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: text));
+    copyWithFeedback(
+      context,
+      text,
+      label: widget.message.role == MessageRole.user
+          ? 'Query copied to clipboard'
+          : 'Response copied to clipboard',
+    );
     setState(() => _isCopied = true);
     _copyTimer?.cancel();
     _copyTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted) setState(() => _isCopied = false);
     });
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.message.role == MessageRole.user
-              ? 'Query copied to clipboard'
-              : 'Response copied to clipboard',
-          style: const TextStyle(fontSize: 12),
-        ),
-        duration: const Duration(milliseconds: 1200),
-        behavior: SnackBarBehavior.floating,
-        width: 220,
-      ),
-    );
   }
 
   String _sanitizeMarkdown(String text) {
@@ -127,9 +118,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                     ? widget.message.content
                                     : '...',
                                 style: TextStyle(
-                                  color: theme.isDark
-                                      ? AppTheme.darkFgDefault
-                                      : AppTheme.lightFgDefault,
+                                  color: theme.fgDefault,
                                   fontSize: 14,
                                   height: 1.5,
                                 ),
@@ -143,9 +132,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                   widget.message.formattedTime,
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: theme.isDark
-                                        ? AppTheme.darkFgMuted
-                                        : AppTheme.lightFgMuted,
+                                    color: theme.fgMuted,
                                   ),
                                 ),
                                 const SizedBox(width: 14),
@@ -169,7 +156,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                           ? 'Copied'
                                           : 'Copy query',
                                       color: _isCopied
-                                          ? const Color(0xFF2DA44E)
+                                          ? theme.statusOk
                                           : null,
                                       onTap: _copyToClipboard,
                                       theme: theme,
@@ -199,9 +186,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                               styleSheet: MarkdownStyleSheet.fromTheme(theme)
                                   .copyWith(
                                     p: TextStyle(
-                                      color: theme.isDark
-                                          ? AppTheme.darkFgDefault
-                                          : AppTheme.lightFgDefault,
+                                      color: theme.fgDefault,
                                       fontSize: 14,
                                       height: 1.5,
                                     ),
@@ -209,9 +194,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                       backgroundColor: theme.bgInset,
                                       fontFamily: 'monospace',
                                       fontSize: 13,
-                                      color: theme.isDark
-                                          ? AppTheme.darkFgDefault
-                                          : AppTheme.lightFgDefault,
+                                      color: theme.fgDefault,
                                     ),
                                     codeblockDecoration: BoxDecoration(
                                       color: theme.bgInset,
@@ -233,9 +216,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                 widget.message.formattedTime,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: theme.isDark
-                                      ? AppTheme.darkFgMuted
-                                      : AppTheme.lightFgMuted,
+                                  color: theme.fgMuted,
                                 ),
                               ),
                               _buildActionButton(
@@ -244,7 +225,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                     : Icons.copy_rounded,
                                 tooltip: _isCopied ? 'Copied' : 'Copy response',
                                 color: _isCopied
-                                    ? const Color(0xFF2DA44E)
+                                    ? theme.statusOk
                                     : null,
                                 onTap: _copyToClipboard,
                                 theme: theme,
@@ -290,8 +271,7 @@ class _ChatBubbleState extends State<ChatBubble> {
             icon,
             size: 13,
             color:
-                color ??
-                (theme.isDark ? AppTheme.darkFgMuted : AppTheme.lightFgMuted),
+                color ?? theme.fgMuted,
           ),
         ),
       ),

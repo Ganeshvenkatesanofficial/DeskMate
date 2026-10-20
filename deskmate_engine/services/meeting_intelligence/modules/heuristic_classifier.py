@@ -35,6 +35,9 @@ class HeuristicUIClassifier:
 
     def _check_red_presence(self, roi_frame):
         """Detects error states via red pixel density."""
+        if roi_frame is None or roi_frame.size == 0 or roi_frame.shape[0] == 0 or roi_frame.shape[1] == 0:
+            return False
+            
         hsv = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2HSV)
         
         # Define range for red color
@@ -47,5 +50,9 @@ class HeuristicUIClassifier:
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         red_mask = cv2.bitwise_or(mask1, mask2)
         
-        red_ratio = np.count_nonzero(red_mask) / (roi_frame.shape[0] * roi_frame.shape[1])
-        return red_ratio > 0.15 # >15% red pixels likely an error banner/border
+        total_pixels = roi_frame.shape[0] * roi_frame.shape[1]
+        if total_pixels == 0:
+            return False
+            
+        red_ratio = np.count_nonzero(red_mask) / total_pixels
+        return red_ratio > 0.15  # >15% red pixels likely an error banner/border

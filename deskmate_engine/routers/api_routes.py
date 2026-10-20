@@ -11,12 +11,11 @@ import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.config import get_user_data_dir, persist_env_variables, base_dir
+from core.config import get_user_data_dir, persist_env_variables, base_dir, generate_conversation_id
 from core.models import check_local_llm_status, get_installed_chat_models
 from services.file_copilot.agent import run_file_copilot
 from services.personal_assistant.agent import (
@@ -56,6 +55,7 @@ class ChatResponse(BaseModel):
 
 # In-memory session history for REST backward compatibility
 _CONVERSATIONS: Dict[str, List[ChatMessage]] = {}
+_MAX_CONVERSATIONS = 50
 
 
 @router.get("/")
@@ -135,8 +135,8 @@ def get_personal_credentials():
     if not client_id:
         try:
             load_dotenv(override=True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to reload dotenv: {e}")
         client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
         client_secret_exists = bool(os.environ.get("GOOGLE_CLIENT_SECRET", "").strip())
 
@@ -163,8 +163,8 @@ def get_personal_credentials():
             csec = inst.get("client_secret", "").strip()
             if is_genuine_credential(cid) and is_genuine_credential(csec):
                 has_real_credentials_file = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to parse credentials file: {e}")
 
     tokens = {
         "gmail": (user_data_dir / "token_gmail.json").exists(),
@@ -203,8 +203,8 @@ def purge_user_google_tokens(user_data_dir) -> bool:
             try:
                 token_path.unlink()
                 purged = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to unlink stale token {token_path}: {e}")
     return purged
 
 
@@ -243,8 +243,8 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
             old_data = json.loads(target_path.read_text(encoding="utf-8"))
             installed = old_data.get("installed") or old_data.get("web") or {}
             existing_id = installed.get("client_id")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to read existing credentials from {target_path}: {e}")
 
     # If client ID is being replaced, purge stale tokens to avoid authorization mismatches
     tokens_purged = False
@@ -304,7 +304,10 @@ def _handle_rest_chat(
     endpoint_name: str,
 ) -> ChatResponse:
     """Shared helper for synchronous REST chat execution and session history management."""
-    conv_id = request.conversation_id or str(uuid4())
+    conv_id = request.conversation_id or generate_conversation_id()
+    if conv_id not in _CONVERSATIONS and len(_CONVERSATIONS) >= _MAX_CONVERSATIONS:
+        oldest_key = next(iter(_CONVERSATIONS))
+        del _CONVERSATIONS[oldest_key]
     history = _CONVERSATIONS.setdefault(conv_id, [])
     history_dicts = [{"role": msg.role, "content": msg.content} for msg in history]
 
@@ -317,7 +320,7 @@ def _handle_rest_chat(
         )
     except Exception as exc:
         logger.error(f"Error in REST {endpoint_name}: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     history.append(ChatMessage(role="user", content=request.message))
     history.append(ChatMessage(role="assistant", content=reply))

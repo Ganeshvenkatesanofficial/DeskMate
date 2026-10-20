@@ -12,11 +12,11 @@ import fnmatch
 import os
 import re
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 from smolagents import Tool
 
 
-def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = False) -> Path:
+def resolve_target_path(path_str: str | None = None, must_be_dir: bool = False) -> Path:
     """
     Robustly resolves a path string into a valid Path object:
     - Resolves laptop aliases ('lap', 'in lap', 'laptop', 'my laptop', 'computer', 'macbook', 'pc') to Path.home().
@@ -46,7 +46,7 @@ def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = Fals
 
     # System / System root keywords
     if raw.lower() in ("root", "system root", "/"):
-        return Path(os.path.abspath(os.sep))
+        return Path(os.sep).resolve()
 
     # Check if raw matches user's home name, 'home', or '~'
     username = Path.home().name
@@ -54,8 +54,7 @@ def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = Fals
         return Path.home()
 
     # Expand ~
-    expanded = os.path.expanduser(raw)
-    p = Path(expanded)
+    p = Path(raw).expanduser()
     if p.is_absolute() and p.exists():
         return p.resolve()
 
@@ -71,7 +70,7 @@ def resolve_target_path(path_str: Optional[str] = None, must_be_dir: bool = Fals
                 return child.resolve()
 
     # Check relative to system root (e.g. 'Applications', 'System', 'Users')
-    root_candidate = Path(os.path.abspath(os.sep)) / raw
+    root_candidate = Path(os.sep) / raw
     if root_candidate.exists():
         return root_candidate.resolve()
 
@@ -125,7 +124,7 @@ def extract_file_content(path: Path, max_chars: int = 20000) -> str:
                     f"- Format: {img.format}",
                     f"- Dimensions: {img.width} x {img.height} pixels",
                     f"- Color Mode: {img.mode}",
-                    f"- File Size: {os.path.getsize(path) / 1024:.1f} KB",
+                    f"- File Size: {path.stat().st_size / 1024:.1f} KB",
                 ]
                 return "\n".join(info)
         except Exception as e:
@@ -153,9 +152,9 @@ def fast_walk_search(
     root_dir: Path,
     pattern: str,
     max_results: int = 100,
-    min_size_mb: Optional[float] = None,
-    max_size_mb: Optional[float] = None,
-) -> List[Path]:
+    min_size_mb: float | None = None,
+    max_size_mb: float | None = None,
+) -> list[Path]:
     """
     Ultra-fast case-insensitive recursive filesystem search using os.walk
     with in-place directory pruning to skip heavy directories (.venv, node_modules, Library).
@@ -171,7 +170,7 @@ def fast_walk_search(
     else:
         pat_lower = raw_pat.lower()
 
-    matches: List[Path] = []
+    matches: list[Path] = []
     if not root_dir.is_dir():
         return matches
 
@@ -186,7 +185,7 @@ def fast_walk_search(
                 full_path = Path(root) / f
                 if min_size_mb is not None or max_size_mb is not None:
                     try:
-                        size_mb = os.path.getsize(full_path) / (1024 * 1024)
+                        size_mb = full_path.stat().st_size / (1024 * 1024)
                         if min_size_mb is not None and size_mb < float(min_size_mb):
                             continue
                         if max_size_mb is not None and size_mb > float(max_size_mb):
@@ -218,10 +217,10 @@ class ReadFileTool(Tool):
 
     def forward(
         self,
-        file_path: Optional[str] = None,
-        path: Optional[str] = None,
-        file: Optional[str] = None,
-        filename: Optional[str] = None,
+        file_path: str | None = None,
+        path: str | None = None,
+        file: str | None = None,
+        filename: str | None = None,
         **kwargs: Any,
     ) -> str:
         target = file_path or path or file or filename
@@ -278,9 +277,9 @@ class ListDirectoryTool(Tool):
 
     def forward(
         self,
-        directory_path: Optional[str] = None,
-        directory: Optional[str] = None,
-        path: Optional[str] = None,
+        directory_path: str | None = None,
+        directory: str | None = None,
+        path: str | None = None,
         **kwargs: Any,
     ) -> str:
         target = directory_path or directory or path or "~"
@@ -364,11 +363,11 @@ class SearchFilesTool(Tool):
     def forward(
         self,
         pattern: str = "*",
-        directory: Optional[str] = None,
-        directory_path: Optional[str] = None,
-        path: Optional[str] = None,
-        min_size_mb: Optional[float] = None,
-        max_size_mb: Optional[float] = None,
+        directory: str | None = None,
+        directory_path: str | None = None,
+        path: str | None = None,
+        min_size_mb: float | None = None,
+        max_size_mb: float | None = None,
         **kwargs: Any,
     ) -> str:
         target_dir = directory or directory_path or path or "~"
@@ -398,7 +397,7 @@ class SearchFilesTool(Tool):
             rel_matches = []
             for m in matches:
                 try:
-                    size_bytes = os.path.getsize(m)
+                    size_bytes = m.stat().st_size
                     size_mb = size_bytes / (1024 * 1024)
                 except OSError:
                     size_bytes = 0

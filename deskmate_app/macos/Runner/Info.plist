@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DeskMate needs microphone access to record meeting audio for transcription.</string>
 </dict>
 </plist>

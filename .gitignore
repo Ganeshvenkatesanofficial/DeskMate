@@ -25,8 +25,8 @@ node_modules/
 dist/
 
 # PyInstaller
-terminal-ai-agent/build/
-terminal-ai-agent/dist/
+deskmate_engine/build/
+deskmate_engine/dist/
 
 # IDE & OS
 .vscode/
@@ -37,5 +37,4 @@ terminal-ai-agent/dist/
 output/
 deskmate_engine/output/
 *.wav
-terminal-ai-agent
 

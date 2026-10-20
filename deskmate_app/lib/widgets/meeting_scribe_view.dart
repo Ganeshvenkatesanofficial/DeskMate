@@ -7,6 +7,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/open_external.dart';
 
 class MeetingScribeView extends StatefulWidget {
   final void Function([AgentMode? mode])? onOpenSetupGuide;
@@ -202,7 +203,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 ),
               ],
             ),
-            backgroundColor: targetMuted ? const Color(0xFFD97706) : const Color(0xFF10B981),
+            backgroundColor: targetMuted ? const Color(0xFFD97706) : AppTheme.emerald,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
           ),
@@ -291,7 +292,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Successfully synced ${res['tasks_created']} action items into DeskMate Tasks!'),
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: AppTheme.emerald,
           ),
         );
       }
@@ -307,15 +308,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   void _openPdf() {
     if (_pdfUrl == null) return;
-    try {
-      if (Platform.isMacOS) {
-        Process.run('open', [_pdfUrl!]);
-      } else if (Platform.isWindows) {
-        Process.run('cmd', ['/c', 'start', '', _pdfUrl!]);
-      } else if (Platform.isLinux) {
-        Process.run('xdg-open', [_pdfUrl!]);
-      }
-    } catch (_) {}
+    openExternal(_pdfUrl!);
   }
 
   Future<void> _exportToGoogleDrive() async {
@@ -333,13 +326,13 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Uploaded to Google Drive in "DeskMate Meetings"! ${link.isNotEmpty ? "(Link ready)" : ""}'),
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: AppTheme.emerald,
             action: link.isNotEmpty
                 ? SnackBarAction(
                     label: 'Open Drive',
                     textColor: Colors.white,
                     onPressed: () {
-                      if (Platform.isMacOS) Process.run('open', [link]);
+                      openExternal(link);
                     },
                   )
                 : null,
@@ -365,7 +358,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.email_outlined, color: Color(0xFF6A35F5), size: 22),
+            Icon(Icons.email_outlined, color: AppTheme.purplePrimary, size: 22),
             SizedBox(width: 8),
             Text('Email Meeting Summary & PDF'),
           ],
@@ -400,14 +393,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6A35F5),
+              backgroundColor: AppTheme.purplePrimary,
               foregroundColor: Colors.white,
             ),
             child: const Text('Send Email'),
           ),
         ],
       ),
-    );
+    ).then((value) { emailController.dispose(); return value; });
 
     if (send == true && emailController.text.trim().isNotEmpty) {
       if (!mounted) return;
@@ -424,7 +417,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Meeting report and PDF emailed to $toEmail!'),
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: AppTheme.emerald,
             ),
           );
         }
@@ -554,13 +547,13 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                       decoration: BoxDecoration(
                         color: _isRecording
-                            ? const Color(0xFFDC2626).withValues(alpha: 0.12)
-                            : const Color(0xFF2DA44E).withValues(alpha: 0.12),
+                            ? AppTheme.recordingRed.withValues(alpha: 0.12)
+                            : AppTheme.lightSuccessFg.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _isRecording
-                              ? const Color(0xFFDC2626)
-                              : const Color(0xFF2DA44E),
+                              ? AppTheme.recordingRed
+                              : AppTheme.lightSuccessFg,
                           width: 0.8,
                         ),
                       ),
@@ -572,7 +565,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               width: 6,
                               height: 6,
                               decoration: const BoxDecoration(
-                                color: Color(0xFFDC2626),
+                                color: AppTheme.recordingRed,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -583,7 +576,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               height: 8,
                               child: CircularProgressIndicator(
                                 strokeWidth: 1.5,
-                                color: Color(0xFF2DA44E),
+                                color: AppTheme.lightSuccessFg,
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -592,7 +585,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               width: 6,
                               height: 6,
                               decoration: const BoxDecoration(
-                                color: Color(0xFF2DA44E),
+                                color: AppTheme.lightSuccessFg,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -607,8 +600,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.4,
                               color: _isRecording
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF2DA44E),
+                                  ? AppTheme.recordingRed
+                                  : AppTheme.lightSuccessFg,
                             ),
                           ),
                         ],
@@ -673,18 +666,18 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: _isMicMuted ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                            color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
                           ),
                         )
                       : Icon(
                           _isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
                           size: 18,
-                          color: _isMicMuted ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
                         ),
                   label: Text(
                     _isMicMuted ? 'Mic Muted (Room Blocked)' : 'Mic Active (Voice In)',
                     style: TextStyle(
-                      color: _isMicMuted ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                      color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -692,12 +685,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
                       color: _isMicMuted
-                          ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
-                          : const Color(0xFF10B981).withValues(alpha: 0.6),
+                          ? AppTheme.amber.withValues(alpha: 0.6)
+                          : AppTheme.emerald.withValues(alpha: 0.6),
                     ),
                     backgroundColor: _isMicMuted
-                        ? const Color(0xFFF59E0B).withValues(alpha: 0.1)
-                        : const Color(0xFF10B981).withValues(alpha: 0.1),
+                        ? AppTheme.amber.withValues(alpha: 0.1)
+                        : AppTheme.emerald.withValues(alpha: 0.1),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
@@ -708,7 +701,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   icon: const Icon(Icons.stop_rounded, size: 20),
                   label: Text('End Meeting (${_formatDuration(_uptimeSeconds)})'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
+                    backgroundColor: AppTheme.recordingRed,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -757,8 +750,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             title: 'Audio Capture Mode',
             value: _isMicMuted ? 'Earphones Only' : 'Earphones + Mic',
             icon: _isMicMuted ? Icons.headset_rounded : Icons.headset_mic_rounded,
-            valueColor: _isMicMuted ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-            iconColor: _isMicMuted ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+            valueColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+            iconColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
           ),
         ),
       ],
@@ -916,7 +909,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           : const Icon(Icons.cloud_upload_outlined, size: 16),
                       label: const Text('Save to Drive'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6A35F5),
+                        backgroundColor: AppTheme.purplePrimary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
@@ -1008,7 +1001,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       decoration: BoxDecoration(
         color: const Color(0xFFFEF3C7).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+        border: Border.all(color: AppTheme.amber.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1018,7 +1011,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.check_circle_outline_rounded, color: Color(0xFFF59E0B), size: 20),
+                  const Icon(Icons.check_circle_outline_rounded, color: AppTheme.amber, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Extracted Action Items',
@@ -1033,7 +1026,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     : const Icon(Icons.sync_rounded, size: 16),
                 label: const Text('Sync to DeskMate Tasks'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
+                  backgroundColor: AppTheme.emerald,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
@@ -1049,7 +1042,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 children: [
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
-                    child: Icon(Icons.arrow_right_rounded, size: 18, color: Color(0xFFF59E0B)),
+                    child: Icon(Icons.arrow_right_rounded, size: 18, color: AppTheme.amber),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -1704,9 +1697,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   }
 
   Color _getSpeakerColor(String speaker) {
-    if (speaker.contains('1')) return const Color(0xFF6A35F5); // DeskMate Purple
-    if (speaker.contains('2')) return const Color(0xFF10B981); // Emerald Green
-    if (speaker.contains('3')) return const Color(0xFFF59E0B); // Amber Orange
+    if (speaker.contains('1')) return AppTheme.purplePrimary; // DeskMate Purple
+    if (speaker.contains('2')) return AppTheme.emerald; // Emerald Green
+    if (speaker.contains('3')) return AppTheme.amber; // Amber Orange
     if (speaker.contains('4')) return const Color(0xFFEC4899); // Pink
     return const Color(0xFF06B6D4); // Cyan
   }
@@ -1731,7 +1724,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             Text('$label copied to clipboard!'),
           ],
         ),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: AppTheme.emerald,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -2089,12 +2082,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       }
     }
 
+    final searchCtrl = TextEditingController();
     showDialog(
       context: context,
       builder: (dialogCtx) {
         String modalSearch = '';
         String? modalSpeaker;
-        final searchCtrl = TextEditingController();
 
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -2310,12 +2303,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           },
         );
       },
-    );
+    ).whenComplete(() => searchCtrl.dispose());
   }
 
   Widget _buildCenterVisual(ThemeData theme) {
-    const green = Color(0xFF2DA44E);
-    const red = Color(0xFFDC2626); // Pure Crimson Red, NOT orange
+    const green = AppTheme.lightSuccessFg;
+    const red = AppTheme.recordingRed; // Pure Crimson Red, NOT orange
     final appTheme = theme.accentFg;
 
     // ── 1. INITIAL / IDLE STATE (Theme Purple, NOT Vibrating, Clickable) ──
@@ -2569,7 +2562,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+                            colors: [AppTheme.recordingRed, Color(0xFFB91C1C)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),

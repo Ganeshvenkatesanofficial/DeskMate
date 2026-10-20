@@ -5,11 +5,14 @@ Automated background meeting audio recording with dynamic microphone
 mute control, loopback/earphone device detection, and real-time silence gating.
 """
 
+from __future__ import annotations
+
 import os
 import time
 import logging
 import threading
-from typing import Optional, Dict, Any
+from pathlib import Path
+from typing import Any, Optional
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -31,14 +34,14 @@ class LiveAudioRecorder:
         self.sample_rate = sample_rate
         self.is_recording = False
         self.is_muted = False
-        self._stream: Optional[sd.InputStream] = None
-        self._wav_file: Optional[sf.SoundFile] = None
-        self._output_path: Optional[str] = None
-        self._start_time: Optional[float] = None
+        self._stream: sd.InputStream | None = None
+        self._wav_file: sf.SoundFile | None = None
+        self._output_path: str | None = None
+        self._start_time: float | None = None
         self._frames_written = 0
         self._lock = threading.Lock()
 
-    def _find_input_device(self) -> Optional[int]:
+    def _find_input_device(self) -> int | None:
         """
         Cross-platform device detection:
         - Windows: Stereo Mix, VB-Audio Virtual Cable, VoiceMeeter, What U Hear, WASAPI loopback
@@ -81,8 +84,8 @@ class LiveAudioRecorder:
             if self.is_recording:
                 return self._output_path or ""
 
-            os.makedirs(session_dir, exist_ok=True)
-            self._output_path = os.path.join(session_dir, filename)
+            Path(session_dir).mkdir(parents=True, exist_ok=True)
+            self._output_path = str(Path(session_dir) / filename)
             self._start_time = time.time()
             self._frames_written = 0
             self.is_muted = False
@@ -99,15 +102,17 @@ class LiveAudioRecorder:
                 )
 
                 def audio_callback(indata, frames, time_info, status):
-                    if not self.is_recording or self._wav_file is None:
+                    if not self.is_recording:
+                        return
+                    wav = self._wav_file
+                    if wav is None:
                         return
 
                     if self.is_muted:
-                        # Strictly zero out ambient noise & surrounding voice when muted
                         zeros = np.zeros_like(indata)
-                        self._wav_file.write(zeros)
+                        wav.write(zeros)
                     else:
-                        self._wav_file.write(indata)
+                        wav.write(indata)
                     self._frames_written += frames
 
                 self._stream = sd.InputStream(
@@ -127,8 +132,8 @@ class LiveAudioRecorder:
                 if self._wav_file:
                     try:
                         self._wav_file.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to close WAV file: {e}")
                     self._wav_file = None
                 return ""
 
@@ -155,12 +160,12 @@ class LiveAudioRecorder:
                 def _close_stream():
                     try:
                         stream_to_close.abort(ignore_errors=True)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Audio stream abort error: {e}")
                     try:
                         stream_to_close.close(ignore_errors=True)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Audio stream close error: {e}")
 
                 t = threading.Thread(target=_close_stream, daemon=True, name="AudioStreamCloseThread")
                 t.start()
@@ -185,7 +190,7 @@ class LiveAudioRecorder:
             )
             return self._output_path
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Return real-time recording state and duration."""
         duration = (
             round(time.time() - self._start_time, 1)

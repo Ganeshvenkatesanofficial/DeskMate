@@ -4,6 +4,7 @@ services.file_copilot.rag_tools — Semantic Search & RAG Vector Tools
 Offline vector indexing and semantic retrieval powered by local Qdrant and FastEmbed.
 """
 
+import functools
 from pathlib import Path
 from qdrant_client import QdrantClient
 from smolagents import Tool
@@ -13,14 +14,11 @@ from core.config import get_user_data_dir
 QDRANT_PATH = str(get_user_data_dir() / ".qdrant_data")
 COLLECTION_NAME = "local_documents"
 
-_client = None
 
-def get_qdrant_client():
-    """Lazy initializer for Qdrant client."""
-    global _client
-    if _client is None:
-        _client = QdrantClient(path=QDRANT_PATH)
-    return _client
+@functools.cache
+def get_qdrant_client() -> QdrantClient:
+    """Lazy cached initializer for Qdrant client."""
+    return QdrantClient(path=QDRANT_PATH)
 
 def check_qdrant_health() -> bool:
     """Dynamically verify that the local embedded Qdrant vector database is responsive."""

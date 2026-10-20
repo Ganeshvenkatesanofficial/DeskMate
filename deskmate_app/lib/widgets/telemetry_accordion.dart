@@ -1,8 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/chat_message.dart';
 import '../theme/app_theme.dart';
+import '../utils/clipboard_utils.dart';
+
+enum _ToolKind { vector, db, other }
+
+_ToolKind _classifyTool(String? tool) {
+  final t = (tool ?? '').toLowerCase();
+  const vectorTools = {'recall_memory', 'save_to_memory', 'search_memory', 'search_qdrant', 'index_document'};
+  const dbTools = {'run_sql_query', 'search_notes', 'save_note', 'list_tasks', 'add_task', 'complete_task'};
+  if (vectorTools.contains(t)) return _ToolKind.vector;
+  if (dbTools.contains(t)) return _ToolKind.db;
+  return _ToolKind.other;
+}
 
 class TelemetryAccordion extends StatefulWidget {
   final List<AgentStepTelemetry> steps;
@@ -70,7 +81,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
   }
 
   void _copyContent(String text, String label, int stepIndex) {
-    Clipboard.setData(ClipboardData(text: text));
+    copyWithFeedback(context, text, label: '$label copied to clipboard');
     setState(() {
       _copiedStepIndex = stepIndex;
     });
@@ -81,15 +92,6 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         });
       }
     });
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label copied to clipboard'),
-        duration: const Duration(milliseconds: 1400),
-        behavior: SnackBarBehavior.floating,
-        width: 240,
-      ),
-    );
   }
 
   static String _friendlyToolName(String? tool) {
@@ -369,9 +371,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       vertical: 3.5,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.isDark
-                          ? const Color(0xFF21262D)
-                          : const Color(0xFFEAEEF2),
+                      color: theme.bgEmphasis,
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(
                         color: _isExpanded
@@ -445,19 +445,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     final isStepExpanded = _expandedSteps.contains(index);
 
     final rawTool = (step.tool ?? '').toLowerCase();
-    final isVectorTool =
-        rawTool == 'recall_memory' ||
-        rawTool == 'save_to_memory' ||
-        rawTool == 'search_memory' ||
-        rawTool == 'search_qdrant' ||
-        rawTool == 'index_document';
-    final isDbTool =
-        rawTool == 'run_sql_query' ||
-        rawTool == 'search_notes' ||
-        rawTool == 'save_note' ||
-        rawTool == 'list_tasks' ||
-        rawTool == 'add_task' ||
-        rawTool == 'complete_task';
+    final toolKind = _classifyTool(step.tool);
 
     IconData icon;
     Color nodeColor;
@@ -466,14 +454,14 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     String inlineMeta = '';
 
     if (isTool) {
-      if (isVectorTool) {
+      if (toolKind == _ToolKind.vector) {
         icon = Icons.hub_rounded;
         nodeColor = const Color(0xFF8250DF); // GitHub Purple
         stageBadge =
             (rawTool == 'save_to_memory' || rawTool == 'index_document')
             ? 'VECTOR EMBEDDING STORE'
             : 'VECTOR EMBEDDING SEARCH';
-      } else if (isDbTool) {
+      } else if (toolKind == _ToolKind.db) {
         icon = Icons.storage_rounded;
         nodeColor = const Color(0xFFD29922); // GitHub Amber
         stageBadge = rawTool == 'run_sql_query'
@@ -509,7 +497,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         nodeColor = const Color(0xFFD29922);
         stageBadge = 'SYSTEM NOTICE';
         primaryTitle = 'Path Adjustment';
-      } else if (isVectorTool) {
+      } else if (toolKind == _ToolKind.vector) {
         icon = Icons.grain_rounded;
         nodeColor = const Color(0xFF8250DF);
         stageBadge = 'EMBEDDING RESULTS';
@@ -517,21 +505,21 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             (rawTool == 'index_document' || rawTool == 'save_to_memory')
             ? 'Vector Index Updated'
             : 'Semantic Embeddings Retrieved';
-      } else if (isDbTool) {
+      } else if (toolKind == _ToolKind.db) {
         icon = Icons.dns_rounded;
-        nodeColor = const Color(0xFF2DA44E); // Green
+        nodeColor = theme.statusOk;
         stageBadge = 'DATABASE RESULTS';
         primaryTitle = rawTool == 'run_sql_query'
             ? 'SQL Query Results'
             : 'Database Records Found';
       } else {
         icon = Icons.check_circle_rounded;
-        nodeColor = const Color(0xFF2DA44E); // Green
+        nodeColor = theme.statusOk;
         stageBadge = 'OBSERVATION';
         primaryTitle = 'Findings Received';
       }
 
-      if (isVectorTool || isDbTool) {
+      if (toolKind != _ToolKind.other) {
         final firstLine = summary.split('\n').first.trim().replaceAll('**', '');
         inlineMeta = firstLine;
       } else {
@@ -700,9 +688,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                                   vertical: 1.5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: theme.isDark
-                                      ? const Color(0xFF21262D)
-                                      : const Color(0xFFF1F5F9),
+                                  color: theme.bgEmphasis,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -812,27 +798,14 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     int stepIndex,
     ThemeData theme,
   ) {
-    final rawTool = (step.tool ?? '').toLowerCase();
-    final isVectorTool =
-        rawTool == 'recall_memory' ||
-        rawTool == 'save_to_memory' ||
-        rawTool == 'search_memory' ||
-        rawTool == 'search_qdrant' ||
-        rawTool == 'index_document';
-    final isDbTool =
-        rawTool == 'run_sql_query' ||
-        rawTool == 'search_notes' ||
-        rawTool == 'save_note' ||
-        rawTool == 'list_tasks' ||
-        rawTool == 'add_task' ||
-        rawTool == 'complete_task';
+    final toolKind = _classifyTool(step.tool);
 
-    final panelTitle = isVectorTool
+    final panelTitle = toolKind == _ToolKind.vector
         ? 'Vector Search Parameters'
-        : (isDbTool ? 'Database Query Parameters' : 'Input Arguments Payload');
-    final panelIcon = isVectorTool
+        : (toolKind == _ToolKind.db ? 'Database Query Parameters' : 'Input Arguments Payload');
+    final panelIcon = toolKind == _ToolKind.vector
         ? Icons.hub_rounded
-        : (isDbTool ? Icons.storage_rounded : Icons.input_rounded);
+        : (toolKind == _ToolKind.db ? Icons.storage_rounded : Icons.input_rounded);
 
     final args = step.arguments ?? {};
     final jsonStr = _formatJson(args);
@@ -867,7 +840,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
                       color: isCopied
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                     const SizedBox(width: 4),
@@ -877,7 +850,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w600,
                         color: isCopied
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.accentFg,
                       ),
                     ),
@@ -894,9 +867,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
           width: double.infinity,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: theme.isDark
-                ? const Color(0xFF0D1117)
-                : const Color(0xFFF6F8FA),
+            color: theme.bgCode,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: theme.borderDefault, width: 0.8),
           ),
@@ -907,9 +878,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                 fontFamily: 'monospace',
                 fontSize: 11,
                 height: 1.45,
-                color: theme.isDark
-                    ? const Color(0xFF7EE787)
-                    : const Color(0xFF116329),
+                color: theme.successText,
               ),
             ),
           ),
@@ -924,29 +893,16 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     int stepIndex,
     ThemeData theme,
   ) {
-    final rawTool = (step.tool ?? '').toLowerCase();
-    final isVectorTool =
-        rawTool == 'recall_memory' ||
-        rawTool == 'save_to_memory' ||
-        rawTool == 'search_memory' ||
-        rawTool == 'search_qdrant' ||
-        rawTool == 'index_document';
-    final isDbTool =
-        rawTool == 'run_sql_query' ||
-        rawTool == 'search_notes' ||
-        rawTool == 'save_note' ||
-        rawTool == 'list_tasks' ||
-        rawTool == 'add_task' ||
-        rawTool == 'complete_task';
+    final toolKind = _classifyTool(step.tool);
 
-    final panelTitle = isVectorTool
+    final panelTitle = toolKind == _ToolKind.vector
         ? 'Semantic Vector Findings (Embeddings)'
-        : (isDbTool
+        : (toolKind == _ToolKind.db
               ? 'Database Records (SQLite Data)'
               : 'Observation & Findings Data');
-    final panelIcon = isVectorTool
+    final panelIcon = toolKind == _ToolKind.vector
         ? Icons.grain_rounded
-        : (isDbTool ? Icons.dns_rounded : Icons.output_rounded);
+        : (toolKind == _ToolKind.db ? Icons.dns_rounded : Icons.output_rounded);
 
     // Show full raw output if available, else summary
     final fullText = (step.rawOutput != null && step.rawOutput!.isNotEmpty)
@@ -974,9 +930,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: theme.isDark
-                    ? const Color(0xFF21262D)
-                    : const Color(0xFFEAEEF2),
+                color: theme.bgEmphasis,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -1001,7 +955,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
                       color: isCopied
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                     const SizedBox(width: 4),
@@ -1011,7 +965,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w600,
                         color: isCopied
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.accentFg,
                       ),
                     ),
@@ -1029,9 +983,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
           constraints: const BoxConstraints(maxHeight: 260),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: theme.isDark
-                ? const Color(0xFF0D1117)
-                : const Color(0xFFF6F8FA),
+            color: theme.bgCode,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: theme.borderDefault, width: 0.8),
           ),
@@ -1116,7 +1068,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
                       color: isCopied
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : const Color(0xFF8250DF),
                     ),
                     const SizedBox(width: 4),
@@ -1126,7 +1078,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w600,
                         color: isCopied
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : const Color(0xFF8250DF),
                       ),
                     ),

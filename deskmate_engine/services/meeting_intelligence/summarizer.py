@@ -16,10 +16,11 @@ import json
 import logging
 import os
 import re
-import urllib.request
-import urllib.error
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
+import requests
 import cv2
+from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
@@ -29,11 +30,11 @@ class MeetingSummarizer:
 
     def __init__(
         self,
-        gemini_api_key: Optional[str] = None,
-        gemini_model: str = "gemini-2.5-flash",
-        ollama_model: str = "llama3.2-vision",
+        gemini_api_key: str | None = None,
+        gemini_model: str = DEFAULT_GEMINI_MODEL.split("/")[-1],
+        ollama_model: str = OLLAMA_VISION_MODEL,
     ):
-        self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY", "")
+        self.gemini_api_key = gemini_api_key or GEMINI_API_KEY
         self.gemini_model = gemini_model
         self.ollama_model = ollama_model
 
@@ -59,7 +60,7 @@ class MeetingSummarizer:
         "switch to",
     }
 
-    def _is_noise_step(self, step: Dict[str, Any]) -> bool:
+    def _is_noise_step(self, step: dict[str, Any]) -> bool:
         summary = (step.get("summary") or "").lower()
         actions = step.get("actions", [])
         combined = summary + " " + " ".join([
@@ -73,10 +74,10 @@ class MeetingSummarizer:
 
     def summarize_meeting(
         self,
-        steps: List[Dict[str, Any]],
-        transcript_data: Optional[Dict[str, Any]] = None,
-        custom_fields: Optional[List[Dict[str, str]]] = None,
-    ) -> Tuple[str, List[str], Dict[str, Any], Dict[str, Any]]:
+        steps: list[dict[str, Any]],
+        transcript_data: dict[str, Any] | None = None,
+        custom_fields: list[dict[str, str]] | None = None,
+    ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
         """
         Synthesize session into an executive summary report.
 
@@ -120,7 +121,11 @@ class MeetingSummarizer:
         audio_section = self._format_transcript(transcript_data)
 
         # 3. Build structured prompt
-        prompt = self._build_prompt(visual_timeline, audio_section, len(effective_steps), custom_fields)
+        has_audio = bool(
+            transcript_data
+            and (transcript_data.get("segments") or transcript_data.get("full_transcript"))
+        )
+        prompt = self._build_prompt(visual_timeline, audio_section, len(effective_steps), custom_fields, has_audio=has_audio)
 
         # 4. Prepare multimodal parts with Base64 screenshot images
         parts = [{"text": prompt}]
@@ -133,9 +138,10 @@ class MeetingSummarizer:
 
             full_img_path = None
             if img_path:
-                for cand in [img_path, os.path.abspath(img_path), os.path.join(os.getcwd(), img_path)]:
-                    if os.path.exists(cand):
-                        full_img_path = cand
+                cand_p = Path(img_path)
+                for cand in [cand_p, cand_p.resolve(), Path.cwd() / img_path]:
+                    if cand.exists():
+                        full_img_path = str(cand)
                         break
 
             if full_img_path:
@@ -159,7 +165,7 @@ class MeetingSummarizer:
         # 6. Parse structured blocks
         return self._parse_structured_response(raw_response)
 
-    def _format_transcript(self, transcript_data: Optional[Dict[str, Any]]) -> str:
+    def _format_transcript(self, transcript_data: dict[str, Any] | None) -> str:
         if not transcript_data:
             return "AUDIO STATUS: No audio recorded or transcription inactive. Generate summary from visual events."
 
@@ -186,8 +192,16 @@ class MeetingSummarizer:
         visual_timeline: str,
         audio_section: str,
         step_count: int,
-        custom_fields: Optional[List[Dict[str, str]]],
+        custom_fields: list[dict[str, str]] | None,
+        *,
+        has_audio: bool = False,
     ) -> str:
+        transcript_section = (
+            "### Spoken Transcript Highlights\n"
+            "Key spoken decisions, directions, answers, and verbal agreements extracted from the transcript.\n"
+            if has_audio else ""
+        )
+
         custom_instructions = ""
         custom_delimiters = ""
         if custom_fields:
@@ -217,6 +231,10 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 {custom_instructions}
 
 ---
+## GROUNDING RULE (MANDATORY):
+You MUST derive every claim, name, deadline, decision, and action item SOLELY from the provided visual timeline, screenshot OCR text, and audio transcript above. If a piece of information is not present in any source, DO NOT infer, assume, or fabricate it. Write "Not discussed" or omit the item entirely rather than guessing.
+
+---
 ## STRICT EXCLUSION & FILTERING RULES:
 1. NEVER describe, mention, or include actions inside the DeskMate application itself (e.g. clicking 'Start Meeting Scribe', 'End Meeting', opening DeskMate, or viewing recording metrics). These are host tool operations, NOT meeting content.
 2. NEVER describe transient window switching, Alt-Tab/Cmd-Tab, Dock clicks, or minimizing/maximizing windows to switch into or out of the meeting.
@@ -240,10 +258,7 @@ Concise 3-5 sentence summary of the meeting's core purpose, platforms used, and 
 ### Detailed Actions Timeline
 Chronological narrative combining visual on-screen actions, screenshot text/OCR details, and spoken statements. Explain the purpose of each significant action.
 
-### Spoken Transcript Highlights
-Key spoken decisions, directions, answers, and verbal agreements extracted from the transcript.
-
-### Decisions & Outcomes
+{transcript_section}### Decisions & Outcomes
 - Accomplishments finalized.
 - Items designated for follow-up.
 
@@ -258,85 +273,89 @@ Relevant code commands, configuration flags, client requests, or operational par
 {custom_delimiters}
 """
 
-    def _query_llm(self, parts: List[Dict[str, Any]], plain_prompt: str) -> str:
+    def _query_llm(self, parts: list[dict[str, Any]], plain_prompt: str) -> str:
         """Query Gemini 2.5 Flash via REST or fallback to local Ollama."""
         # 1. Gemini REST
         if self.gemini_api_key:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent"
+                headers = {"x-goog-api-key": self.gemini_api_key, "Content-Type": "application/json"}
                 req_data = {
                     "contents": [{"parts": parts}],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 16384},
                 }
-                body = json.dumps(req_data).encode("utf-8")
-                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=90) as response:
-                    res_json = json.loads(response.read().decode("utf-8"))
-                    candidates = res_json.get("candidates", [])
-                    if candidates:
-                        content_parts = candidates[0].get("content", {}).get("parts", [])
-                        if content_parts:
-                            return content_parts[0].get("text", "")
+                resp = requests.post(url, json=req_data, headers=headers, timeout=90)
+                resp.raise_for_status()
+                res_json = resp.json()
+                candidates = res_json.get("candidates", [])
+                if candidates:
+                    content_parts = candidates[0].get("content", {}).get("parts", [])
+                    if content_parts:
+                        return "".join(p.get("text", "") for p in content_parts)
             except Exception as e:
                 logger.warning(f"Gemini API request failed: {e}. Falling back to local Ollama.")
 
         # 2. Local Ollama fallback
         try:
-            import requests
-            ollama_base = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
             res = requests.post(
-                f"{ollama_base}/api/generate",
-                json={"model": self.ollama_model, "prompt": plain_prompt, "stream": False},
-                timeout=60,
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": self.ollama_model,
+                    "prompt": plain_prompt,
+                    "stream": False,
+                    "options": {"num_ctx": 16384},
+                },
+                timeout=180,
             )
             if res.status_code == 200:
                 return res.json().get("response", "")
         except Exception as oe:
             logger.error(f"Local Ollama generation error: {oe}")
 
-        return "===SUMMARY===\n### Meeting Completed\nReview recorded session steps and audio transcript above.\n===IMPORTANT_STEPS===\n[]\n===STEP_DESCRIPTIONS===\n{}"
+        logger.error("All summarization engines failed (Gemini and Ollama). Returning empty result.")
+        return "===SUMMARY===\n### Summarization Unavailable\nBoth Gemini and Ollama engines failed. Configure GEMINI_API_KEY or ensure Ollama is running locally.\n===IMPORTANT_STEPS===\n[]\n===STEP_DESCRIPTIONS===\n{}"
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        return re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text.strip(), flags=re.DOTALL)
 
     def _parse_structured_response(
         self, raw: str
-    ) -> Tuple[str, List[str], Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
         summary = "Meeting summary could not be extracted."
-        important_steps = []
-        step_descriptions = {}
-        custom_fields_dict = {}
+        important_steps: list[str] = []
+        step_descriptions: dict[str, Any] = {}
+        custom_fields_dict: dict[str, Any] = {}
 
-        try:
-            # Extract CUSTOM_FIELDS if present
-            if "===CUSTOM_FIELDS===" in raw:
-                raw, cf_block = raw.split("===CUSTOM_FIELDS===", 1)
-                cf_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", cf_block.strip(), flags=re.DOTALL)
-                try:
-                    custom_fields_dict = json.loads(cf_clean)
-                except Exception as cfe:
-                    logger.debug(f"Failed to parse custom fields JSON: {cfe}")
+        # 1. Extract CUSTOM_FIELDS independently
+        if "===CUSTOM_FIELDS===" in raw:
+            raw, cf_block = raw.split("===CUSTOM_FIELDS===", 1)
+            try:
+                custom_fields_dict = json.loads(self._strip_code_fences(cf_block))
+            except Exception as cfe:
+                logger.debug(f"Failed to parse custom fields JSON: {cfe}")
 
-            if "===SUMMARY===" in raw and "===IMPORTANT_STEPS===" in raw:
-                parts = raw.split("===IMPORTANT_STEPS===")
-                summary = parts[0].split("===SUMMARY===")[1].strip()
+        # 2. Extract STEP_DESCRIPTIONS independently
+        if "===STEP_DESCRIPTIONS===" in raw:
+            raw, desc_block = raw.split("===STEP_DESCRIPTIONS===", 1)
+            try:
+                step_descriptions = json.loads(self._strip_code_fences(desc_block))
+            except Exception as e:
+                logger.debug(f"Failed to parse step_descriptions JSON: {e}")
 
-                rest = parts[1]
-                if "===STEP_DESCRIPTIONS===" in rest:
-                    steps_raw, desc_raw = rest.split("===STEP_DESCRIPTIONS===")
-                    steps_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", steps_raw.strip(), flags=re.DOTALL)
-                    important_steps = json.loads(steps_clean)
+        # 3. Extract IMPORTANT_STEPS independently
+        if "===IMPORTANT_STEPS===" in raw:
+            raw, steps_block = raw.split("===IMPORTANT_STEPS===", 1)
+            try:
+                important_steps = json.loads(self._strip_code_fences(steps_block))
+            except Exception as e:
+                logger.debug(f"Failed to parse important_steps JSON: {e}")
 
-                    desc_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", desc_raw.strip(), flags=re.DOTALL)
-                    try:
-                        step_descriptions = json.loads(desc_clean)
-                    except Exception:
-                        pass
-                else:
-                    steps_clean = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", rest.strip(), flags=re.DOTALL)
-                    important_steps = json.loads(steps_clean)
-            else:
-                summary = raw
-        except Exception as e:
-            logger.warning(f"Structured response parsing error: {e}")
-            summary = raw
+        # 4. Extract SUMMARY (everything after the delimiter, now that later blocks are removed)
+        if "===SUMMARY===" in raw:
+            summary = raw.split("===SUMMARY===", 1)[1].strip()
+        elif raw.strip():
+            summary = re.sub(r"===[A-Z_]+=== *", "", raw).strip()
 
         # Post-filter: purge any internal DeskMate or window-switch steps returned by the model
         clean_important = []

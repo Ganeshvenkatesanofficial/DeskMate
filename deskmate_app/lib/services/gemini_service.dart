@@ -10,7 +10,7 @@ class GeminiService {
   /// Returns the text response from the model.
   Future<String> generateContent(String prompt) async {
     final uri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     );
     final requestBody = jsonEncode({
       'systemInstruction': {
@@ -37,7 +37,10 @@ class GeminiService {
     final response = await http
         .post(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
           body: requestBody,
         )
         .timeout(const Duration(seconds: 30));

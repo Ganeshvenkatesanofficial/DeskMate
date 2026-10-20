@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/constants.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import 'database_explorer_dialog.dart';
@@ -167,7 +168,7 @@ class _SidebarState extends State<Sidebar> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'DeskMate AI • v1.0.0',
+                                    '${AppConstants.appName} • v${AppConstants.version}',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
@@ -325,7 +326,7 @@ class _SidebarState extends State<Sidebar> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.isDark ? theme.bgCanvas : theme.bgCanvas,
+        color: theme.bgCanvas,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: theme.borderDefault, width: 1),
       ),
@@ -663,11 +664,13 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-  Widget _buildFileAgentHealthCard(ChatProvider provider, ThemeData theme) {
-    final health = provider.fileAgentHealth;
-    final checks = health['checks'] as Map<String, dynamic>? ?? {};
-    final status = health['status'] as String? ?? 'loading';
-
+  Widget _buildHealthCard({
+    required ThemeData theme,
+    required String status,
+    required String title,
+    required String offlineLabel,
+    required List<Widget> rows,
+  }) {
     if (status == 'loading') {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -698,7 +701,7 @@ class _SidebarState extends State<Sidebar> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'File Copilot offline',
+                offlineLabel,
                 style: TextStyle(
                   fontSize: 11,
                   color: theme.dangerFg,
@@ -711,10 +714,6 @@ class _SidebarState extends State<Sidebar> {
       );
     }
 
-    final hasFs = checks['filesystem_access'] ?? false;
-    final hasQdrant = checks['qdrant_db'] ?? false;
-    final hasPrivacy = checks['privacy_mode'] ?? true;
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -726,7 +725,7 @@ class _SidebarState extends State<Sidebar> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'FILE COPILOT HEALTH',
+            title,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -735,13 +734,29 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
           const SizedBox(height: 8),
-          _buildHealthRow(theme, 'Filesystem Access', hasFs),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Qdrant Vector DB', hasQdrant),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Privacy Mode', hasPrivacy),
+          ...rows,
         ],
       ),
+    );
+  }
+
+  Widget _buildFileAgentHealthCard(ChatProvider provider, ThemeData theme) {
+    final health = provider.fileAgentHealth;
+    final checks = health['checks'] as Map<String, dynamic>? ?? {};
+    final status = health['status'] as String? ?? 'loading';
+
+    return _buildHealthCard(
+      theme: theme,
+      status: status,
+      title: 'FILE COPILOT HEALTH',
+      offlineLabel: 'File Copilot offline',
+      rows: [
+        _buildHealthRow(theme, 'Filesystem Access', checks['filesystem_access'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Qdrant Vector DB', checks['qdrant_db'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Privacy Mode', checks['privacy_mode'] ?? true),
+      ],
     );
   }
 
@@ -750,83 +765,20 @@ class _SidebarState extends State<Sidebar> {
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
     final status = health['status'] as String? ?? 'loading';
 
-    if (status == 'loading') {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: theme.accentFg,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (status == 'offline') {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: theme.dangerBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: theme.dangerBorder, width: 1),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Personal Agent offline',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.dangerFg,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final hasCredsFile = checks['google_credentials_file'] ?? false;
-    final hasGmailToken = checks['gmail_token'] ?? false;
-    final hasCalToken = checks['calendar_token'] ?? false;
-    final hasDriveToken = checks['drive_token'] ?? false;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.bgCanvas,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.borderDefault, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'PERSONAL HEALTH',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: theme.fgMuted,
-              letterSpacing: 0.08,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildHealthRow(theme, 'Credentials JSON', hasCredsFile),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Gmail Access', hasGmailToken),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Calendar Access', hasCalToken),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Drive Access', hasDriveToken),
-        ],
-      ),
+    return _buildHealthCard(
+      theme: theme,
+      status: status,
+      title: 'PERSONAL HEALTH',
+      offlineLabel: 'Personal Agent offline',
+      rows: [
+        _buildHealthRow(theme, 'Credentials JSON', checks['google_credentials_file'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Gmail Access', checks['gmail_token'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Calendar Access', checks['calendar_token'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Drive Access', checks['drive_token'] ?? false),
+      ],
     );
   }
 
@@ -835,84 +787,22 @@ class _SidebarState extends State<Sidebar> {
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
     final status = health['status'] as String? ?? 'loading';
 
-    if (status == 'loading') {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: theme.accentFg,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (status == 'offline') {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: theme.dangerBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: theme.dangerBorder, width: 1),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Meeting Scribe offline',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.dangerFg,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final hasCredsFile = checks['google_credentials_file'] ?? false;
-    final hasGmailToken = checks['gmail_token'] ?? false;
-    final hasDriveToken = checks['drive_token'] ?? false;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.bgCanvas,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.borderDefault, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'MEETING SCRIBE HEALTH',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: theme.fgMuted,
-              letterSpacing: 0.08,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildHealthRow(theme, 'Google OAuth', hasCredsFile),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Drive Cloud Sync', hasDriveToken),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Gmail Dispatch', hasGmailToken),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'Voxtral 4B Audio', true),
-          const SizedBox(height: 4),
-          _buildHealthRow(theme, 'LocateAnything-3B', true),
-        ],
-      ),
+    return _buildHealthCard(
+      theme: theme,
+      status: status,
+      title: 'MEETING SCRIBE HEALTH',
+      offlineLabel: 'Meeting Scribe offline',
+      rows: [
+        _buildHealthRow(theme, 'Google OAuth', checks['google_credentials_file'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Drive Cloud Sync', checks['drive_token'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Gmail Dispatch', checks['gmail_token'] ?? false),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'Voxtral 4B Audio', true),
+        const SizedBox(height: 4),
+        _buildHealthRow(theme, 'LocateAnything-3B', true),
+      ],
     );
   }
 

@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from core.config import setup_stdio_logging, start_parent_watchdog
+from settings import APP_VERSION, PORT as DEFAULT_PORT, HOST as DEFAULT_HOST
 from routers.api_routes import router as api_router
 from routers.ws_file_agent import router as ws_file_router
 from routers.ws_personal_agent import router as ws_personal_router
@@ -46,14 +47,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="DeskMate AI Server",
     description="Triple-Service Copilot, Personal Assistant & Meeting Intelligence with Real-Time WebSockets & Telemetry",
-    version="2.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
 # Cross-Origin Resource Sharing
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost",
+        "http://127.0.0.1",
+        f"http://localhost:{DEFAULT_PORT}",
+        f"http://127.0.0.1:{DEFAULT_PORT}",
+        "tauri://localhost",
+        "https://tauri.localhost",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,15 +94,15 @@ def find_free_port() -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DeskMate Backend Server")
-    parser.add_argument("--port", type=int, default=None, help="Port to bind backend server (default: 2026)")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host interface")
+    parser.add_argument("--port", type=int, default=None, help=f"Port to bind backend server (default: {DEFAULT_PORT})")
+    parser.add_argument("--host", type=str, default=DEFAULT_HOST, help="Host interface")
     parser.add_argument("--reload", action="store_true", default=False, help="Enable auto-reload on code changes")
     args, _ = parser.parse_known_args()
 
     if args.port:
         port = args.port
-    elif is_port_available(2026, args.host):
-        port = 2026
+    elif is_port_available(DEFAULT_PORT, args.host):
+        port = DEFAULT_PORT
     else:
         port = find_free_port()
     host = args.host

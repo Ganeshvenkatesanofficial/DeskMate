@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import os
 from collections import deque
+from pathlib import Path
 from .. import config
 
 logger = logging.getLogger(__name__)
@@ -26,23 +27,25 @@ class CursorDetector:
         best_val = -1
         best_loc = None
         best_type = None
+        best_tw, best_th = 0, 0
 
         for name, template in self.templates.items():
             for scale in self.scales:
                 t_w = int(template.shape[1] * scale)
                 t_h = int(template.shape[0] * scale)
                 scaled_t = cv2.resize(template, (t_w, t_h))
-                
+
                 res = cv2.matchTemplate(gray, scaled_t, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(res)
-                
+
                 if max_val > best_val:
                     best_val = max_val
                     best_loc = max_loc
                     best_type = name
+                    best_tw, best_th = t_w, t_h
 
         if best_val >= config.CURSOR_MATCH_THRESHOLD:
-            tw, th = self.templates[best_type].shape[::-1]
+            tw, th = best_tw, best_th
             raw_pos = (best_loc[0] + tw // 2, best_loc[1] + th // 2)
             
             self.pos_history.append(raw_pos)
@@ -58,10 +61,11 @@ class CursorDetector:
 
     def _load_or_generate_templates(self):
         templates = {}
-        if os.path.exists(config.CURSOR_TEMPLATES_DIR):
-            for f in os.listdir(config.CURSOR_TEMPLATES_DIR):
-                if f.endswith(('.png', '.jpg')):
-                    templates[os.path.splitext(f)[0]] = cv2.imread(os.path.join(config.CURSOR_TEMPLATES_DIR, f), 0)
+        tmpl_dir = Path(config.CURSOR_TEMPLATES_DIR)
+        if tmpl_dir.exists():
+            for f in tmpl_dir.iterdir():
+                if f.suffix.lower() in ('.png', '.jpg'):
+                    templates[f.stem] = cv2.imread(str(f), 0)
         if not templates:
             templates['arrow'] = self._generate_arrow_template()
             templates['hand'] = self._generate_hand_template()

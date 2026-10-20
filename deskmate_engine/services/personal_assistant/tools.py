@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
+import requests
 import sys
-import urllib.request
+import threading
 import webbrowser
-from datetime import datetime, timedelta
+
+logger = logging.getLogger("deskmate.personal.tools")
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
@@ -44,10 +48,19 @@ from core.database import (
     db_save_note,
     db_search_notes,
 )
+from settings import (
+    GOOGLE_CREDENTIALS_PATH,
+    GMAIL_TOKEN_PATH,
+    GCAL_TOKEN_PATH,
+    DRIVE_TOKEN_PATH,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GITHUB_TOKEN,
+)
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
-_CREDS = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+_CREDS = GOOGLE_CREDENTIALS_PATH
 
 
 def _google_service(scopes: list[str], token_path: str, api: str, version: str) -> Any:
@@ -63,8 +76,8 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
     elif resolved_creds.exists():
         actual_creds = str(resolved_creds)
     else:
-        client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("CI")
-        client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or os.getenv("CS")
+        client_id = GOOGLE_CLIENT_ID or os.getenv("CI")
+        client_secret = GOOGLE_CLIENT_SECRET or os.getenv("CS")
         if client_id and client_secret:
             creds_data = {
                 "installed": {
@@ -96,8 +109,8 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                 creds = Credentials.from_authorized_user_file(resolved_token_path, scopes)
             else:
                 creds = None # Force re-auth due to missing scopes
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to read authorized scopes from token file: {e}")
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -115,8 +128,10 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                     existing_scopes = existing_data.get("scopes", [])
                     if existing_scopes:
                         req_scopes = list(set(scopes + existing_scopes))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to read existing scopes from token file: {e}")
+
+            orig_open = webbrowser.open
 
             def _robust_open(url, new=0, autoraise=True):
                 sys.stderr.write(f"\n[OAuth Re-Auth] Please open this URL in your browser if it doesn't open automatically:\n{url}\n\n")
@@ -129,16 +144,16 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
                     sys.stderr.write(f"[OAuth Re-Auth] Failed to use os.startfile: {err}\n")
                     sys.stderr.flush()
                 try:
-                    return webbrowser._original_open(url, new, autoraise)
+                    return orig_open(url, new, autoraise)
                 except Exception:
                     return False
 
-            if not hasattr(webbrowser, "_original_open"):
-                webbrowser._original_open = webbrowser.open
             webbrowser.open = _robust_open
-
-            flow = InstalledAppFlow.from_client_secrets_file(actual_creds, req_scopes)
-            creds = flow.run_local_server(port=0)
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(actual_creds, req_scopes)
+                creds = flow.run_local_server(port=0)
+            finally:
+                webbrowser.open = orig_open
         
         Path(resolved_token_path).write_text(creds.to_json(), encoding="utf-8")
     return build(api, version, credentials=creds)
@@ -151,16 +166,27 @@ def _google_service(scopes: list[str], token_path: str, api: str, version: str) 
 _MEM_TEXTS: list[str] = []
 _MEM_META: list[dict[str, Any]] = []
 _MEM_INDEX: Any = None
+_MEM_LOCK = threading.Lock()
+_model_cache: Any = None
+_model_lock = threading.Lock()
+
+
+def _get_embedding_model() -> Any:
+    """Thread-safe lazy initialization of the sentence transformer model."""
+    global _model_cache
+    if _model_cache is None:
+        with _model_lock:
+            if _model_cache is None:
+                if SentenceTransformer is not None:
+                    _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
+                else:
+                    raise RuntimeError("sentence_transformers is not installed.")
+    return _model_cache
 
 
 def _embed_batch(texts: list[str]) -> Any:
-    global _model_cache
-    if '_model_cache' not in globals():
-        if SentenceTransformer is not None:
-            _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
-        else:
-            raise RuntimeError("sentence_transformers is not installed.")
-    return _model_cache.encode(texts, normalize_embeddings=True).astype("float32")
+    model = _get_embedding_model()
+    return model.encode(texts, normalize_embeddings=True).astype("float32")
 
 
 def _embed(text: str) -> Any:
@@ -169,30 +195,31 @@ def _embed(text: str) -> Any:
 
 def _faiss_index() -> Any:
     global _MEM_INDEX, _MEM_TEXTS, _MEM_META
-    if _MEM_INDEX is None:
-        if faiss is None:
-            raise RuntimeError("faiss is not installed.")
-        _MEM_INDEX = faiss.IndexFlatL2(384)
-        _MEM_TEXTS = []
-        _MEM_META = []
-        
-        # Pull memories from persistent SQLite table via core.database
-        try:
-            rows = db_get_all_memories()
-            if rows:
-                texts = [r["content"] for r in rows]
-                tags_list = [r["tags"] for r in rows]
-                dates = [r["created_at"] for r in rows]
-                
-                embeddings = _embed_batch(texts)
-                _MEM_INDEX.add(embeddings)
-                
-                for text, tags, date in zip(texts, tags_list, dates):
-                    _MEM_TEXTS.append(text)
-                    _MEM_META.append({"tags": tags, "saved_at": date})
-        except Exception as e:
-            print(f"Error loading vector memory from DB: {e}")
-    return _MEM_INDEX
+    with _MEM_LOCK:
+        if _MEM_INDEX is None:
+            if faiss is None:
+                raise RuntimeError("faiss is not installed.")
+            _MEM_INDEX = faiss.IndexFlatL2(384)
+            _MEM_TEXTS = []
+            _MEM_META = []
+            
+            # Pull memories from persistent SQLite table via core.database
+            try:
+                rows = db_get_all_memories()
+                if rows:
+                    texts = [r["content"] for r in rows]
+                    tags_list = [r["tags"] for r in rows]
+                    dates = [r["created_at"] for r in rows]
+                    
+                    embeddings = _embed_batch(texts)
+                    _MEM_INDEX.add(embeddings)
+                    
+                    for text, tags, date in zip(texts, tags_list, dates):
+                        _MEM_TEXTS.append(text)
+                        _MEM_META.append({"tags": tags, "saved_at": date})
+            except Exception as e:
+                logger.error(f"Error loading vector memory from DB: {e}")
+        return _MEM_INDEX
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -349,8 +376,8 @@ class ListEventsTool(Tool):
                 os.getenv("GCAL_TOKEN_PATH", "token_gcal.json"),
                 "calendar", "v3",
             )
-            now = datetime.utcnow().isoformat() + "Z"
-            end = (datetime.utcnow() + timedelta(days=days_ahead)).isoformat() + "Z"
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            end = (datetime.now(timezone.utc) + timedelta(days=days_ahead)).isoformat().replace("+00:00", "Z")
             res = svc.events().list(
                 calendarId="primary", timeMin=now, timeMax=end,
                 maxResults=max_results, singleEvents=True, orderBy="startTime",
@@ -618,9 +645,9 @@ class GetWeatherTool(Tool):
     def forward(self, location: str) -> str:
         url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=8) as r:  # nosec B310
-                data = json.loads(r.read().decode('utf-8'))
+            resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
+            resp.raise_for_status()
+            data = resp.json()
             cur = data["current_condition"][0]
             area = data["nearest_area"][0]
             return json.dumps({
@@ -657,7 +684,7 @@ class SaveMemoryTool(Tool):
     def forward(self, content: str, tags: str | None = "") -> str:
         try:
             tags = tags or ""
-            created_at = datetime.utcnow().isoformat()
+            created_at = datetime.now(timezone.utc).isoformat()
             
             # Persist to SQLite database via core.database
             db_save_memory(content=content, tags=tags, created_at=created_at)
@@ -665,10 +692,12 @@ class SaveMemoryTool(Tool):
             # Load and update FAISS index
             idx = _faiss_index()
             vec = _embed(content)
-            idx.add(vec)
-            _MEM_TEXTS.append(content)
-            _MEM_META.append({"tags": tags, "saved_at": created_at})
-            return f"Saved to memory (total: {len(_MEM_TEXTS)} entries)"
+            with _MEM_LOCK:
+                idx.add(vec)
+                _MEM_TEXTS.append(content)
+                _MEM_META.append({"tags": tags, "saved_at": created_at})
+                total_entries = len(_MEM_TEXTS)
+            return f"Saved to memory (total: {total_entries} entries)"
         except Exception as e:
             return f"Failed to save memory: {e}"
 
@@ -692,15 +721,16 @@ class RecallMemoryTool(Tool):
             if idx.ntotal == 0:
                 return "[]"
             vec = _embed(query)
-            distances, indices = idx.search(vec, min(top_k, idx.ntotal))
-            results = []
-            for dist, i in zip(distances[0], indices[0]):
-                if i < len(_MEM_TEXTS) and i >= 0:
-                    results.append({
-                        "content": _MEM_TEXTS[i],
-                        "similarity": round(float(1 - dist), 4),
-                        **_MEM_META[i],
-                    })
+            with _MEM_LOCK:
+                distances, indices = idx.search(vec, min(top_k, idx.ntotal))
+                results = []
+                for dist, i in zip(distances[0], indices[0]):
+                    if 0 <= i < len(_MEM_TEXTS):
+                        results.append({
+                            "content": _MEM_TEXTS[i],
+                            "similarity": round(float(1 - dist), 4),
+                            **_MEM_META[i],
+                        })
             return json.dumps(results, indent=2)
         except Exception as e:
             return f"Memory recall failed: {e}"
@@ -767,16 +797,16 @@ class SearchGithubIssuesTool(Tool):
         url = f"https://api.github.com/repos/{repository}/issues?state={state}&per_page={per_page}"
         
         try:
-            req = urllib.request.Request(url)
-            req.add_header("User-Agent", "DeskMate-AI-Agent")
-            req.add_header("Accept", "application/vnd.github+json")
-            
-            token = os.getenv("GITHUB_TOKEN")
-            if token:
-                req.add_header("Authorization", f"Bearer {token}")
-                
-            with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
-                issues = json.loads(r.read().decode('utf-8'))
+            headers = {
+                "User-Agent": "DeskMate-AI-Agent",
+                "Accept": "application/vnd.github+json",
+            }
+            if GITHUB_TOKEN:
+                headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            issues = resp.json()
                 
             results = []
             for issue in issues:
@@ -814,10 +844,9 @@ class CreateGithubIssueTool(Tool):
         if "/" not in repository:
             return "Invalid repository format. Please specify as 'owner/repo'."
             
-        token = os.getenv("GITHUB_TOKEN")
-        if not token:
+        if not GITHUB_TOKEN:
             return "GitHub Personal Access Token (GITHUB_TOKEN) is not configured in the .env file. Please ask the user to add it."
-            
+
         url = f"https://api.github.com/repos/{repository}/issues"
         payload = {
             "title": title,
@@ -826,15 +855,18 @@ class CreateGithubIssueTool(Tool):
             payload["body"] = body
             
         try:
-            data_bytes = json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(url, data=data_bytes, method="POST")
-            req.add_header("User-Agent", "DeskMate-AI-Agent")
-            req.add_header("Accept", "application/vnd.github+json")
-            req.add_header("Authorization", f"Bearer {token}")
-            req.add_header("Content-Type", "application/json")
-            
-            with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
-                res_data = json.loads(r.read().decode('utf-8'))
+            resp = requests.post(
+                url,
+                json=payload,
+                headers={
+                    "User-Agent": "DeskMate-AI-Agent",
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {GITHUB_TOKEN}",
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            res_data = resp.json()
                 
             return f"Successfully created GitHub issue #{res_data.get('number')} in '{repository}'!\nURL: {res_data.get('html_url')}"
         except Exception as e:
@@ -1142,7 +1174,7 @@ class ListGoogleTasksTool(Tool):
             show_completed = show_completed or False
             svc = _google_service(
                 ["https://www.googleapis.com/auth/tasks.readonly"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
+                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
                 "tasks", "v1",
             )
             
@@ -1182,10 +1214,10 @@ class CreateGoogleTaskTool(Tool):
         try:
             svc = _google_service(
                 ["https://www.googleapis.com/auth/tasks"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
+                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
                 "tasks", "v1",
             )
-            
+
             body = {"title": title}
             if notes:
                 body["notes"] = notes
@@ -1210,10 +1242,10 @@ class CompleteGoogleTaskTool(Tool):
         try:
             svc = _google_service(
                 ["https://www.googleapis.com/auth/tasks"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
+                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
                 "tasks", "v1",
             )
-            
+
             svc.tasks().patch(tasklist="@default", task=task_id, body={"status": "completed"}).execute()
             return f"Google Task {task_id} successfully marked as completed."
         except Exception as e:

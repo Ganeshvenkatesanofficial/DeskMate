@@ -14,6 +14,7 @@ import logging
 from typing import Any, Callable, Dict, Generator, Optional
 import uuid
 from fastapi import WebSocket, WebSocketDisconnect
+from core.config import generate_conversation_id
 
 logger = logging.getLogger("deskmate.ws")
 
@@ -92,7 +93,7 @@ async def handle_agent_websocket(
             model_id = data.get("model")
             conversation_id = data.get("conversation_id")
             if not conversation_id or not str(conversation_id).strip():
-                conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+                conversation_id = generate_conversation_id()
 
             # Setup async queue and dispatch background execution
             queue: asyncio.Queue = asyncio.Queue()

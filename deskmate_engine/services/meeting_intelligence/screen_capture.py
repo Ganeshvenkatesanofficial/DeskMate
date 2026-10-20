@@ -56,14 +56,6 @@ class ScreenCapture:
         self._resolution: Tuple[int, int] = (0, 0)
 
     @property
-    def is_running(self) -> bool:
-        return self._running
-
-    @property
-    def is_paused(self) -> bool:
-        return self._paused
-
-    @property
     def stats(self) -> Dict[str, Any]:
         uptime = round(time.time() - self._start_time, 1) if self._start_time else 0.0
         return {

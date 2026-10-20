@@ -253,7 +253,7 @@ websocat ws://127.0.0.1:8000/ws/file-agent
      "step_number": 1,
      "tool_name": "search_files",
      "tool_input": {"directory_path": ".", "pattern": "*.md"},
-     "observation": "Found: README.md, terminal-ai-agent/README.md",
+     "observation": "Found: README.md, deskmate_engine/README.md",
      "reasoning": "Searching project root for markdown files.",
      "duration_ms": 42
    }
@@ -262,7 +262,7 @@ websocat ws://127.0.0.1:8000/ws/file-agent
    ```json
    {
      "type": "done",
-     "reply": "I found 2 markdown files:\n- `README.md`\n- `terminal-ai-agent/README.md`",
+     "reply": "I found 2 markdown files:\n- `README.md`\n- `deskmate_engine/README.md`",
      "conversation_id": "session_f123a",
      "step_count": 1
    }

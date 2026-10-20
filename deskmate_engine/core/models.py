@@ -16,10 +16,9 @@ import requests
 from smolagents import Model, ChatMessage, MessageRole, LiteLLMModel
 from smolagents.models import ChatMessageToolCall, ChatMessageToolCallFunction
 
+from core.config import DEFAULT_GEMINI_MODEL, OLLAMA_BASE_URL
 
 logger = logging.getLogger("deskmate.models")
-
-OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 
 # ─── Dynamic Local Model Discovery ──────────────────────────────────────────
@@ -52,8 +51,8 @@ def get_installed_chat_models() -> list[str]:
                     continue
                 chat_models.append(name)
             return chat_models
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to query Ollama installed models: {e}")
     return []
 
 
@@ -79,37 +78,6 @@ def check_local_llm_status() -> dict[str, Any]:
             "models": [],
             "default_model": None,
         }
-
-
-def ask_local_llm(
-    prompt: str,
-    *,
-    model: str | None = None,
-    stream: bool = False,
-    temperature: float = 0.1,
-) -> str:
-    """Send prompt to the local Ollama generate API and return generated text."""
-    selected_model = model or get_default_model()
-    if not selected_model:
-        raise RuntimeError(
-            "No local LLM model found in Ollama. Please install a model (e.g. `ollama pull llama3`) or configure a Gemini API key."
-        )
-    payload: dict[str, Any] = {
-        "model": selected_model,
-        "prompt": prompt,
-        "stream": stream,
-        "options": {
-            "temperature": temperature,
-            "num_ctx": 16384,
-            "num_predict": 4096,
-            "repeat_penalty": 1.15,
-        },
-    }
-
-    response = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=600)
-    response.raise_for_status()
-    data = response.json()
-    return data.get("response", "").strip()
 
 
 def chat_local_llm(
@@ -338,8 +306,8 @@ def ensure_json_tool_call(content: str) -> str:
                         return json.dumps({"name": "list_directory", "arguments": {"directory_path": p_val}}, indent=2)
                 elif "answer" in parsed:
                     return json.dumps({"name": "final_answer", "arguments": parsed}, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"JSON tool call parsing exception: {e}")
 
     # No valid JSON tool call found -> wrap entire text as final_answer
     cleaned_answer = content_stripped
@@ -351,12 +319,12 @@ def ensure_json_tool_call(content: str) -> str:
         if cleaned_answer.lower().startswith(prefix):
             cleaned_answer = cleaned_answer[len(prefix):].strip()
 
-    escaped_answer = (
-        cleaned_answer.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-    )
-    return f'{{\n  "name": "final_answer",\n  "arguments": {{\n    "answer": "{escaped_answer}"\n  }}\n}}'
+    return json.dumps({
+        "name": "final_answer",
+        "arguments": {
+            "answer": cleaned_answer
+        }
+    }, indent=2)
 
 
 def extract_first_json_object(text: str) -> str:
@@ -515,8 +483,8 @@ class LocalLiteLLMModel(Model):
                 if isinstance(arguments, str):
                     try:
                         arguments = json.loads(arguments)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to parse function arguments JSON: {e}")
 
                 smol_tool_calls.append(
                     ChatMessageToolCall(
@@ -561,8 +529,8 @@ class LocalLiteLLMModel(Model):
                     ],
                     raw=response_msg,
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to parse tool call JSON: {e}")
 
         return ChatMessage(
             role=MessageRole.ASSISTANT,
@@ -584,15 +552,11 @@ class LocalLiteLLMModel(Model):
         return self.generate(*args, **kwargs)
 
 
-
-SafeLiteLLMModel = LocalLiteLLMModel
-
-
 def get_model(api_key: Optional[str] = None, model_id: Optional[str] = None) -> Model:
     """
     Central factory: returns LiteLLM Gemini cloud model if api_key provided,
     otherwise returns LocalLiteLLMModel using detected or chosen Ollama model.
     """
     if api_key and api_key.strip():
-        return LiteLLMModel(model_id="gemini/gemini-2.5-flash", api_key=api_key.strip())
+        return LiteLLMModel(model_id=DEFAULT_GEMINI_MODEL, api_key=api_key.strip())
     return LocalLiteLLMModel(model_id=model_id or get_default_model())

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 import subprocess
 from typing import Optional
 
@@ -30,29 +31,29 @@ class AudioExtractor:
         """
         Converts any media file (wav, mp3, mp4, mov, webm) into 16 kHz mono PCM WAV.
         """
-        if not os.path.exists(input_path):
+        inp = Path(input_path)
+        if not inp.exists():
             raise FileNotFoundError(f"Input audio file not found: {input_path}")
 
-        if output_path is None:
-            base, _ = os.path.splitext(input_path)
-            output_path = f"{base}_normalized_16k.wav"
+        out = Path(output_path) if output_path else inp.with_name(f"{inp.stem}_normalized_16k.wav")
+        out_str = str(out)
 
         # 1. Try ffmpeg if installed
         try:
             cmd = [
                 "ffmpeg",
                 "-y",
-                "-i", input_path,
+                "-i", str(inp),
                 "-vn",                    # Discard video stream
                 "-acodec", "pcm_s16le",    # 16-bit PCM
                 "-ar", str(self.sample_rate),
                 "-ac", str(CHANNELS),
-                output_path,
+                out_str,
             ]
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-            if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 100:
-                logger.info(f"Audio extracted via FFmpeg: {output_path}")
-                return output_path
+            if res.returncode == 0 and out.exists() and out.stat().st_size > 100:
+                logger.info(f"Audio extracted via FFmpeg: {out_str}")
+                return out_str
         except Exception as e:
             logger.debug(f"FFmpeg extraction fallback: {e}")
 
@@ -77,9 +78,9 @@ class AudioExtractor:
             if peak > 0:
                 data = data / peak * 0.95
 
-            sf.write(output_path, data, self.sample_rate, subtype="PCM_16")
-            logger.info(f"Audio normalized via soundfile: {output_path}")
-            return output_path
+            sf.write(out_str, data, self.sample_rate, subtype="PCM_16")
+            logger.info(f"Audio normalized via soundfile: {out_str}")
+            return out_str
         except Exception as se:
             logger.warning(f"Python audio normalization fallback: {se}")
 

@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
@@ -31,11 +32,13 @@ from services.meeting_intelligence import (
 )
 from services.meeting_intelligence.transcriber.live_audio_recorder import LiveAudioRecorder
 
+from settings import SESSIONS_OUTPUT_DIR, DEFAULT_SCREEN_FPS, MAX_RETAINED_SESSIONS
+
 logger = logging.getLogger("deskmate.meeting_routes")
 router = APIRouter(prefix="/api/meeting", tags=["meeting"])
 
 # Global session state singleton
-_SESSION_STATE: Dict[str, Any] = {
+_SESSION_STATE: dict[str, Any] = {
     "capture": None,
     "pipeline": None,
     "audio_recorder": None,
@@ -44,13 +47,13 @@ _SESSION_STATE: Dict[str, Any] = {
     "pdf_generator": MeetingPDFGenerator(),
     "export_service": MeetingExportService(),
     "active_session_id": None,
-    "output_dir": "output/sessions",
+    "output_dir": SESSIONS_OUTPUT_DIR,
 }
 
 
 class StartMeetingRequest(BaseModel):
     monitor: int = 1
-    fps: float = 2.0
+    fps: float = DEFAULT_SCREEN_FPS
 
 
 class SummarizeMeetingRequest(BaseModel):
@@ -109,7 +112,7 @@ async def start_meeting(req: StartMeetingRequest):
         )
 
         session_id = pipeline.start()
-        session_dir = os.path.join(_SESSION_STATE["output_dir"], session_id)
+        session_dir = str(Path(_SESSION_STATE["output_dir"]) / session_id)
 
         # Start automated background audio recording (captures earphones/system & mic)
         audio_rec = LiveAudioRecorder()
@@ -199,27 +202,34 @@ async def stop_meeting():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_MAX_AUDIO_BYTES = 500 * 1024 * 1024  # 500 MB
+
 @router.post("/audio/{session_id}")
 @router.post("/{session_id}/audio")
 async def upload_session_audio(session_id: str, file: UploadFile = File(...)):
     """Receive live audio recording (WAV, WebM, MP3) for Voxtral 4B transcription."""
-    output_dir = _SESSION_STATE["output_dir"]
-    session_dir = os.path.join(output_dir, session_id)
-    os.makedirs(session_dir, exist_ok=True)
+    base_dir = Path(_SESSION_STATE["output_dir"]).resolve()
+    session_dir = (base_dir / session_id).resolve()
+    if not session_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session_dir.mkdir(parents=True, exist_ok=True)
 
     filename = file.filename or "audio.wav"
-    ext = os.path.splitext(filename)[1].lower() or ".wav"
-    save_path = os.path.join(session_dir, f"audio{ext}")
+    ext = Path(filename).suffix.lower() or ".wav"
+    save_path = session_dir / f"audio{ext}"
 
     try:
         content = await file.read()
-        with open(save_path, "wb") as f:
-            f.write(content)
+        if len(content) > _MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail="Audio file too large")
+        await asyncio.to_thread(save_path.write_bytes, content)
         logger.info(f"Saved session audio to {save_path} ({len(content)} bytes)")
-        return {"status": "uploaded", "session_id": session_id, "audio_path": save_path}
+        return {"status": "uploaded", "session_id": session_id, "audio_path": str(save_path)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to save audio for {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Audio upload failed")
 
 
 @router.post("/summarize")
@@ -229,29 +239,30 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
     if not session_id:
         raise HTTPException(status_code=400, detail="No session_id provided or active.")
 
-    output_dir = _SESSION_STATE["output_dir"]
-    report_file = os.path.join(output_dir, f"session_{session_id}.json")
-    session_dir = os.path.join(output_dir, session_id)
+    output_dir = Path(_SESSION_STATE["output_dir"])
+    report_file = output_dir / f"session_{session_id}.json"
+    session_dir = output_dir / session_id
 
-    if not os.path.exists(report_file):
+    if not report_file.exists():
         raise HTTPException(status_code=404, detail=f"Session report not found: {report_file}")
 
     try:
-        with open(report_file, "r", encoding="utf-8") as f:
-            report_data = json.load(f)
+        report_data = await asyncio.to_thread(
+            lambda: json.loads(report_file.read_text(encoding="utf-8"))
+        )
 
         steps = report_data.get("steps", [])
 
         # Check for recorded audio (wav, webm, mp3, m4a)
         audio_path = None
         for cand in ["audio.wav", "audio.webm", "audio.mp3", "audio.m4a"]:
-            p = os.path.join(session_dir, cand)
-            if os.path.exists(p):
-                audio_path = p
+            p = session_dir / cand
+            if p.exists():
+                audio_path = str(p)
                 break
 
         transcript_data = None
-        if audio_path and os.path.exists(audio_path):
+        if audio_path and Path(audio_path).exists():
             extractor = AudioExtractor()
             normalized_path = extractor.extract_and_normalize(audio_path)
             voxtral = _SESSION_STATE["voxtral"]
@@ -260,7 +271,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 
         # Execute multimodal reasoning in thread pool
         summarizer: MeetingSummarizer = _SESSION_STATE["summarizer"]
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         summary_md, important_steps, step_desc, custom_fields_res = await loop.run_in_executor(
             None,
             summarizer.summarize_meeting,
@@ -270,7 +281,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         )
 
         # Generate DeskMate branded PDF
-        pdf_path = os.path.join(session_dir, f"deskmate_report_{session_id}.pdf")
+        pdf_path = str(session_dir / f"deskmate_report_{session_id}.pdf")
         pdf_gen: MeetingPDFGenerator = _SESSION_STATE["pdf_generator"]
         pdf_ok = await loop.run_in_executor(
             None,
@@ -292,16 +303,17 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         report_data["custom_fields"] = custom_fields_res
         report_data["pdf_path"] = pdf_path if pdf_ok else None
 
-        with open(report_file, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, indent=2, default=str)
+        await asyncio.to_thread(
+            lambda: report_file.write_text(json.dumps(report_data, indent=2, default=str), encoding="utf-8")
+        )
 
         # Automated retention: purge raw screenshot JPG frames if requested
         if req.purge_raw_assets_after:
             exporter: MeetingExportService = _SESSION_STATE["export_service"]
-            exporter.purge_raw_assets(session_id)
+            await asyncio.to_thread(exporter.purge_raw_assets, session_id)
 
         # Auto-clean older sessions beyond 15
-        _SESSION_STATE["export_service"].cleanup_old_sessions(max_keep=15)
+        await asyncio.to_thread(_SESSION_STATE["export_service"].cleanup_old_sessions, max_keep=MAX_RETAINED_SESSIONS)
 
         return {
             "session_id": session_id,
@@ -322,25 +334,27 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 @router.get("/asset/{session_id}/{filename}")
 async def get_session_asset(session_id: str, filename: str):
     """Serve session screenshot assets for interactive UI previews."""
-    session_dir = os.path.join(_SESSION_STATE["output_dir"], session_id)
+    base_dir = Path(_SESSION_STATE["output_dir"]).resolve()
+    session_dir = base_dir / session_id
     cand_paths = [
-        os.path.join(session_dir, "assets", filename),
-        os.path.join(session_dir, filename),
+        session_dir / "assets" / filename,
+        session_dir / filename,
     ]
     for p in cand_paths:
-        if os.path.exists(p):
-            return FileResponse(p, media_type="image/jpeg")
+        resolved = p.resolve()
+        if resolved.is_relative_to(base_dir) and resolved.is_file():
+            return FileResponse(str(resolved), media_type="image/jpeg")
     raise HTTPException(status_code=404, detail="Asset not found")
 
 
 @router.get("/pdf/{session_id}")
 async def download_meeting_pdf(session_id: str):
     """Stream DeskMate-branded executive PDF report."""
-    output_dir = _SESSION_STATE["output_dir"]
-    pdf_path = os.path.join(output_dir, session_id, f"deskmate_report_{session_id}.pdf")
-    if os.path.exists(pdf_path):
+    output_dir = Path(_SESSION_STATE["output_dir"])
+    pdf_path = output_dir / session_id / f"deskmate_report_{session_id}.pdf"
+    if pdf_path.exists():
         return FileResponse(
-            pdf_path,
+            str(pdf_path),
             media_type="application/pdf",
             filename=f"DeskMate_Meeting_Report_{session_id}.pdf",
         )
@@ -351,7 +365,7 @@ async def download_meeting_pdf(session_id: str):
 async def export_meeting_to_drive(req: ExportDriveRequest):
     """Upload generated meeting PDF to Google Drive."""
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
         exporter.upload_to_drive,
@@ -367,7 +381,7 @@ async def export_meeting_to_drive(req: ExportDriveRequest):
 async def send_meeting_email(req: SendEmailRequest):
     """Email executive meeting summary and attached PDF via Gmail."""
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
         exporter.send_email_with_pdf,
@@ -385,7 +399,7 @@ async def send_meeting_email(req: SendEmailRequest):
 async def cleanup_sessions(req: CleanupSessionsRequest):
     """Perform disk cleanup and enforce session retention."""
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
-    result = exporter.cleanup_old_sessions(max_keep=req.max_keep)
+    result = await asyncio.to_thread(exporter.cleanup_old_sessions, max_keep=req.max_keep)
     return result
 
 
@@ -395,15 +409,16 @@ async def sync_action_items_to_tasks(req: SyncTasksRequest):
     try:
         saved_count = 0
         for item in req.action_items:
-            clean_title = re.sub(r'^\s*[-*•]\s*', '', item.strip())
+            clean_title = re.sub(r'^\s*[-*•]\s*', '', str(item).strip())
             clean_title = re.sub(r'\*{0,2}\[(ACTION ITEM|HIGH PRIORITY|IMPORTANT|TODO|TASK)\]\*{0,2}', '', clean_title, flags=re.IGNORECASE)
             clean_title = clean_title.replace("**", "").replace("*", "").strip()
             if clean_title:
-                res = db_add_task(
+                res = await asyncio.to_thread(
+                    db_add_task,
                     title=f"[Meeting {req.session_id}] {clean_title}",
                     priority="high",
                 )
-                if res.get("status") == "success":
+                if res and (res.get("id") or res.get("status") == "success"):
                     saved_count += 1
 
         return {"status": "synced", "tasks_created": saved_count}

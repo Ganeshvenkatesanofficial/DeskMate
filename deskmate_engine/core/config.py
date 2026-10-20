@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import sys
 import threading
 import time
-from pathlib import Path
-from dotenv import load_dotenv
 
-# Detect frozen executable environment
-is_frozen = getattr(sys, "frozen", False)
-base_dir = Path(sys.executable).parent if is_frozen else Path(__file__).resolve().parent.parent
+logger = logging.getLogger("deskmate.core.config")
 
-# Load .env (local base_dir takes initial priority, then persistent user_data_dir)
-env_path = base_dir / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
+from settings import (
+    BASE_DIR,
+    IS_FROZEN,
+    USER_DATA_DIR,
+    OLLAMA_BASE_URL,
+    DEFAULT_GEMINI_MODEL,
+    generate_conversation_id,
+    get_user_data_dir,
+    persist_env_variables,
+)
+
+is_frozen = IS_FROZEN
+base_dir = BASE_DIR
 
 
 class NullWriter:
@@ -36,56 +43,7 @@ class NullReader:
         return ""
 
 
-def get_user_data_dir() -> Path:
-    """Return a guaranteed-writable user application data directory."""
-    if sys.platform == "darwin":
-        path = Path.home() / "Library" / "Application Support" / "DeskMate"
-    elif sys.platform == "win32":
-        app_data = os.getenv("APPDATA")
-        path = Path(app_data) / "DeskMate" if app_data else Path.home() / ".deskmate"
-    else:
-        path = Path.home() / ".deskmate"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
-
-# Also load persistent user_data_dir .env if present
-user_env_file = get_user_data_dir() / ".env"
-if user_env_file.exists():
-    load_dotenv(dotenv_path=user_env_file, override=True)
-
-
-def persist_env_variables(updates: dict[str, str]) -> None:
-    """Safely updates or appends key-value pairs to user_data_dir/.env and base_dir/.env."""
-    targets = [get_user_data_dir() / ".env"]
-    if not is_frozen and base_dir.exists():
-        targets.append(base_dir / ".env")
-
-    for target in targets:
-        try:
-            lines: list[str] = []
-            existing_keys: set[str] = set()
-            if target.exists():
-                lines = target.read_text(encoding="utf-8").splitlines()
-
-            new_lines: list[str] = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#") and "=" in stripped:
-                    key = stripped.split("=", 1)[0].strip()
-                    if key in updates:
-                        new_lines.append(f"{key}={updates[key]}")
-                        existing_keys.add(key)
-                        continue
-                new_lines.append(line)
-
-            for key, val in updates.items():
-                if key not in existing_keys:
-                    new_lines.append(f"{key}={val}")
-
-            target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-        except Exception:
-            pass
 
 
 def setup_stdio_logging() -> None:
@@ -125,8 +83,8 @@ def _parent_process_watchdog() -> None:
                 if not handle:
                     os._exit(0)
                 kernel32.CloseHandle(handle)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Parent process watchdog check error: %s", e)
         else:
             try:
                 os.kill(parent_pid, 0)

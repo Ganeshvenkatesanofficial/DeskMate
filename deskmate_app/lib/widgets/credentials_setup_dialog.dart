@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/clipboard_utils.dart';
+import '../utils/open_external.dart';
 
 class CredentialsSetupDialog extends StatefulWidget {
   final VoidCallback onClose;
@@ -68,7 +68,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
   }
 
   void _copy(String text, String key, String label) {
-    Clipboard.setData(ClipboardData(text: text));
+    copyWithFeedback(context, text, label: '$label copied to clipboard');
     setState(() {
       _copiedKey = key;
     });
@@ -81,37 +81,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         });
       }
     });
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label copied to clipboard'),
-        duration: const Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-        width: 260,
-      ),
-    );
   }
 
   Future<void> _launchExternalUrl(String url, String label) async {
-    try {
-      if (Platform.isMacOS) {
-        await Process.run('open', [url]);
-      } else if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', url]);
-      } else {
-        await Process.run('xdg-open', [url]);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Opened $label in default web browser.'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            width: 320,
-          ),
-        );
-      }
-    } catch (_) {
+    final opened = await openExternal(url);
+    if (opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Opened $label in default web browser.'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          width: 320,
+        ),
+      );
+    } else if (!opened) {
       _copy(url, 'url_$label', label);
     }
   }
@@ -165,7 +148,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   Icon(
                     isCopied ? Icons.check_rounded : Icons.copy_rounded,
                     size: 12,
-                    color: isCopied ? const Color(0xFF2DA44E) : theme.accentFg,
+                    color: isCopied ? theme.statusOk : theme.accentFg,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -174,7 +157,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: isCopied
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                   ),
@@ -916,12 +899,12 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: isOk
-            ? const Color(0xFF2DA44E).withValues(alpha: 0.15)
+            ? theme.statusOk.withValues(alpha: 0.15)
             : const Color(0xFFCF222E).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: isOk
-              ? const Color(0xFF2DA44E).withValues(alpha: 0.45)
+              ? theme.statusOk.withValues(alpha: 0.45)
               : const Color(0xFFCF222E).withValues(alpha: 0.45),
           width: 0.8,
         ),
@@ -934,7 +917,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             height: 6,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isOk ? const Color(0xFF2DA44E) : const Color(0xFFCF222E),
+              color: isOk ? theme.statusOk : const Color(0xFFCF222E),
             ),
           ),
           const SizedBox(width: 4),
@@ -944,9 +927,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               fontSize: 10,
               fontWeight: FontWeight.w600,
               color: isOk
-                  ? (theme.isDark
-                        ? const Color(0xFF7EE787)
-                        : const Color(0xFF1A7F37))
+                  ? theme.successText
                   : (theme.isDark
                         ? const Color(0xFFFFA198)
                         : const Color(0xFFCF222E)),
@@ -1081,9 +1062,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: theme.isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1.0),
             ),
@@ -1185,9 +1164,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: theme.isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1.0),
             ),
@@ -1246,7 +1223,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+        color: theme.bgPanel,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: theme.borderDefault, width: 1.0),
       ),
@@ -1259,7 +1236,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   (isGemini
                           ? theme.accentFg
                           : (isLlmOnline
-                                ? const Color(0xFF2DA44E)
+                                ? theme.statusOk
                                 : theme.dangerFg))
                       .withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
@@ -1268,7 +1245,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     (isGemini
                             ? theme.accentFg
                             : (isLlmOnline
-                                  ? const Color(0xFF2DA44E)
+                                  ? theme.statusOk
                                   : theme.dangerFg))
                         .withValues(alpha: 0.3),
                 width: 0.8,
@@ -1278,7 +1255,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               isGemini ? Icons.cloud_done_rounded : Icons.memory_rounded,
               color: isGemini
                   ? theme.accentFg
-                  : (isLlmOnline ? const Color(0xFF2DA44E) : theme.dangerFg),
+                  : (isLlmOnline ? theme.statusOk : theme.dangerFg),
               size: 18,
             ),
           ),
@@ -1305,9 +1282,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         fontWeight: FontWeight.w700,
                         color: isGemini
                             ? theme.accentFg
-                            : (theme.isDark
-                                  ? const Color(0xFF7EE787)
-                                  : const Color(0xFF1A7F37)),
+                            : theme.successText,
                       ),
                     ),
                   ],
@@ -1664,20 +1639,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             actionButton: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF2DA44E).withValues(alpha: 0.15),
+                color: theme.statusOk.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: const Color(0xFF2DA44E).withValues(alpha: 0.4),
+                  color: theme.statusOk.withValues(alpha: 0.4),
                   width: 0.8,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.bolt_rounded,
                     size: 13,
-                    color: Color(0xFF2DA44E),
+                    color: theme.statusOk,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -1685,9 +1660,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
-                      color: theme.isDark
-                          ? const Color(0xFF7EE787)
-                          : const Color(0xFF1A7F37),
+                      color: theme.successText,
                     ),
                   ),
                 ],
@@ -1718,9 +1691,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1.0),
             ),
@@ -1749,14 +1720,14 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       decoration: BoxDecoration(
                         color:
                             (isLlmOnline
-                                    ? const Color(0xFF2DA44E)
+                                    ? theme.statusOk
                                     : theme.dangerFg)
                                 .withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color:
                               (isLlmOnline
-                                      ? const Color(0xFF2DA44E)
+                                      ? theme.statusOk
                                       : theme.dangerFg)
                                   .withValues(alpha: 0.35),
                           width: 0.8,
@@ -1771,7 +1742,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isLlmOnline
-                                  ? const Color(0xFF2DA44E)
+                                  ? theme.statusOk
                                   : theme.dangerFg,
                             ),
                           ),
@@ -1786,9 +1757,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: isLlmOnline
-                                  ? (theme.isDark
-                                        ? const Color(0xFF7EE787)
-                                        : const Color(0xFF1A7F37))
+                                  ? theme.successText
                                   : theme.dangerFg,
                             ),
                           ),
@@ -1960,20 +1929,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             actionButton: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF2DA44E).withValues(alpha: 0.15),
+                color: theme.statusOk.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: const Color(0xFF2DA44E).withValues(alpha: 0.4),
+                  color: theme.statusOk.withValues(alpha: 0.4),
                   width: 0.8,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.bolt_rounded,
                     size: 13,
-                    color: Color(0xFF2DA44E),
+                    color: theme.statusOk,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -1981,9 +1950,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
-                      color: theme.isDark
-                          ? const Color(0xFF7EE787)
-                          : const Color(0xFF1A7F37),
+                      color: theme.successText,
                     ),
                   ),
                 ],
@@ -2140,15 +2107,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF2DA44E,
-                          ).withValues(alpha: 0.12),
+                          color: theme.statusOk.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.person_outline_rounded,
                           size: 14,
-                          color: Color(0xFF2DA44E),
+                          color: theme.statusOk,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -2228,7 +2193,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           : Icons.copy_rounded,
                       size: 12,
                       color: _copiedKey == keyId
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                     const SizedBox(width: 4),
@@ -2238,7 +2203,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: _copiedKey == keyId
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.accentFg,
                       ),
                     ),
@@ -2258,7 +2223,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+        color: theme.bgPanel,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: theme.borderDefault, width: 0.8),
       ),
@@ -2374,12 +2339,12 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           color: theme.isDark ? const Color(0xFF0D1117) : Colors.white,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: const Color(0xFF2DA44E).withValues(alpha: 0.4),
+            color: theme.statusOk.withValues(alpha: 0.4),
             width: 1.2,
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2DA44E).withValues(alpha: 0.06),
+              color: theme.statusOk.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -2397,10 +2362,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2DA44E).withValues(alpha: 0.15),
+                    color: theme.statusOk.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color: const Color(0xFF2DA44E).withValues(alpha: 0.4),
+                      color: theme.statusOk.withValues(alpha: 0.4),
                       width: 0.8,
                     ),
                   ),
@@ -2409,9 +2374,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFF2DA44E),
+                          color: theme.statusOk,
                         ),
                       ),
                       const SizedBox(width: 5),
@@ -2421,9 +2386,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
-                          color: theme.isDark
-                              ? const Color(0xFF7EE787)
-                              : const Color(0xFF1A7F37),
+                          color: theme.successText,
                         ),
                       ),
                     ],
@@ -2462,18 +2425,16 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: theme.isDark
-                    ? const Color(0xFF161B22)
-                    : const Color(0xFFF6F8FA),
+                color: theme.bgPanel,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: theme.borderDefault, width: 0.8),
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.badge_outlined,
                     size: 14,
-                    color: Color(0xFF2DA44E),
+                    color: theme.statusOk,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -2506,7 +2467,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                                   : Icons.copy_rounded,
                               size: 12,
                               color: _copiedKey == 'active_cid'
-                                  ? const Color(0xFF2DA44E)
+                                  ? theme.statusOk
                                   : theme.accentFg,
                             ),
                             const SizedBox(width: 4),
@@ -2516,7 +2477,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                                 color: _copiedKey == 'active_cid'
-                                    ? const Color(0xFF2DA44E)
+                                    ? theme.statusOk
                                     : theme.accentFg,
                               ),
                             ),
@@ -2543,9 +2504,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: theme.isDark
-                    ? const Color(0xFF161B22)
-                    : const Color(0xFFF6F8FA),
+                color: theme.bgPanel,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: theme.borderDefault, width: 0.8),
               ),
@@ -3109,10 +3068,10 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
+        Icon(
           Icons.check_circle_rounded,
           size: 14,
-          color: Color(0xFF2DA44E),
+          color: theme.statusOk,
         ),
         const SizedBox(width: 8),
         Text(
@@ -3235,7 +3194,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
                         isCopied ? Icons.check_rounded : Icons.copy_rounded,
                         size: 12,
                         color: isCopied
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.accentFg,
                       ),
                       const SizedBox(width: 4),
@@ -3245,7 +3204,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                           color: isCopied
-                              ? const Color(0xFF2DA44E)
+                              ? theme.statusOk
                               : theme.accentFg,
                         ),
                       ),
@@ -3335,18 +3294,18 @@ GITHUB_TOKEN=ghp_your_github_token_here
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF2DA44E).withValues(alpha: 0.1),
+              color: theme.statusOk.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF2DA44E).withValues(alpha: 0.3),
+                color: theme.statusOk.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_outline_rounded,
-                  color: Color(0xFF2DA44E),
+                  color: theme.statusOk,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
@@ -3356,9 +3315,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
-                      color: theme.isDark
-                          ? const Color(0xFF7EE787)
-                          : const Color(0xFF1A7F37),
+                      color: theme.successText,
                     ),
                   ),
                 ),
@@ -3743,9 +3700,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1.0),
             ),
@@ -3868,9 +3823,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1.0),
             ),
@@ -4008,10 +3961,8 @@ GITHUB_TOKEN=ghp_your_github_token_here
             text:
                 'All File Copilot tools execute 100% locally on your computer with zero external network transmission.',
             icon: Icons.shield_outlined,
-            color: const Color(0xFF2DA44E),
-            textColor: theme.isDark
-                ? const Color(0xFF7EE787)
-                : const Color(0xFF1A7F37),
+            color: theme.statusOk,
+            textColor: theme.successText,
           ),
           const SizedBox(height: 16),
           for (final t in tools) ...[
@@ -4019,9 +3970,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.isDark
-                    ? const Color(0xFF161B22)
-                    : const Color(0xFFF6F8FA),
+                color: theme.bgPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: theme.borderDefault, width: 0.8),
               ),
@@ -4137,7 +4086,7 @@ RAG_CHUNK_OVERLAP=200
                         isCopied ? Icons.check_rounded : Icons.copy_rounded,
                         size: 12,
                         color: isCopied
-                            ? const Color(0xFF2DA44E)
+                            ? theme.statusOk
                             : theme.accentFg,
                       ),
                       const SizedBox(width: 4),
@@ -4147,7 +4096,7 @@ RAG_CHUNK_OVERLAP=200
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                           color: isCopied
-                              ? const Color(0xFF2DA44E)
+                              ? theme.statusOk
                               : theme.accentFg,
                         ),
                       ),
@@ -4756,7 +4705,7 @@ RAG_CHUNK_OVERLAP=200
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: theme.borderDefault, width: 0.8),
             ),
@@ -4833,7 +4782,7 @@ RAG_CHUNK_OVERLAP=200
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: theme.borderDefault, width: 0.8),
             ),
@@ -4974,7 +4923,7 @@ RAG_CHUNK_OVERLAP=200
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+              color: theme.bgPanel,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: theme.borderDefault, width: 1),
             ),
@@ -5142,7 +5091,7 @@ RAG_CHUNK_OVERLAP=200
     required String offlineDesc,
     required IconData icon,
   }) {
-    final color = isOnline ? const Color(0xFF2DA44E) : const Color(0xFFCF222E);
+    final color = isOnline ? theme.statusOk : const Color(0xFFCF222E);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -5244,7 +5193,7 @@ RAG_CHUNK_OVERLAP=200
   }
 
   Widget _buildMicStateRow(ThemeData theme, {required bool isActive, required String label, required String badge, required String desc}) {
-    final color = isActive ? const Color(0xFF2DA44E) : const Color(0xFFCF222E);
+    final color = isActive ? theme.statusOk : const Color(0xFFCF222E);
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -5334,7 +5283,7 @@ RAG_CHUNK_OVERLAP=200
                         : Icons.copy_rounded,
                     size: 11,
                     color: _copiedKey == keyId
-                        ? const Color(0xFF2DA44E)
+                        ? theme.statusOk
                         : theme.accentFg,
                   ),
                   const SizedBox(width: 3),
@@ -5344,7 +5293,7 @@ RAG_CHUNK_OVERLAP=200
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: _copiedKey == keyId
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                   ),
@@ -5412,7 +5361,7 @@ RAG_CHUNK_OVERLAP=200
                       : (isUrl ? Icons.open_in_new_rounded : Icons.copy_rounded),
                   size: 11,
                   color: _copiedKey == keyId
-                      ? const Color(0xFF2DA44E)
+                      ? theme.statusOk
                       : theme.accentFg,
                 ),
                 const SizedBox(width: 4),
@@ -5422,7 +5371,7 @@ RAG_CHUNK_OVERLAP=200
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: _copiedKey == keyId
-                        ? const Color(0xFF2DA44E)
+                        ? theme.statusOk
                         : theme.accentFg,
                   ),
                 ),
@@ -5507,7 +5456,7 @@ RAG_CHUNK_OVERLAP=200
                         : Icons.copy_rounded,
                     size: 11,
                     color: _copiedKey == keyId
-                        ? const Color(0xFF2DA44E)
+                        ? theme.statusOk
                         : theme.accentFg,
                   ),
                   const SizedBox(width: 3),
@@ -5517,7 +5466,7 @@ RAG_CHUNK_OVERLAP=200
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: _copiedKey == keyId
-                          ? const Color(0xFF2DA44E)
+                          ? theme.statusOk
                           : theme.accentFg,
                     ),
                   ),
@@ -5683,7 +5632,7 @@ RAG_CHUNK_OVERLAP=200
                                   : Icons.copy_rounded,
                               size: 11,
                               color: _copiedKey == keyId
-                                  ? const Color(0xFF2DA44E)
+                                  ? theme.statusOk
                                   : theme.accentFg,
                             ),
                             const SizedBox(width: 4),
@@ -5693,7 +5642,7 @@ RAG_CHUNK_OVERLAP=200
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                                 color: _copiedKey == keyId
-                                    ? const Color(0xFF2DA44E)
+                                    ? theme.statusOk
                                     : theme.accentFg,
                               ),
                             ),
