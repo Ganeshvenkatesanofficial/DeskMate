@@ -37,7 +37,7 @@ class ChunkedTranscriber:
     def __init__(self, voxtral_engine: VoxtralSpeechEngine):
         self.engine = voxtral_engine
 
-    async def transcribe_long_file(self, audio_path: str) -> Dict[str, Any]:
+    async def transcribe_long_file(self, audio_path: str) -> dict[str, Any]:
         """Transcribe short files directly, or partition long files into chunks."""
         if not Path(audio_path).exists():
             return {
@@ -95,7 +95,7 @@ class ChunkedTranscriber:
             size = Path(audio_path).stat().st_size
             return max(1.0, size / 32000.0)
 
-    def _split_audio(self, audio_path: str, total_duration: float) -> List[AudioChunk]:
+    def _split_audio(self, audio_path: str, total_duration: float) -> list[AudioChunk]:
         """Slice audio into chunks with overlap using soundfile."""
         chunks = []
         try:

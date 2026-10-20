@@ -35,7 +35,7 @@ class MeetingExportService:
         self.output_dir = Path(output_dir)
         self.max_retained_sessions = max_retained_sessions
 
-    def _get_google_service(self, scopes: List[str], token_filename: str, api: str, version: str) -> Any:
+    def _get_google_service(self, scopes: list[str], token_filename: str, api: str, version: str) -> Any:
         """Obtain authenticated Google API service using DeskMate's OAuth manager."""
         from services.personal_assistant.tools import _google_service
         return _google_service(scopes, token_filename, api, version)
@@ -44,7 +44,7 @@ class MeetingExportService:
         self,
         session_id: str,
         folder_name: str = "DeskMate Meetings",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Uploads the generated meeting PDF to the user's Google Drive.
         Creates a 'DeskMate Meetings' folder if one does not exist.
@@ -86,7 +86,7 @@ class MeetingExportService:
 
             # 2. Upload PDF
             file_title = f"DeskMate_Report_{session_id}.pdf"
-            file_meta: Dict[str, Any] = {"name": file_title}
+            file_meta: dict[str, Any] = {"name": file_title}
             if folder_id:
                 file_meta["parents"] = [folder_id]
 
@@ -122,7 +122,7 @@ class MeetingExportService:
         subject: Optional[str] = None,
         cc_email: Optional[str] = None,
         summary_text: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Sends an email with the executive meeting summary and attached PDF.
         """
@@ -206,7 +206,7 @@ Generated with DeskMate Meeting Scribe.
             logger.exception(f"Failed to send email with PDF: {e}")
             return {"status": "error", "message": str(e)}
 
-    def cleanup_old_sessions(self, max_keep: Optional[int] = None) -> Dict[str, Any]:
+    def cleanup_old_sessions(self, max_keep: Optional[int] = None) -> dict[str, Any]:
         """
         Retention policy: cleans up older session assets to save disk space.
         Retains the latest `max_keep` sessions.

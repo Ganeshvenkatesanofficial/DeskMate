@@ -156,9 +156,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: isCopied
-                          ? theme.statusOk
-                          : theme.accentFg,
+                      color: isCopied ? theme.statusOk : theme.accentFg,
                     ),
                   ),
                 ],
@@ -461,122 +459,132 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         child: Row(
                           children: [
                             if (isMeeting) ...[
-                        _buildStatusPill(
-                          theme,
-                          'Google Config',
-                          hasCreds ? 'Configured Online' : 'Not Configured (Offline)',
-                          hasCreds,
+                              _buildStatusPill(
+                                theme,
+                                'Google Config',
+                                hasCreds
+                                    ? 'Configured Online'
+                                    : 'Not Configured (Offline)',
+                                hasCreds,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Drive Export',
+                                hasDrive
+                                    ? 'Connected Online'
+                                    : 'Offline / Setup Needed',
+                                hasDrive,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Gmail Dispatch',
+                                hasGmail
+                                    ? 'Connected Online'
+                                    : 'Offline / Setup Needed',
+                                hasGmail,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Voxtral 4B',
+                                'In-Memory (16kHz)',
+                                true,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'LocateAnything',
+                                'Vision Grounding',
+                                true,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Audio Gating',
+                                'Active Room Silence',
+                                true,
+                              ),
+                            ] else if (isPersonal) ...[
+                              _buildStatusPill(
+                                theme,
+                                'Google Config',
+                                hasCreds
+                                    ? 'Configured Online'
+                                    : 'Not Configured (Offline)',
+                                hasCreds,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Gmail',
+                                hasGmail ? 'Connected' : 'Offline',
+                                hasGmail,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Calendar',
+                                hasCal ? 'Connected' : 'Offline',
+                                hasCal,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Drive',
+                                hasDrive ? 'Connected' : 'Offline',
+                                hasDrive,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Local DB',
+                                'Ready (SQLite)',
+                                true,
+                              ),
+                            ] else ...[
+                              _buildStatusPill(
+                                theme,
+                                'Backend',
+                                provider.isBackendOnline ? 'Online' : 'Offline',
+                                provider.isBackendOnline,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Local LLM',
+                                provider.isLocalLlmOnline
+                                    ? 'Online'
+                                    : 'Offline',
+                                provider.isLocalLlmOnline,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Active Model',
+                                provider.selectedLocalModel.isNotEmpty
+                                    ? provider.selectedLocalModel
+                                    : (provider.availableLocalModels.isNotEmpty
+                                          ? provider.availableLocalModels.first
+                                          : 'None'),
+                                provider.selectedLocalModel.isNotEmpty,
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusPill(
+                                theme,
+                                'Vector DB',
+                                'Ready (Qdrant & FastEmbed)',
+                                true,
+                              ),
+                            ],
+                          ],
                         ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Drive Export',
-                          hasDrive ? 'Connected Online' : 'Offline / Setup Needed',
-                          hasDrive,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Gmail Dispatch',
-                          hasGmail ? 'Connected Online' : 'Offline / Setup Needed',
-                          hasGmail,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Voxtral 4B',
-                          'In-Memory (16kHz)',
-                          true,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'LocateAnything',
-                          'Vision Grounding',
-                          true,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Audio Gating',
-                          'Active Room Silence',
-                          true,
-                        ),
-                      ] else if (isPersonal) ...[
-                        _buildStatusPill(
-                          theme,
-                          'Google Config',
-                          hasCreds ? 'Configured Online' : 'Not Configured (Offline)',
-                          hasCreds,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Gmail',
-                          hasGmail ? 'Connected' : 'Offline',
-                          hasGmail,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Calendar',
-                          hasCal ? 'Connected' : 'Offline',
-                          hasCal,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Drive',
-                          hasDrive ? 'Connected' : 'Offline',
-                          hasDrive,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Local DB',
-                          'Ready (SQLite)',
-                          true,
-                        ),
-                      ] else ...[
-                        _buildStatusPill(
-                          theme,
-                          'Backend',
-                          provider.isBackendOnline ? 'Online' : 'Offline',
-                          provider.isBackendOnline,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Local LLM',
-                          provider.isLocalLlmOnline ? 'Online' : 'Offline',
-                          provider.isLocalLlmOnline,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Active Model',
-                          provider.selectedLocalModel.isNotEmpty
-                              ? provider.selectedLocalModel
-                              : (provider.availableLocalModels.isNotEmpty
-                                    ? provider.availableLocalModels.first
-                                    : 'None'),
-                          provider.selectedLocalModel.isNotEmpty,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusPill(
-                          theme,
-                          'Vector DB',
-                          'Ready (Qdrant & FastEmbed)',
-                          true,
-                        ),
-                      ],
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
               Divider(height: 1, color: theme.borderDefault),
 
               // ─── Navigation Tabs ─────────────────────────────────────────
@@ -1235,18 +1243,14 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               color:
                   (isGemini
                           ? theme.accentFg
-                          : (isLlmOnline
-                                ? theme.statusOk
-                                : theme.dangerFg))
+                          : (isLlmOnline ? theme.statusOk : theme.dangerFg))
                       .withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color:
                     (isGemini
                             ? theme.accentFg
-                            : (isLlmOnline
-                                  ? theme.statusOk
-                                  : theme.dangerFg))
+                            : (isLlmOnline ? theme.statusOk : theme.dangerFg))
                         .withValues(alpha: 0.3),
                 width: 0.8,
               ),
@@ -1280,9 +1284,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         fontFamily: isGemini ? null : 'monospace',
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: isGemini
-                            ? theme.accentFg
-                            : theme.successText,
+                        color: isGemini ? theme.accentFg : theme.successText,
                       ),
                     ),
                   ],
@@ -1649,11 +1651,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    size: 13,
-                    color: theme.statusOk,
-                  ),
+                  Icon(Icons.bolt_rounded, size: 13, color: theme.statusOk),
                   const SizedBox(width: 4),
                   Text(
                     'Automatic',
@@ -1718,18 +1716,12 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            (isLlmOnline
-                                    ? theme.statusOk
-                                    : theme.dangerFg)
-                                .withValues(alpha: 0.15),
+                        color: (isLlmOnline ? theme.statusOk : theme.dangerFg)
+                            .withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color:
-                              (isLlmOnline
-                                      ? theme.statusOk
-                                      : theme.dangerFg)
-                                  .withValues(alpha: 0.35),
+                          color: (isLlmOnline ? theme.statusOk : theme.dangerFg)
+                              .withValues(alpha: 0.35),
                           width: 0.8,
                         ),
                       ),
@@ -1939,11 +1931,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    size: 13,
-                    color: theme.statusOk,
-                  ),
+                  Icon(Icons.bolt_rounded, size: 13, color: theme.statusOk),
                   const SizedBox(width: 4),
                   Text(
                     'Auto-Configured',
@@ -2431,11 +2419,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.badge_outlined,
-                    size: 14,
-                    color: theme.statusOk,
-                  ),
+                  Icon(Icons.badge_outlined, size: 14, color: theme.statusOk),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -3068,11 +3052,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          Icons.check_circle_rounded,
-          size: 14,
-          color: theme.statusOk,
-        ),
+        Icon(Icons.check_circle_rounded, size: 14, color: theme.statusOk),
         const SizedBox(width: 8),
         Text(
           name,
@@ -3193,9 +3173,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
                       Icon(
                         isCopied ? Icons.check_rounded : Icons.copy_rounded,
                         size: 12,
-                        color: isCopied
-                            ? theme.statusOk
-                            : theme.accentFg,
+                        color: isCopied ? theme.statusOk : theme.accentFg,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -3203,9 +3181,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
-                          color: isCopied
-                              ? theme.statusOk
-                              : theme.accentFg,
+                          color: isCopied ? theme.statusOk : theme.accentFg,
                         ),
                       ),
                     ],
@@ -3423,7 +3399,11 @@ GITHUB_TOKEN=ghp_your_github_token_here
                       width: 0.8,
                     ),
                   ),
-                  child: Icon(Icons.person_rounded, color: theme.accentFg, size: 22),
+                  child: Icon(
+                    Icons.person_rounded,
+                    color: theme.accentFg,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -3480,7 +3460,8 @@ GITHUB_TOKEN=ghp_your_github_token_here
             color: const Color(0xFF1F883D),
             label: 'Zero Cloud Data Leakage',
             badge: '100% Local Device',
-            desc: 'Your SQLite tasks, notes, and local vector memory (deskmate_agent.db) are stored 100% on your device with no external telemetry.',
+            desc:
+                'Your SQLite tasks, notes, and local vector memory (deskmate_agent.db) are stored 100% on your device with no external telemetry.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -3488,7 +3469,8 @@ GITHUB_TOKEN=ghp_your_github_token_here
             color: const Color(0xFF0969DA),
             label: 'Direct Google OAuth',
             badge: 'Direct End-to-End',
-            desc: 'DeskMate never routes your emails, calendar events, or documents through intermediary servers. All requests communicate directly between your machine and official Google API endpoints.',
+            desc:
+                'DeskMate never routes your emails, calendar events, or documents through intermediary servers. All requests communicate directly between your machine and official Google API endpoints.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -3496,7 +3478,8 @@ GITHUB_TOKEN=ghp_your_github_token_here
             color: const Color(0xFF8957E5),
             label: 'Local Credential Storage',
             badge: 'Secure Environment',
-            desc: 'OAuth client credentials and tokens are stored in your user configuration directory (~/.deskmate/.env) and never transmitted elsewhere.',
+            desc:
+                'OAuth client credentials and tokens are stored in your user configuration directory (~/.deskmate/.env) and never transmitted elsewhere.',
           ),
 
           const SizedBox(height: 16),
@@ -3523,25 +3506,29 @@ GITHUB_TOKEN=ghp_your_github_token_here
             theme,
             icon: Icons.mark_email_read_rounded,
             title: 'Gmail Automation',
-            desc: 'Search recent threads, summarize unread messages, draft replies, and send emails securely directly from the chat prompt.',
+            desc:
+                'Search recent threads, summarize unread messages, draft replies, and send emails securely directly from the chat prompt.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.calendar_today_rounded,
             title: 'Google Calendar Management',
-            desc: 'List today\'s agenda, check availability, create new calendar events with attendees, and calculate relative scheduling automatically.',
+            desc:
+                'List today\'s agenda, check availability, create new calendar events with attendees, and calculate relative scheduling automatically.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.add_to_drive_rounded,
             title: 'Google Drive & Docs Search',
-            desc: 'Search Drive files by keyword, download and summarize document contents, and query shared files across your organization.',
+            desc:
+                'Search Drive files by keyword, download and summarize document contents, and query shared files across your organization.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.task_alt_rounded,
             title: 'Google Tasks Sync',
-            desc: 'Create, list, check off, and synchronize task lists across Google devices in real-time.',
+            desc:
+                'Create, list, check off, and synchronize task lists across Google devices in real-time.',
           ),
 
           const SizedBox(height: 16),
@@ -3568,25 +3555,29 @@ GITHUB_TOKEN=ghp_your_github_token_here
             theme,
             icon: Icons.checklist_rounded,
             title: 'Local SQLite Tasks (deskmate_agent.db)',
-            desc: 'Add, complete, and track local to-dos without requiring an internet connection. Stored permanently in SQLite.',
+            desc:
+                'Add, complete, and track local to-dos without requiring an internet connection. Stored permanently in SQLite.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.note_alt_outlined,
             title: 'Tagged Markdown Notes',
-            desc: 'Save quick ideas, meeting minutes, and code snippets with full-text search and category tags.',
+            desc:
+                'Save quick ideas, meeting minutes, and code snippets with full-text search and category tags.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.psychology_rounded,
             title: 'FAISS L2 Semantic Memory',
-            desc: 'Persistent vector memory allows the assistant to remember your project preferences and context across days.',
+            desc:
+                'Persistent vector memory allows the assistant to remember your project preferences and context across days.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.travel_explore_rounded,
             title: 'Live Weather & Web Research',
-            desc: 'Real-time DuckDuckGo searches and wttr.in weather forecasts without requiring any API key or subscription.',
+            desc:
+                'Real-time DuckDuckGo searches and wttr.in weather forecasts without requiring any API key or subscription.',
           ),
 
           const SizedBox(height: 16),
@@ -3621,12 +3612,31 @@ GITHUB_TOKEN=ghp_your_github_token_here
               children: [
                 Text(
                   'Zero-Bloat Contextualizer transforms follow-up queries into complete standalone prompts in sub-80ms:',
-                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: theme.fgMuted,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                _buildMultiTurnStep(theme, 'Turn 1', '"What is the weather in SF this weekend?"', 'Assistant answers with San Francisco forecast.'),
-                _buildMultiTurnStep(theme, 'Turn 2', '"in chennai"', 'Auto-resolved to: "What is the weather in Chennai this weekend?"'),
-                _buildMultiTurnStep(theme, 'Turn 3', '"what about tomorrow?"', 'Auto-resolved to: "What is the weather in Chennai tomorrow?"'),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 1',
+                  '"What is the weather in SF this weekend?"',
+                  'Assistant answers with San Francisco forecast.',
+                ),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 2',
+                  '"in chennai"',
+                  'Auto-resolved to: "What is the weather in Chennai this weekend?"',
+                ),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 3',
+                  '"what about tomorrow?"',
+                  'Auto-resolved to: "What is the weather in Chennai tomorrow?"',
+                ),
               ],
             ),
           ),
@@ -3661,13 +3671,41 @@ GITHUB_TOKEN=ghp_your_github_token_here
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildExampleInquiry(theme, '"Weather Forecast"', 'What\'s the weather forecast for San Francisco this weekend?'),
-                _buildExampleInquiry(theme, '"Follow-up Query"', 'in chennai  (dynamically resolves without conversational bloat)'),
-                _buildExampleInquiry(theme, '"Calendar Agenda"', 'What is on my calendar for tomorrow afternoon?'),
-                _buildExampleInquiry(theme, '"Email Digest"', 'Check my unread emails from the last 24 hours and summarize anything urgent.'),
-                _buildExampleInquiry(theme, '"Meeting Schedule"', 'Schedule a meeting called "Sprint Retro" for Friday at 3 PM.'),
-                _buildExampleInquiry(theme, '"Local Task"', 'Add a task to my local list: "Review pull request #42 before EOD".'),
-                _buildExampleInquiry(theme, '"Tagged Note"', 'Save a note tagged #meeting: Team agreed on adopting Qdrant for local vector indexing.'),
+                _buildExampleInquiry(
+                  theme,
+                  '"Weather Forecast"',
+                  'What\'s the weather forecast for San Francisco this weekend?',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Follow-up Query"',
+                  'in chennai  (dynamically resolves without conversational bloat)',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Calendar Agenda"',
+                  'What is on my calendar for tomorrow afternoon?',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Email Digest"',
+                  'Check my unread emails from the last 24 hours and summarize anything urgent.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Meeting Schedule"',
+                  'Schedule a meeting called "Sprint Retro" for Friday at 3 PM.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Local Task"',
+                  'Add a task to my local list: "Review pull request #42 before EOD".',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Tagged Note"',
+                  'Save a note tagged #meeting: Team agreed on adopting Qdrant for local vector indexing.',
+                ),
               ],
             ),
           ),
@@ -4085,9 +4123,7 @@ RAG_CHUNK_OVERLAP=200
                       Icon(
                         isCopied ? Icons.check_rounded : Icons.copy_rounded,
                         size: 12,
-                        color: isCopied
-                            ? theme.statusOk
-                            : theme.accentFg,
+                        color: isCopied ? theme.statusOk : theme.accentFg,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -4095,9 +4131,7 @@ RAG_CHUNK_OVERLAP=200
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
-                          color: isCopied
-                              ? theme.statusOk
-                              : theme.accentFg,
+                          color: isCopied ? theme.statusOk : theme.accentFg,
                         ),
                       ),
                     ],
@@ -4169,7 +4203,11 @@ RAG_CHUNK_OVERLAP=200
                       width: 0.8,
                     ),
                   ),
-                  child: Icon(Icons.folder_special_rounded, color: theme.accentFg, size: 22),
+                  child: Icon(
+                    Icons.folder_special_rounded,
+                    color: theme.accentFg,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -4205,7 +4243,11 @@ RAG_CHUNK_OVERLAP=200
           // Architecture & Air-Gap Section
           Row(
             children: [
-              Icon(Icons.verified_user_rounded, size: 14, color: theme.accentFg),
+              Icon(
+                Icons.verified_user_rounded,
+                size: 14,
+                color: theme.accentFg,
+              ),
               const SizedBox(width: 6),
               Text(
                 'AIR-GAP & ARCHITECTURE GUARANTEES',
@@ -4226,7 +4268,8 @@ RAG_CHUNK_OVERLAP=200
             color: const Color(0xFF1F883D),
             label: '100% Offline Execution',
             badge: 'Local CPU / GPU',
-            desc: 'All model inference is processed on your local device by Ollama (http://127.0.0.1:11434). Zero internet required for inference.',
+            desc:
+                'All model inference is processed on your local device by Ollama (http://127.0.0.1:11434). Zero internet required for inference.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -4234,7 +4277,8 @@ RAG_CHUNK_OVERLAP=200
             color: const Color(0xFF0969DA),
             label: 'No Cloud Code Transmission',
             badge: '100% Air-Gapped',
-            desc: 'Your proprietary source files, sensitive configs, and tokens are never sent over the internet or logged to third-party providers.',
+            desc:
+                'Your proprietary source files, sensitive configs, and tokens are never sent over the internet or logged to third-party providers.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -4242,7 +4286,8 @@ RAG_CHUNK_OVERLAP=200
             color: const Color(0xFF8957E5),
             label: 'Embedded Vector Database',
             badge: 'Qdrant & FastEmbed',
-            desc: 'FastEmbed and Qdrant store codebase representations in ~/.deskmate/.qdrant_data with sub-second hybrid semantic search.',
+            desc:
+                'FastEmbed and Qdrant store codebase representations in ~/.deskmate/.qdrant_data with sub-second hybrid semantic search.',
           ),
 
           const SizedBox(height: 16),
@@ -4269,14 +4314,31 @@ RAG_CHUNK_OVERLAP=200
             theme: theme,
             stepNumber: '1',
             title: 'Install Ollama Locally',
-            description: 'Download and install Ollama for your operating system:',
+            description:
+                'Download and install Ollama for your operating system:',
             customContent: Column(
               children: [
-                _buildCommandRow(theme, 'macOS', 'brew install ollama', 'ollama_mac'),
+                _buildCommandRow(
+                  theme,
+                  'macOS',
+                  'brew install ollama',
+                  'ollama_mac',
+                ),
                 const SizedBox(height: 6),
-                _buildCommandRow(theme, 'Linux', 'curl -fsSL https://ollama.com/install.sh | sh', 'ollama_linux'),
+                _buildCommandRow(
+                  theme,
+                  'Linux',
+                  'curl -fsSL https://ollama.com/install.sh | sh',
+                  'ollama_linux',
+                ),
                 const SizedBox(height: 6),
-                _buildCommandRow(theme, 'Windows', 'https://ollama.com/download/windows', 'ollama_win', isUrl: true),
+                _buildCommandRow(
+                  theme,
+                  'Windows',
+                  'https://ollama.com/download/windows',
+                  'ollama_win',
+                  isUrl: true,
+                ),
               ],
             ),
           ),
@@ -4284,14 +4346,30 @@ RAG_CHUNK_OVERLAP=200
             theme: theme,
             stepNumber: '2',
             title: 'Pull Your Preferred Local Model',
-            description: 'Run any of the following models in your terminal to start coding immediately:',
+            description:
+                'Run any of the following models in your terminal to start coding immediately:',
             customContent: Column(
               children: [
-                _buildCommandRow(theme, 'Fast 3B (General)', 'ollama run llama3.2', 'model_llama'),
+                _buildCommandRow(
+                  theme,
+                  'Fast 3B (General)',
+                  'ollama run llama3.2',
+                  'model_llama',
+                ),
                 const SizedBox(height: 6),
-                _buildCommandRow(theme, 'Code 7B (Specialized)', 'ollama run qwen2.5-coder', 'model_qwen'),
+                _buildCommandRow(
+                  theme,
+                  'Code 7B (Specialized)',
+                  'ollama run qwen2.5-coder',
+                  'model_qwen',
+                ),
                 const SizedBox(height: 6),
-                _buildCommandRow(theme, 'Reasoning 8B', 'ollama run deepseek-r1:8b', 'model_deepseek'),
+                _buildCommandRow(
+                  theme,
+                  'Reasoning 8B',
+                  'ollama run deepseek-r1:8b',
+                  'model_deepseek',
+                ),
               ],
             ),
           ),
@@ -4320,19 +4398,22 @@ RAG_CHUNK_OVERLAP=200
             theme,
             icon: Icons.view_sidebar_rounded,
             title: 'Draggable Resizable Sidebar',
-            desc: 'Drag the vertical splitter on the right edge of the sidebar to widen or narrow your view anytime (min 255px, max 450px). Double-click to reset.',
+            desc:
+                'Drag the vertical splitter on the right edge of the sidebar to widen or narrow your view anytime (min 255px, max 450px). Double-click to reset.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.swap_horiz_rounded,
             title: 'Instant Model Switcher',
-            desc: 'When multiple Ollama models are installed, hot-swap between models instantly with zero application restart.',
+            desc:
+                'When multiple Ollama models are installed, hot-swap between models instantly with zero application restart.',
           ),
           _buildMeetingInfoCard(
             theme,
             icon: Icons.settings_rounded,
             title: 'Settings Drawer (Gear Icon ⚙️)',
-            desc: 'Inspect FastAPI backend URL, verify local LLM engine status, and configure theme preferences with live telemetry.',
+            desc:
+                'Inspect FastAPI backend URL, verify local LLM engine status, and configure theme preferences with live telemetry.',
           ),
 
           const SizedBox(height: 16),
@@ -4367,13 +4448,37 @@ RAG_CHUNK_OVERLAP=200
               children: [
                 Text(
                   'Explore repositories conversationally without retyping long paths. Contextualizer resolves follow-ups locally in sub-80ms:',
-                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: theme.fgMuted,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                _buildMultiTurnStep(theme, 'Turn 1', '"What files are in the core directory?"', 'Lists directory contents.'),
-                _buildMultiTurnStep(theme, 'Turn 2', '"and in services?"', 'Auto-resolved to: "What files are in the services directory?"'),
-                _buildMultiTurnStep(theme, 'Turn 3', '"read telemetry.py"', 'Auto-resolved to: "Read the content of telemetry.py"'),
-                _buildMultiTurnStep(theme, 'Turn 4', '"what is inside it?"', 'Auto-resolved to: "Explain the implementation in telemetry.py"'),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 1',
+                  '"What files are in the core directory?"',
+                  'Lists directory contents.',
+                ),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 2',
+                  '"and in services?"',
+                  'Auto-resolved to: "What files are in the services directory?"',
+                ),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 3',
+                  '"read telemetry.py"',
+                  'Auto-resolved to: "Read the content of telemetry.py"',
+                ),
+                _buildMultiTurnStep(
+                  theme,
+                  'Turn 4',
+                  '"what is inside it?"',
+                  'Auto-resolved to: "Explain the implementation in telemetry.py"',
+                ),
               ],
             ),
           ),
@@ -4411,24 +4516,72 @@ RAG_CHUNK_OVERLAP=200
               children: [
                 Text(
                   'File Copilot supports reading, editing, and semantic indexing for:',
-                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: theme.fgMuted,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    _buildFormatBadge(theme, 'Python (.py)', const Color(0xFF8957E5)),
-                    _buildFormatBadge(theme, 'Dart / Flutter (.dart)', const Color(0xFF0969DA)),
-                    _buildFormatBadge(theme, 'TypeScript / JavaScript', const Color(0xFFD29922)),
-                    _buildFormatBadge(theme, 'Rust (.rs)', const Color(0xFFCF222E)),
-                    _buildFormatBadge(theme, 'Go (.go)', const Color(0xFF1F883D)),
-                    _buildFormatBadge(theme, 'C / C++ (.c, .cpp)', const Color(0xFF0969DA)),
-                    _buildFormatBadge(theme, 'SQL (.sql)', const Color(0xFF8957E5)),
-                    _buildFormatBadge(theme, 'JSON / YAML / TOML', const Color(0xFF57606A)),
-                    _buildFormatBadge(theme, 'Markdown (.md)', const Color(0xFF1F883D)),
-                    _buildFormatBadge(theme, 'HTML / CSS', const Color(0xFFD29922)),
-                    _buildFormatBadge(theme, 'Environment (.env)', const Color(0xFFCF222E)),
+                    _buildFormatBadge(
+                      theme,
+                      'Python (.py)',
+                      const Color(0xFF8957E5),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'Dart / Flutter (.dart)',
+                      const Color(0xFF0969DA),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'TypeScript / JavaScript',
+                      const Color(0xFFD29922),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'Rust (.rs)',
+                      const Color(0xFFCF222E),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'Go (.go)',
+                      const Color(0xFF1F883D),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'C / C++ (.c, .cpp)',
+                      const Color(0xFF0969DA),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'SQL (.sql)',
+                      const Color(0xFF8957E5),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'JSON / YAML / TOML',
+                      const Color(0xFF57606A),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'Markdown (.md)',
+                      const Color(0xFF1F883D),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'HTML / CSS',
+                      const Color(0xFFD29922),
+                    ),
+                    _buildFormatBadge(
+                      theme,
+                      'Environment (.env)',
+                      const Color(0xFFCF222E),
+                    ),
                   ],
                 ),
               ],
@@ -4465,13 +4618,41 @@ RAG_CHUNK_OVERLAP=200
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildExampleInquiry(theme, '"Directory Listing"', 'What files are in the core directory?'),
-                _buildExampleInquiry(theme, '"Follow-up Exploration"', 'and in services?  (dynamically resolves without conversational bloat)'),
-                _buildExampleInquiry(theme, '"Code Inspection"', 'read telemetry.py and explain how streaming works.'),
-                _buildExampleInquiry(theme, '"Repository Layout"', 'List all files in the current repository and show the folder layout.'),
-                _buildExampleInquiry(theme, '"Router Search"', 'Search for all files defining API routers.'),
-                _buildExampleInquiry(theme, '"Vector Indexing"', 'Index backend.py into Qdrant vector database.'),
-                _buildExampleInquiry(theme, '"Semantic RAG Search"', 'Search the vector DB for how local LLM tags are discovered.'),
+                _buildExampleInquiry(
+                  theme,
+                  '"Directory Listing"',
+                  'What files are in the core directory?',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Follow-up Exploration"',
+                  'and in services?  (dynamically resolves without conversational bloat)',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Code Inspection"',
+                  'read telemetry.py and explain how streaming works.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Repository Layout"',
+                  'List all files in the current repository and show the folder layout.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Router Search"',
+                  'Search for all files defining API routers.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Vector Indexing"',
+                  'Index backend.py into Qdrant vector database.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Semantic RAG Search"',
+                  'Search the vector DB for how local LLM tags are discovered.',
+                ),
               ],
             ),
           ),
@@ -4509,9 +4690,16 @@ RAG_CHUNK_OVERLAP=200
                   decoration: BoxDecoration(
                     color: theme.accentFg.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: theme.accentFg.withValues(alpha: 0.3), width: 0.8),
+                    border: Border.all(
+                      color: theme.accentFg.withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
                   ),
-                  child: Icon(Icons.mic_rounded, color: theme.accentFg, size: 22),
+                  child: Icon(
+                    Icons.mic_rounded,
+                    color: theme.accentFg,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -4520,12 +4708,20 @@ RAG_CHUNK_OVERLAP=200
                     children: [
                       Text(
                         'Meeting Scribe & Audio Intelligence',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         'Enterprise-grade live visual & audio intelligence. Runs 100% on your local machine.',
-                        style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted),
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: theme.fgMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -4541,54 +4737,116 @@ RAG_CHUNK_OVERLAP=200
             children: [
               Icon(Icons.psychology_rounded, size: 14, color: theme.accentFg),
               const SizedBox(width: 6),
-              Text('CORE NEURAL PIPELINE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'CORE NEURAL PIPELINE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
 
-          _buildMeetingEngineRow(theme, icon: Icons.graphic_eq_rounded, color: const Color(0xFF8957E5),
-            label: 'Mistral Voxtral 4B', badge: 'Speech Extraction',
-            desc: 'Native speaker diarization — no Whisper dependency. Runs in-memory on MPS/CUDA.'),
-          _buildMeetingEngineRow(theme, icon: Icons.grid_on_rounded, color: const Color(0xFF1F883D),
-            label: 'NVIDIA LocateAnything-3B', badge: 'Vision Grounding',
-            desc: 'Dense bounding-box coordinate tracking of UI interactions, buttons, and windows.'),
-          _buildMeetingEngineRow(theme, icon: Icons.headphones_rounded, color: const Color(0xFF0969DA),
-            label: 'macOS Loopback + Mic', badge: 'Audio Routing',
-            desc: 'Simultaneous earphone loopback + microphone capture at native 16,000 Hz Mono PCM.'),
-          _buildMeetingEngineRow(theme, icon: Icons.block_rounded, color: const Color(0xFFCF222E),
-            label: 'Real-Time Buffer Gating', badge: 'Room Noise Block',
-            desc: 'When mic is muted, buffer frames are zeroed at hardware level. Room chatter cannot enter the recording.'),
-          _buildMeetingEngineRow(theme, icon: Icons.auto_awesome_rounded, color: theme.accentFg,
-            label: 'Gemini 2.5 Flash / Ollama', badge: 'NeuroSummarizer',
-            desc: 'Generates executive takeaways, action items, speaker attribution, and structured briefing.'),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.graphic_eq_rounded,
+            color: const Color(0xFF8957E5),
+            label: 'Mistral Voxtral 4B',
+            badge: 'Speech Extraction',
+            desc:
+                'Native speaker diarization — no Whisper dependency. Runs in-memory on MPS/CUDA.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.grid_on_rounded,
+            color: const Color(0xFF1F883D),
+            label: 'NVIDIA LocateAnything-3B',
+            badge: 'Vision Grounding',
+            desc:
+                'Dense bounding-box coordinate tracking of UI interactions, buttons, and windows.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.headphones_rounded,
+            color: const Color(0xFF0969DA),
+            label: 'macOS Loopback + Mic',
+            badge: 'Audio Routing',
+            desc:
+                'Simultaneous earphone loopback + microphone capture at native 16,000 Hz Mono PCM.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.block_rounded,
+            color: const Color(0xFFCF222E),
+            label: 'Real-Time Buffer Gating',
+            badge: 'Room Noise Block',
+            desc:
+                'When mic is muted, buffer frames are zeroed at hardware level. Room chatter cannot enter the recording.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.auto_awesome_rounded,
+            color: theme.accentFg,
+            label: 'Gemini 2.5 Flash / Ollama',
+            badge: 'NeuroSummarizer',
+            desc:
+                'Generates executive takeaways, action items, speaker attribution, and structured briefing.',
+          ),
 
           const SizedBox(height: 16),
 
           // Quick Start Steps
           Row(
             children: [
-              Icon(Icons.rocket_launch_rounded, size: 14, color: theme.accentFg),
+              Icon(
+                Icons.rocket_launch_rounded,
+                size: 14,
+                color: theme.accentFg,
+              ),
               const SizedBox(width: 6),
-              Text('QUICK START', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'QUICK START',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
 
-          _buildStepCard(theme: theme, stepNumber: '1',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '1',
             title: 'Add Custom Focus Topics (Optional)',
-            description: 'Before starting, click "Add Inquiry / Column" to track specific topics like "Engineering Roadblocks", "Budget Decisions", or "Actions for Sarah". Each topic becomes a dedicated section in your summary.',
+            description:
+                'Before starting, click "Add Inquiry / Column" to track specific topics like "Engineering Roadblocks", "Budget Decisions", or "Actions for Sarah". Each topic becomes a dedicated section in your summary.',
           ),
-          _buildStepCard(theme: theme, stepNumber: '2',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '2',
             title: 'Start Meeting Scribe',
-            description: 'Click the Start Meeting Scribe button. A 2.0-second settling window ensures DeskMate application clicks are never recorded as meeting steps.',
+            description:
+                'Click the Start Meeting Scribe button. A 2.0-second settling window ensures DeskMate application clicks are never recorded as meeting steps.',
           ),
-          _buildStepCard(theme: theme, stepNumber: '3',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '3',
             title: 'Control Room Noise with Mic Toggle',
-            description: 'Use the Mic Active / Mic Muted button in the header:\n• Mic Active (green): User voice is mixed with earphone audio.\n• Mic Muted (orange): Surrounding room chatter and background noise are mathematically zeroed. Attendee audio from earphones continues recording cleanly.',
+            description:
+                'Use the Mic Active / Mic Muted button in the header:\n• Mic Active (green): User voice is mixed with earphone audio.\n• Mic Muted (orange): Surrounding room chatter and background noise are mathematically zeroed. Attendee audio from earphones continues recording cleanly.',
           ),
-          _buildStepCard(theme: theme, stepNumber: '4',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '4',
             title: 'End Meeting & Review Report',
-            description: 'Click End Meeting. The engine automatically diarizes audio, correlates visual moments with speaker statements, generates action items, and compiles an executive PDF report ready for export.',
+            description:
+                'Click End Meeting. The engine automatically diarizes audio, correlates visual moments with speaker statements, generates action items, and compiles an executive PDF report ready for export.',
           ),
         ],
       ),
@@ -4619,7 +4877,10 @@ RAG_CHUNK_OVERLAP=200
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+                width: 0.8,
+              ),
             ),
             child: Icon(icon, size: 14, color: color),
           ),
@@ -4630,21 +4891,48 @@ RAG_CHUNK_OVERLAP=200
               children: [
                 Row(
                   children: [
-                    Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: theme.fgDefault,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.35),
+                          width: 0.6,
+                        ),
                       ),
-                      child: Text(badge, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+                      child: Text(
+                        badge,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: theme.fgMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -4653,7 +4941,11 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  Widget _buildMeetingDriveExportTab(ThemeData theme, bool hasDrive, bool hasCreds) {
+  Widget _buildMeetingDriveExportTab(
+    ThemeData theme,
+    bool hasDrive,
+    bool hasCreds,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Column(
@@ -4665,8 +4957,10 @@ RAG_CHUNK_OVERLAP=200
             isOnline: hasDrive,
             onlineTitle: 'Google Drive: Online & Ready',
             offlineTitle: 'Google Drive: Not Configured (Offline)',
-            onlineDesc: 'Your Google Drive OAuth token is verified. One-click export uploads full meeting PDFs to your Google Drive automatically.',
-            offlineDesc: 'Google Drive is offline. Configure your Google OAuth credentials in the Personal Guide to enable one-click cloud PDF export.',
+            onlineDesc:
+                'Your Google Drive OAuth token is verified. One-click export uploads full meeting PDFs to your Google Drive automatically.',
+            offlineDesc:
+                'Google Drive is offline. Configure your Google OAuth credentials in the Personal Guide to enable one-click cloud PDF export.',
             icon: Icons.add_to_drive_rounded,
           ),
 
@@ -4677,26 +4971,46 @@ RAG_CHUNK_OVERLAP=200
             children: [
               Icon(Icons.info_outline_rounded, size: 14, color: theme.accentFg),
               const SizedBox(width: 6),
-              Text('HOW DRIVE EXPORT WORKS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'HOW DRIVE EXPORT WORKS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
 
-          _buildStepCard(theme: theme, stepNumber: '1',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '1',
             title: 'Shared Google OAuth Credentials',
-            description: 'Meeting Scribe reuses the same credentials.json and OAuth tokens as the Personal Assistant. You do not need a separate Google Cloud project for meeting exports.',
+            description:
+                'Meeting Scribe reuses the same credentials.json and OAuth tokens as the Personal Assistant. You do not need a separate Google Cloud project for meeting exports.',
           ),
-          _buildStepCard(theme: theme, stepNumber: '2',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '2',
             title: 'Dedicated "DeskMate Meeting Summaries" Folder',
-            description: 'On first export, DeskMate automatically creates a folder named "DeskMate Meeting Summaries" in your Google Drive root. All subsequent meeting PDFs are organized there.',
+            description:
+                'On first export, DeskMate automatically creates a folder named "DeskMate Meeting Summaries" in your Google Drive root. All subsequent meeting PDFs are organized there.',
           ),
-          _buildStepCard(theme: theme, stepNumber: '3',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '3',
             title: 'Multi-Page Executive PDF Contents',
-            description: 'The exported PDF includes:\n• Complete executive summary and meeting takeaways\n• High-resolution visual screenshots with LocateAnything-3B bounding boxes\n• Diarized speaker transcript with exact timestamps\n• Action items checklist with assignees and due dates',
+            description:
+                'The exported PDF includes:\n• Complete executive summary and meeting takeaways\n• High-resolution visual screenshots with LocateAnything-3B bounding boxes\n• Diarized speaker transcript with exact timestamps\n• Action items checklist with assignees and due dates',
           ),
-          _buildStepCard(theme: theme, stepNumber: '4',
+          _buildStepCard(
+            theme: theme,
+            stepNumber: '4',
             title: 'Instant Shareable Link',
-            description: 'Once uploaded, DeskMate generates a direct shareable Google Drive link so you can immediately share the report with meeting stakeholders.',
+            description:
+                'Once uploaded, DeskMate generates a direct shareable Google Drive link so you can immediately share the report with meeting stakeholders.',
           ),
 
           const SizedBox(height: 4),
@@ -4718,19 +5032,55 @@ RAG_CHUNK_OVERLAP=200
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Required Google OAuth Scope', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      Text(
+                        'Required Google OAuth Scope',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('drive.file', style: TextStyle(fontFamily: 'monospace', fontSize: 11.5, color: theme.accentFg, fontWeight: FontWeight.w600)),
+                      Text(
+                        'drive.file',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11.5,
+                          color: theme.accentFg,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('Allows DeskMate to create and upload meeting PDFs without access to your entire Drive.', style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                      Text(
+                        'Allows DeskMate to create and upload meeting PDFs without access to your entire Drive.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: theme.fgMuted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 if (!hasDrive) ...[
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: () => setState(() { _currentMode = AgentMode.personal; _selectedTabIndex = 0; }),
-                    style: ElevatedButton.styleFrom(backgroundColor: theme.accentFg, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    onPressed: () => setState(() {
+                      _currentMode = AgentMode.personal;
+                      _selectedTabIndex = 0;
+                    }),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.accentFg,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     child: const Text('Setup OAuth'),
                   ),
                 ],
@@ -4742,7 +5092,11 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  Widget _buildMeetingGmailDispatchTab(ThemeData theme, bool hasGmail, bool hasCreds) {
+  Widget _buildMeetingGmailDispatchTab(
+    ThemeData theme,
+    bool hasGmail,
+    bool hasCreds,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Column(
@@ -4754,8 +5108,10 @@ RAG_CHUNK_OVERLAP=200
             isOnline: hasGmail,
             onlineTitle: 'Gmail: Online & Ready',
             offlineTitle: 'Gmail: Not Configured (Offline)',
-            onlineDesc: 'Gmail integration is live. Email formatted executive summaries, diarized transcripts, and action items directly to attendees with one click.',
-            offlineDesc: 'Gmail is offline. Set up your Google Workspace credentials in the Personal Guide to enable automated meeting email dispatch.',
+            onlineDesc:
+                'Gmail integration is live. Email formatted executive summaries, diarized transcripts, and action items directly to attendees with one click.',
+            offlineDesc:
+                'Gmail is offline. Set up your Google Workspace credentials in the Personal Guide to enable automated meeting email dispatch.',
             icon: Icons.mark_email_read_rounded,
           ),
 
@@ -4766,15 +5122,47 @@ RAG_CHUNK_OVERLAP=200
             children: [
               Icon(Icons.drafts_outlined, size: 14, color: theme.accentFg),
               const SizedBox(width: 6),
-              Text('AUTOMATED EMAIL FORMAT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'AUTOMATED EMAIL FORMAT',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
 
-          _buildMeetingInfoCard(theme, icon: Icons.table_rows_outlined, title: 'Meeting Header', desc: 'Date, time, session duration, and attendee list (derived from Voxtral 4B speaker diarization).'),
-          _buildMeetingInfoCard(theme, icon: Icons.format_list_bulleted_rounded, title: 'Executive Takeaways', desc: 'Concise 3-5 bullet point briefing authored by the NeuroSummarizer. Structured for quick stakeholder review.'),
-          _buildMeetingInfoCard(theme, icon: Icons.task_alt_rounded, title: 'Action Items & Ownership', desc: 'High-priority task checklist with assignees extracted from speaker statements and conversation context.'),
-          _buildMeetingInfoCard(theme, icon: Icons.link_rounded, title: 'PDF Download / Drive Link', desc: 'A direct link to the full cloud PDF report on Google Drive is embedded in the email for complete archival access.'),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.table_rows_outlined,
+            title: 'Meeting Header',
+            desc:
+                'Date, time, session duration, and attendee list (derived from Voxtral 4B speaker diarization).',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.format_list_bulleted_rounded,
+            title: 'Executive Takeaways',
+            desc:
+                'Concise 3-5 bullet point briefing authored by the NeuroSummarizer. Structured for quick stakeholder review.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.task_alt_rounded,
+            title: 'Action Items & Ownership',
+            desc:
+                'High-priority task checklist with assignees extracted from speaker statements and conversation context.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.link_rounded,
+            title: 'PDF Download / Drive Link',
+            desc:
+                'A direct link to the full cloud PDF report on Google Drive is embedded in the email for complete archival access.',
+          ),
 
           const SizedBox(height: 4),
 
@@ -4793,25 +5181,58 @@ RAG_CHUNK_OVERLAP=200
                   children: [
                     Icon(Icons.lock_outlined, size: 13, color: theme.accentFg),
                     const SizedBox(width: 6),
-                    Text('Security & OAuth Scopes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                    Text(
+                      'Security & OAuth Scopes',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: theme.fgDefault,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                _buildOAuthScopeRow(theme, 'gmail.send', 'Send summary emails directly via your Google account.'),
+                _buildOAuthScopeRow(
+                  theme,
+                  'gmail.send',
+                  'Send summary emails directly via your Google account.',
+                ),
                 const SizedBox(height: 4),
-                _buildOAuthScopeRow(theme, 'gmail.readonly', 'Optional: look up attendee email addresses for auto-fill.'),
+                _buildOAuthScopeRow(
+                  theme,
+                  'gmail.readonly',
+                  'Optional: look up attendee email addresses for auto-fill.',
+                ),
                 const SizedBox(height: 6),
-                Text('Emails are never proxied through third-party servers. Zero hallucination dispatch — emails only send when you confirm.',
-                  style: TextStyle(fontSize: 10.5, fontStyle: FontStyle.italic, height: 1.4, color: theme.fgMuted)),
+                Text(
+                  'Emails are never proxied through third-party servers. Zero hallucination dispatch — emails only send when you confirm.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                    color: theme.fgMuted,
+                  ),
+                ),
                 if (!hasGmail) ...[
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => setState(() { _currentMode = AgentMode.personal; _selectedTabIndex = 0; }),
+                      onPressed: () => setState(() {
+                        _currentMode = AgentMode.personal;
+                        _selectedTabIndex = 0;
+                      }),
                       icon: const Icon(Icons.vpn_key_rounded, size: 14),
                       label: const Text('Configure OAuth in Personal Guide'),
-                      style: ElevatedButton.styleFrom(backgroundColor: theme.accentFg, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 9), textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.accentFg,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -4835,7 +5256,9 @@ RAG_CHUNK_OVERLAP=200
             decoration: BoxDecoration(
               color: const Color(0xFF0969DA).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF0969DA).withValues(alpha: 0.3)),
+              border: Border.all(
+                color: const Color(0xFF0969DA).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
@@ -4845,16 +5268,34 @@ RAG_CHUNK_OVERLAP=200
                     color: const Color(0xFF0969DA).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.headset_mic_rounded, color: Color(0xFF0969DA), size: 20),
+                  child: const Icon(
+                    Icons.headset_mic_rounded,
+                    color: Color(0xFF0969DA),
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('macOS Audio Loopback & Room Noise Gating', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      Text(
+                        'macOS Audio Loopback & Room Noise Gating',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('Captures earphone audio from remote attendees while mathematically blocking ambient room noise when muted.', style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                      Text(
+                        'Captures earphone audio from remote attendees while mathematically blocking ambient room noise when muted.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: theme.fgMuted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -4865,16 +5306,46 @@ RAG_CHUNK_OVERLAP=200
           const SizedBox(height: 16),
 
           // Section 1: Loopback
-          _buildMeetingSection(theme, '1', Icons.router_rounded, 'Automated System Audio (Earphone Loopback)', const Color(0xFF0969DA)),
+          _buildMeetingSection(
+            theme,
+            '1',
+            Icons.router_rounded,
+            'Automated System Audio (Earphone Loopback)',
+            const Color(0xFF0969DA),
+          ),
           const SizedBox(height: 8),
-          _buildMeetingInfoCard(theme, icon: Icons.settings_input_composite_rounded, title: 'Virtual Loopback Devices', desc: 'DeskMate scans for BlackHole 2ch, Loopback (Rogue Amoeba), or custom Aggregate Devices to capture system/earphone audio.'),
-          _buildMeetingInfoCard(theme, icon: Icons.device_hub_rounded, title: 'Native Hardware Fallback', desc: 'If no virtual loopback driver is found, falls back cleanly to the default macOS system input with no configuration needed.'),
-          _buildMeetingInfoCard(theme, icon: Icons.graphic_eq_rounded, title: 'Target Specification', desc: 'Records at native 16,000 Hz, 16-bit Mono PCM — matching Voxtral 4B training weights for zero-resampling, maximum accuracy.'),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.settings_input_composite_rounded,
+            title: 'Virtual Loopback Devices',
+            desc:
+                'DeskMate scans for BlackHole 2ch, Loopback (Rogue Amoeba), or custom Aggregate Devices to capture system/earphone audio.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.device_hub_rounded,
+            title: 'Native Hardware Fallback',
+            desc:
+                'If no virtual loopback driver is found, falls back cleanly to the default macOS system input with no configuration needed.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.graphic_eq_rounded,
+            title: 'Target Specification',
+            desc:
+                'Records at native 16,000 Hz, 16-bit Mono PCM — matching Voxtral 4B training weights for zero-resampling, maximum accuracy.',
+          ),
 
           const SizedBox(height: 12),
 
           // Section 2: Mic Gating
-          _buildMeetingSection(theme, '2', Icons.mic_off_rounded, 'Real-Time Microphone Gating (Room Noise Rejection)', const Color(0xFFCF222E)),
+          _buildMeetingSection(
+            theme,
+            '2',
+            Icons.mic_off_rounded,
+            'Real-Time Microphone Gating (Room Noise Rejection)',
+            const Color(0xFFCF222E),
+          ),
           const SizedBox(height: 8),
 
           // State table as structured cards
@@ -4886,16 +5357,22 @@ RAG_CHUNK_OVERLAP=200
             ),
             child: Column(
               children: [
-                _buildMicStateRow(theme, isActive: true,
+                _buildMicStateRow(
+                  theme,
+                  isActive: true,
                   label: 'Mic Active',
                   badge: 'Earphones + Microphone',
-                  desc: 'User speech is recorded and diarized alongside remote attendee audio.',
+                  desc:
+                      'User speech is recorded and diarized alongside remote attendee audio.',
                 ),
                 Divider(height: 1, color: theme.borderDefault),
-                _buildMicStateRow(theme, isActive: false,
+                _buildMicStateRow(
+                  theme,
+                  isActive: false,
                   label: 'Mic Muted',
                   badge: 'Earphone Audio Only',
-                  desc: 'Microphone buffer frames are zeroed at hardware level. Room chatter, background music, and echo CANNOT enter the recording.',
+                  desc:
+                      'Microphone buffer frames are zeroed at hardware level. Room chatter, background music, and echo CANNOT enter the recording.',
                 ),
               ],
             ),
@@ -4904,10 +5381,28 @@ RAG_CHUNK_OVERLAP=200
           const SizedBox(height: 12),
 
           // Section 3: DeskMate Noise Filter
-          _buildMeetingSection(theme, '3', Icons.filter_alt_rounded, 'DeskMate Host App Noise Filtering', const Color(0xFF8957E5)),
+          _buildMeetingSection(
+            theme,
+            '3',
+            Icons.filter_alt_rounded,
+            'DeskMate Host App Noise Filtering',
+            const Color(0xFF8957E5),
+          ),
           const SizedBox(height: 8),
-          _buildMeetingInfoCard(theme, icon: Icons.timer_outlined, title: '2.0-Second Grace Period', desc: 'When you click "Start Meeting Scribe" inside DeskMate, recording is suppressed for the first 2 seconds so DeskMate UI interactions are never captured.'),
-          _buildMeetingInfoCard(theme, icon: Icons.filter_list_rounded, title: 'Heuristic Keyword Filter', desc: 'DeskMate UI clicks ("Meeting Scribe", "End Meeting", "Mic Muted") and macOS Dock / Alt-Tab switcher frames are automatically rejected from visual moments and transcripts.'),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.timer_outlined,
+            title: '2.0-Second Grace Period',
+            desc:
+                'When you click "Start Meeting Scribe" inside DeskMate, recording is suppressed for the first 2 seconds so DeskMate UI interactions are never captured.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.filter_list_rounded,
+            title: 'Heuristic Keyword Filter',
+            desc:
+                'DeskMate UI clicks ("Meeting Scribe", "End Meeting", "Mic Muted") and macOS Dock / Alt-Tab switcher frames are automatically rejected from visual moments and transcripts.',
+          ),
         ],
       ),
     );
@@ -4931,17 +5426,38 @@ RAG_CHUNK_OVERLAP=200
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: theme.accentFg.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                  child: Icon(Icons.api_rounded, color: theme.accentFg, size: 20),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.api_rounded,
+                    color: theme.accentFg,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Meeting Scribe REST API', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                      Text(
+                        'Meeting Scribe REST API',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('All endpoints are available at http://127.0.0.1:2026 (port-forwarded from backend :8080).', style: TextStyle(fontFamily: 'monospace', fontSize: 10.5, color: theme.fgMuted)),
+                      Text(
+                        'All endpoints are available at http://127.0.0.1:2026 (port-forwarded from backend :8080).',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 10.5,
+                          color: theme.fgMuted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -4954,9 +5470,21 @@ RAG_CHUNK_OVERLAP=200
           // API Endpoints
           Row(
             children: [
-              Icon(Icons.cloud_circle_outlined, size: 14, color: theme.accentFg),
+              Icon(
+                Icons.cloud_circle_outlined,
+                size: 14,
+                color: theme.accentFg,
+              ),
               const SizedBox(width: 6),
-              Text('REST ENDPOINTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'REST ENDPOINTS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -4966,26 +5494,34 @@ RAG_CHUNK_OVERLAP=200
             method: 'POST',
             endpoint: '/api/meeting/start',
             title: 'Start Meeting Recording',
-            description: 'Launches non-blocking screen capture (MSS at 2.0 FPS) and initializes the 8-stage computer vision detection thread.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/start" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"monitor": 1, "fps": 2.0}\'',
-            responseJson: '{\n  "status": "recording",\n  "session_id": "20261020_113000",\n  "fps": 2.0,\n  "monitor": 1\n}',
+            description:
+                'Launches non-blocking screen capture (MSS at 2.0 FPS) and initializes the 8-stage computer vision detection thread.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/start" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"monitor": 1, "fps": 2.0}\'',
+            responseJson:
+                '{\n  "status": "recording",\n  "session_id": "20261020_113000",\n  "fps": 2.0,\n  "monitor": 1\n}',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'GET',
             endpoint: '/api/meeting/status',
             title: 'Live Telemetry Metrics',
-            description: 'Returns real-time recording metrics including session uptime, total frames processed, unique events detected, and steps count. Polled by the UI timer card every second.',
-            curlCommand: 'curl -X GET "http://127.0.0.1:2026/api/meeting/status"',
-            responseJson: '{\n  "state": "running",\n  "session_id": "20261020_113000",\n  "uptime_seconds": 124.5,\n  "frames_processed": 248,\n  "frames_skipped": 192,\n  "events_detected": 14,\n  "steps_count": 5\n}',
+            description:
+                'Returns real-time recording metrics including session uptime, total frames processed, unique events detected, and steps count. Polled by the UI timer card every second.',
+            curlCommand:
+                'curl -X GET "http://127.0.0.1:2026/api/meeting/status"',
+            responseJson:
+                '{\n  "state": "running",\n  "session_id": "20261020_113000",\n  "uptime_seconds": 124.5,\n  "frames_processed": 248,\n  "frames_skipped": 192,\n  "events_detected": 14,\n  "steps_count": 5\n}',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'POST',
             endpoint: '/api/meeting/mute',
             title: 'Mic Mute Gating',
-            description: 'Toggles real-time microphone audio capture. When muted, silence is piped into the audio pipeline to protect confidential room discussions.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/mute" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"muted": true}\'',
+            description:
+                'Toggles real-time microphone audio capture. When muted, silence is piped into the audio pipeline to protect confidential room discussions.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/mute" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"muted": true}\'',
             responseJson: '{\n  "status": "success",\n  "muted": true\n}',
           ),
           _buildApiEndpointCard(
@@ -4993,45 +5529,60 @@ RAG_CHUNK_OVERLAP=200
             method: 'POST',
             endpoint: '/api/meeting/stop',
             title: 'Finalize Session Recording',
-            description: 'Halts screen capture, joins consumer threads, finalizes chronological steps in StepBuilder, and saves session_{session_id}.json.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/stop"',
-            responseJson: '{\n  "status": "completed",\n  "session_id": "20261020_113000",\n  "steps_count": 6,\n  "duration_seconds": 132.8\n}',
+            description:
+                'Halts screen capture, joins consumer threads, finalizes chronological steps in StepBuilder, and saves session_{session_id}.json.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/stop"',
+            responseJson:
+                '{\n  "status": "completed",\n  "session_id": "20261020_113000",\n  "steps_count": 6,\n  "duration_seconds": 132.8\n}',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'POST',
             endpoint: '/api/meeting/summarize',
             title: 'Multimodal Summarization & PDF',
-            description: 'Executes the multimodal reasoning pipeline: Voxtral 4B speaker diarization, LocateAnything-3B vision grounding, Gemini / Ollama timeline fusion, and executive PDF generation.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/summarize" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "purge_raw_assets_after": true}\'',
-            responseJson: '{\n  "session_id": "20261020_113000",\n  "summary": "### Executive Overview\\nDiscussed Q4 roadmap and architecture...",\n  "important_steps": ["step_1", "step_4"],\n  "pdf_generated": true,\n  "pdf_url": "/api/meeting/pdf/20261020_113000"\n}',
+            description:
+                'Executes the multimodal reasoning pipeline: Voxtral 4B speaker diarization, LocateAnything-3B vision grounding, Gemini / Ollama timeline fusion, and executive PDF generation.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/summarize" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "purge_raw_assets_after": true}\'',
+            responseJson:
+                '{\n  "session_id": "20261020_113000",\n  "summary": "### Executive Overview\\nDiscussed Q4 roadmap and architecture...",\n  "important_steps": ["step_1", "step_4"],\n  "pdf_generated": true,\n  "pdf_url": "/api/meeting/pdf/20261020_113000"\n}',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'GET',
             endpoint: '/api/meeting/pdf/{session_id}',
             title: 'Download Compiled Meeting PDF',
-            description: 'Streams the compiled DeskMate executive PDF report directly to the client for local viewing, archival, or sharing.',
-            curlCommand: 'curl -X GET "http://127.0.0.1:2026/api/meeting/pdf/20261020_113000" -O',
-            responseJson: '// Binary Application/PDF Stream\n// Saved as: deskmate_report_20261020_113000.pdf',
+            description:
+                'Streams the compiled DeskMate executive PDF report directly to the client for local viewing, archival, or sharing.',
+            curlCommand:
+                'curl -X GET "http://127.0.0.1:2026/api/meeting/pdf/20261020_113000" -O',
+            responseJson:
+                '// Binary Application/PDF Stream\n// Saved as: deskmate_report_20261020_113000.pdf',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'POST',
             endpoint: '/api/meeting/export-drive',
             title: 'Upload to Google Drive',
-            description: 'Automatically locates or creates "DeskMate Meeting Summaries" folder in Google Drive root, uploads the executive PDF report, and returns a direct shareable link.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/export-drive" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000"}\'',
-            responseJson: '{\n  "status": "success",\n  "file_id": "1A2B3C4D5E...",\n  "file_name": "DeskMate_Report_20261020_113000.pdf",\n  "view_link": "https://drive.google.com/file/d/1A2B3C4D5E.../view"\n}',
+            description:
+                'Automatically locates or creates "DeskMate Meeting Summaries" folder in Google Drive root, uploads the executive PDF report, and returns a direct shareable link.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/export-drive" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000"}\'',
+            responseJson:
+                '{\n  "status": "success",\n  "file_id": "1A2B3C4D5E...",\n  "file_name": "DeskMate_Report_20261020_113000.pdf",\n  "view_link": "https://drive.google.com/file/d/1A2B3C4D5E.../view"\n}',
           ),
           _buildApiEndpointCard(
             theme,
             method: 'POST',
             endpoint: '/api/meeting/send-email',
             title: 'Email Summary & PDF Dispatch',
-            description: 'Sends an email via Gmail API with the executive meeting briefing in the HTML body and the full DeskMate PDF attached.',
-            curlCommand: 'curl -X POST "http://127.0.0.1:2026/api/meeting/send-email" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "recipient": "team@example.com"}\'',
-            responseJson: '{\n  "status": "sent",\n  "recipient": "team@example.com",\n  "session_id": "20261020_113000"\n}',
+            description:
+                'Sends an email via Gmail API with the executive meeting briefing in the HTML body and the full DeskMate PDF attached.',
+            curlCommand:
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/send-email" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "recipient": "team@example.com"}\'',
+            responseJson:
+                '{\n  "status": "sent",\n  "recipient": "team@example.com",\n  "session_id": "20261020_113000"\n}',
           ),
 
           const SizedBox(height: 14),
@@ -5041,7 +5592,15 @@ RAG_CHUNK_OVERLAP=200
             children: [
               Icon(Icons.tune_rounded, size: 14, color: theme.accentFg),
               const SizedBox(width: 6),
-              Text('CUSTOM FOCUS INQUIRIES', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'CUSTOM FOCUS INQUIRIES',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -5055,11 +5614,30 @@ RAG_CHUNK_OVERLAP=200
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Add inquiry columns before starting a session to track specific topics:', style: TextStyle(fontSize: 11.5, color: theme.fgMuted, height: 1.4)),
+                Text(
+                  'Add inquiry columns before starting a session to track specific topics:',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: theme.fgMuted,
+                    height: 1.4,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                _buildExampleInquiry(theme, '"Technical Blockers"', 'Extract any mentioned timeline delays or server capacity constraints.'),
-                _buildExampleInquiry(theme, '"Budget Approval"', 'Identify any numbers, approvals, or sign-off decisions discussed.'),
-                _buildExampleInquiry(theme, '"Actions for Sarah"', 'List all tasks or follow-ups assigned to or mentioned for Sarah.'),
+                _buildExampleInquiry(
+                  theme,
+                  '"Technical Blockers"',
+                  'Extract any mentioned timeline delays or server capacity constraints.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Budget Approval"',
+                  'Identify any numbers, approvals, or sign-off decisions discussed.',
+                ),
+                _buildExampleInquiry(
+                  theme,
+                  '"Actions for Sarah"',
+                  'List all tasks or follow-ups assigned to or mentioned for Sarah.',
+                ),
               ],
             ),
           ),
@@ -5071,12 +5649,32 @@ RAG_CHUNK_OVERLAP=200
             children: [
               Icon(Icons.security_rounded, size: 14, color: theme.accentFg),
               const SizedBox(width: 6),
-              Text('MACOS PERMISSIONS REQUIRED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: theme.fgMuted)),
+              Text(
+                'MACOS PERMISSIONS REQUIRED',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: theme.fgMuted,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          _buildMeetingInfoCard(theme, icon: Icons.screen_share_rounded, title: 'Screen & System Audio Recording', desc: 'System Settings > Privacy & Security > Screen Recording. Grant access to DeskMate to enable visual frame capture.'),
-          _buildMeetingInfoCard(theme, icon: Icons.mic_rounded, title: 'Microphone Access', desc: 'System Settings > Privacy & Security > Microphone. Grant access to DeskMate to capture user voice for speaker diarization.'),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.screen_share_rounded,
+            title: 'Screen & System Audio Recording',
+            desc:
+                'System Settings > Privacy & Security > Screen Recording. Grant access to DeskMate to enable visual frame capture.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.mic_rounded,
+            title: 'Microphone Access',
+            desc:
+                'System Settings > Privacy & Security > Microphone. Grant access to DeskMate to capture user voice for speaker diarization.',
+          ),
         ],
       ),
     );
@@ -5103,7 +5701,10 @@ RAG_CHUNK_OVERLAP=200
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 12),
@@ -5116,7 +5717,10 @@ RAG_CHUNK_OVERLAP=200
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color,
+                      ),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -5126,7 +5730,9 @@ RAG_CHUNK_OVERLAP=200
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: theme.isDark
-                              ? (isOnline ? const Color(0xFF7EE787) : const Color(0xFFFFA198))
+                              ? (isOnline
+                                    ? const Color(0xFF7EE787)
+                                    : const Color(0xFFFFA198))
                               : color,
                         ),
                       ),
@@ -5134,7 +5740,14 @@ RAG_CHUNK_OVERLAP=200
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(isOnline ? onlineDesc : offlineDesc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                Text(
+                  isOnline ? onlineDesc : offlineDesc,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: theme.fgMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -5143,7 +5756,12 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  Widget _buildMeetingInfoCard(ThemeData theme, {required IconData icon, required String title, required String desc}) {
+  Widget _buildMeetingInfoCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String title,
+    required String desc,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -5161,9 +5779,23 @@ RAG_CHUNK_OVERLAP=200
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: theme.fgMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -5172,7 +5804,13 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  Widget _buildMeetingSection(ThemeData theme, String number, IconData icon, String title, Color color) {
+  Widget _buildMeetingSection(
+    ThemeData theme,
+    String number,
+    IconData icon,
+    String title,
+    Color color,
+  ) {
     return Row(
       children: [
         Container(
@@ -5180,19 +5818,44 @@ RAG_CHUNK_OVERLAP=200
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
+            border: Border.all(
+              color: color.withValues(alpha: 0.35),
+              width: 0.8,
+            ),
           ),
-          child: Text(number, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+          child: Text(
+            number,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ),
         const SizedBox(width: 8),
         Icon(icon, size: 13, color: color),
         const SizedBox(width: 6),
-        Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault))),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: theme.fgDefault,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildMicStateRow(ThemeData theme, {required bool isActive, required String label, required String badge, required String desc}) {
+  Widget _buildMicStateRow(
+    ThemeData theme, {
+    required bool isActive,
+    required String label,
+    required String badge,
+    required String desc,
+  }) {
     final color = isActive ? theme.statusOk : const Color(0xFFCF222E);
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -5212,21 +5875,48 @@ RAG_CHUNK_OVERLAP=200
               children: [
                 Row(
                   children: [
-                    Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.fgDefault)),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: theme.fgDefault,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.35),
+                          width: 0.6,
+                        ),
                       ),
-                      child: Text(badge, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+                      child: Text(
+                        badge,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(desc, style: TextStyle(fontSize: 11, height: 1.4, color: theme.fgMuted)),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: theme.fgMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -5235,7 +5925,11 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-  Widget _buildExampleInquiry(ThemeData theme, String name, String instruction) {
+  Widget _buildExampleInquiry(
+    ThemeData theme,
+    String name,
+    String instruction,
+  ) {
     final keyId = 'inquiry_${name}_${instruction.hashCode}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -5358,11 +6052,11 @@ RAG_CHUNK_OVERLAP=200
                 Icon(
                   _copiedKey == keyId
                       ? Icons.check_rounded
-                      : (isUrl ? Icons.open_in_new_rounded : Icons.copy_rounded),
+                      : (isUrl
+                            ? Icons.open_in_new_rounded
+                            : Icons.copy_rounded),
                   size: 11,
-                  color: _copiedKey == keyId
-                      ? theme.statusOk
-                      : theme.accentFg,
+                  color: _copiedKey == keyId ? theme.statusOk : theme.accentFg,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -5498,7 +6192,6 @@ RAG_CHUNK_OVERLAP=200
     );
   }
 
-
   Widget _buildApiEndpointCard(
     ThemeData theme, {
     required String method,
@@ -5509,7 +6202,9 @@ RAG_CHUNK_OVERLAP=200
     String? responseJson,
   }) {
     final isPost = method == 'POST';
-    final methodColor = isPost ? const Color(0xFF8957E5) : const Color(0xFF0969DA);
+    final methodColor = isPost
+        ? const Color(0xFF8957E5)
+        : const Color(0xFF0969DA);
     final keyId = 'curl_$endpoint';
 
     return Container(
@@ -5547,7 +6242,10 @@ RAG_CHUNK_OVERLAP=200
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: methodColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
@@ -5656,9 +6354,14 @@ RAG_CHUNK_OVERLAP=200
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: theme.isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
+                      color: theme.isDark
+                          ? const Color(0xFF0D1117)
+                          : const Color(0xFFF6F8FA),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: theme.borderDefault, width: 0.8),
+                      border: Border.all(
+                        color: theme.borderDefault,
+                        width: 0.8,
+                      ),
                     ),
                     child: SelectableText(
                       curlCommand,
@@ -5666,7 +6369,9 @@ RAG_CHUNK_OVERLAP=200
                         fontFamily: 'monospace',
                         fontSize: 11,
                         height: 1.4,
-                        color: theme.isDark ? const Color(0xFF7EE787) : const Color(0xFF116329),
+                        color: theme.isDark
+                            ? const Color(0xFF7EE787)
+                            : const Color(0xFF116329),
                       ),
                     ),
                   ),
@@ -5688,9 +6393,14 @@ RAG_CHUNK_OVERLAP=200
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: theme.isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
+                      color: theme.isDark
+                          ? const Color(0xFF0D1117)
+                          : const Color(0xFFF6F8FA),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: theme.borderDefault, width: 0.8),
+                      border: Border.all(
+                        color: theme.borderDefault,
+                        width: 0.8,
+                      ),
                     ),
                     child: SelectableText(
                       responseJson,
@@ -5698,7 +6408,9 @@ RAG_CHUNK_OVERLAP=200
                         fontFamily: 'monospace',
                         fontSize: 11,
                         height: 1.4,
-                        color: theme.isDark ? const Color(0xFF79C0FF) : const Color(0xFF0550AE),
+                        color: theme.isDark
+                            ? const Color(0xFF79C0FF)
+                            : const Color(0xFF0550AE),
                       ),
                     ),
                   ),
@@ -5721,10 +6433,23 @@ RAG_CHUNK_OVERLAP=200
             color: theme.accentFg.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(3),
           ),
-          child: Text(scope, style: TextStyle(fontFamily: 'monospace', fontSize: 10, fontWeight: FontWeight.w700, color: theme.accentFg)),
+          child: Text(
+            scope,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: theme.accentFg,
+            ),
+          ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Text(desc, style: TextStyle(fontSize: 11, height: 1.35, color: theme.fgMuted))),
+        Expanded(
+          child: Text(
+            desc,
+            style: TextStyle(fontSize: 11, height: 1.35, color: theme.fgMuted),
+          ),
+        ),
       ],
     );
   }

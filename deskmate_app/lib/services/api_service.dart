@@ -254,7 +254,10 @@ class ApiService {
 
   // --- Meeting Intelligence Endpoints ---
 
-  Future<Map<String, dynamic>> startMeeting({int monitor = 1, double fps = 2.0}) async {
+  Future<Map<String, dynamic>> startMeeting({
+    int monitor = 1,
+    double fps = 2.0,
+  }) async {
     final url = Uri.parse('$baseUrl/api/meeting/start');
     return _postJson(url, {'monitor': monitor, 'fps': fps});
   }
@@ -289,17 +292,11 @@ class ApiService {
     List<Map<String, String>>? customFields,
   }) async {
     final url = Uri.parse('$baseUrl/api/meeting/summarize');
-    final payload = <String, dynamic>{
-      'session_id': sessionId,
-    };
+    final payload = <String, dynamic>{'session_id': sessionId};
     if (customFields != null && customFields.isNotEmpty) {
       payload['custom_fields'] = customFields;
     }
-    return _postJson(
-      url,
-      payload,
-      timeout: const Duration(minutes: 5),
-    );
+    return _postJson(url, payload, timeout: const Duration(minutes: 5));
   }
 
   Future<Map<String, dynamic>> syncMeetingTasks({
@@ -326,10 +323,7 @@ class ApiService {
     String folderName = 'DeskMate Meetings',
   }) async {
     final url = Uri.parse('$baseUrl/api/meeting/export-drive');
-    return _postJson(url, {
-      'session_id': sessionId,
-      'folder_name': folderName,
-    });
+    return _postJson(url, {'session_id': sessionId, 'folder_name': folderName});
   }
 
   Future<Map<String, dynamic>> sendMeetingEmail({
@@ -347,4 +341,3 @@ class ApiService {
     });
   }
 }
-

@@ -76,7 +76,7 @@ class VoxtralSpeechEngine:
         logger.info(f"Voxtral transcription completed in {elapsed}s (Segments: {len(result.get('segments', []))})")
         return result
 
-    def _transcribe_sync(self, audio_path: str) -> Dict[str, Any]:
+    def _transcribe_sync(self, audio_path: str) -> dict[str, Any]:
         """Synchronous audio processing pipeline for Voxtral."""
         # 1. Check if user configured Mistral Cloud Audio API
         if self.api_key:
@@ -96,9 +96,10 @@ class VoxtralSpeechEngine:
                 dtype = torch.float16 if device in ("cuda", "mps") else torch.float32
 
                 try:
-                    self._processor = AutoProcessor.from_pretrained(self.model_name)
+                    self._processor = AutoProcessor.from_pretrained(self.model_name, revision="main")
                     self._model = AutoModelForSpeechSeq2Seq.from_pretrained(
                         self.model_name,
+                        revision="main",
                         torch_dtype=dtype,
                         low_cpu_mem_usage=True,
                     ).to(device)
@@ -153,7 +154,7 @@ class VoxtralSpeechEngine:
             logger.warning(f"Mistral Cloud Audio API error: {e}")
         return None
 
-    def _run_local_voxtral_inference(self, audio_path: str) -> Dict[str, Any]:
+    def _run_local_voxtral_inference(self, audio_path: str) -> dict[str, Any]:
         """Execute local Voxtral inference on device."""
         try:
             import soundfile as sf

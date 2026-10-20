@@ -50,9 +50,10 @@ class LocateAnythingDetector:
                 except ImportError:
                     from transformers import AutoModel as AutoVisionModel
 
-            self._processor = AutoProcessor.from_pretrained(self.model_id)
+            self._processor = AutoProcessor.from_pretrained(self.model_id, revision="main")
             self._model = AutoVisionModel.from_pretrained(
                 self.model_id,
+                revision="main",
                 torch_dtype=torch.float16 if self.device in ("cuda", "mps") else torch.float32,
                 low_cpu_mem_usage=True,
             ).to(self.device)

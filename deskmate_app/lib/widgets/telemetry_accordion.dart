@@ -8,8 +8,21 @@ enum _ToolKind { vector, db, other }
 
 _ToolKind _classifyTool(String? tool) {
   final t = (tool ?? '').toLowerCase();
-  const vectorTools = {'recall_memory', 'save_to_memory', 'search_memory', 'search_qdrant', 'index_document'};
-  const dbTools = {'run_sql_query', 'search_notes', 'save_note', 'list_tasks', 'add_task', 'complete_task'};
+  const vectorTools = {
+    'recall_memory',
+    'save_to_memory',
+    'search_memory',
+    'search_qdrant',
+    'index_document',
+  };
+  const dbTools = {
+    'run_sql_query',
+    'search_notes',
+    'save_note',
+    'list_tasks',
+    'add_task',
+    'complete_task',
+  };
   if (vectorTools.contains(t)) return _ToolKind.vector;
   if (dbTools.contains(t)) return _ToolKind.db;
   return _ToolKind.other;
@@ -802,10 +815,14 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
 
     final panelTitle = toolKind == _ToolKind.vector
         ? 'Vector Search Parameters'
-        : (toolKind == _ToolKind.db ? 'Database Query Parameters' : 'Input Arguments Payload');
+        : (toolKind == _ToolKind.db
+              ? 'Database Query Parameters'
+              : 'Input Arguments Payload');
     final panelIcon = toolKind == _ToolKind.vector
         ? Icons.hub_rounded
-        : (toolKind == _ToolKind.db ? Icons.storage_rounded : Icons.input_rounded);
+        : (toolKind == _ToolKind.db
+              ? Icons.storage_rounded
+              : Icons.input_rounded);
 
     final args = step.arguments ?? {};
     final jsonStr = _formatJson(args);
@@ -839,9 +856,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                     Icon(
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
-                      color: isCopied
-                          ? theme.statusOk
-                          : theme.accentFg,
+                      color: isCopied ? theme.statusOk : theme.accentFg,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -849,9 +864,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w600,
-                        color: isCopied
-                            ? theme.statusOk
-                            : theme.accentFg,
+                        color: isCopied ? theme.statusOk : theme.accentFg,
                       ),
                     ),
                   ],
@@ -954,9 +967,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                     Icon(
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
-                      color: isCopied
-                          ? theme.statusOk
-                          : theme.accentFg,
+                      color: isCopied ? theme.statusOk : theme.accentFg,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -964,9 +975,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w600,
-                        color: isCopied
-                            ? theme.statusOk
-                            : theme.accentFg,
+                        color: isCopied ? theme.statusOk : theme.accentFg,
                       ),
                     ),
                   ],

@@ -494,7 +494,6 @@ class _SidebarState extends State<Sidebar> {
               ),
             ],
           ),
-
         ),
       ),
     );
@@ -751,9 +750,17 @@ class _SidebarState extends State<Sidebar> {
       title: 'FILE COPILOT HEALTH',
       offlineLabel: 'File Copilot offline',
       rows: [
-        _buildHealthRow(theme, 'Filesystem Access', checks['filesystem_access'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Filesystem Access',
+          checks['filesystem_access'] ?? false,
+        ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Qdrant Vector DB', checks['qdrant_db'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Qdrant Vector DB',
+          checks['qdrant_db'] ?? false,
+        ),
         const SizedBox(height: 4),
         _buildHealthRow(theme, 'Privacy Mode', checks['privacy_mode'] ?? true),
       ],
@@ -771,11 +778,19 @@ class _SidebarState extends State<Sidebar> {
       title: 'PERSONAL HEALTH',
       offlineLabel: 'Personal Agent offline',
       rows: [
-        _buildHealthRow(theme, 'Credentials JSON', checks['google_credentials_file'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Credentials JSON',
+          checks['google_credentials_file'] ?? false,
+        ),
         const SizedBox(height: 4),
         _buildHealthRow(theme, 'Gmail Access', checks['gmail_token'] ?? false),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Calendar Access', checks['calendar_token'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Calendar Access',
+          checks['calendar_token'] ?? false,
+        ),
         const SizedBox(height: 4),
         _buildHealthRow(theme, 'Drive Access', checks['drive_token'] ?? false),
       ],
@@ -793,11 +808,23 @@ class _SidebarState extends State<Sidebar> {
       title: 'MEETING SCRIBE HEALTH',
       offlineLabel: 'Meeting Scribe offline',
       rows: [
-        _buildHealthRow(theme, 'Google OAuth', checks['google_credentials_file'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Google OAuth',
+          checks['google_credentials_file'] ?? false,
+        ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Drive Cloud Sync', checks['drive_token'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Drive Cloud Sync',
+          checks['drive_token'] ?? false,
+        ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Gmail Dispatch', checks['gmail_token'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Gmail Dispatch',
+          checks['gmail_token'] ?? false,
+        ),
         const SizedBox(height: 4),
         _buildHealthRow(theme, 'Voxtral 4B Audio', true),
         const SizedBox(height: 4),
@@ -806,7 +833,12 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-  Widget _buildHealthRow(ThemeData theme, String label, bool isOk, [String? statusText]) {
+  Widget _buildHealthRow(
+    ThemeData theme,
+    String label,
+    bool isOk, [
+    String? statusText,
+  ]) {
     final displayStatus = statusText ?? (isOk ? 'Online' : 'Offline');
     return Row(
       children: [

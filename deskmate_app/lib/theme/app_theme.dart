@@ -326,13 +326,17 @@ extension GitHubPrimerTheme on ThemeData {
       isDark ? AppTheme.darkDangerBorder : AppTheme.lightDangerBorder;
 
   // Panel / code block backgrounds (replaces hardcoded 0xFF161B22 / 0xFFF6F8FA)
-  Color get bgPanel => isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA);
-  Color get bgCode => isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA);
+  Color get bgPanel =>
+      isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA);
+  Color get bgCode =>
+      isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA);
 
   // Success text on dark/light (replaces hardcoded 0xFF7EE787 / 0xFF1A7F37 ternaries)
-  Color get successText => isDark ? const Color(0xFF7EE787) : const Color(0xFF1A7F37);
+  Color get successText =>
+      isDark ? const Color(0xFF7EE787) : const Color(0xFF1A7F37);
 
   // Status pill convenience
   Color get statusOk => const Color(0xFF2DA44E);
-  Color get statusBad => isDark ? AppTheme.darkDangerFg : AppTheme.lightDangerFg;
+  Color get statusBad =>
+      isDark ? AppTheme.darkDangerFg : AppTheme.lightDangerFg;
 }

@@ -1396,9 +1396,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: isOk
-                  ? theme.successText
-                  : theme.fgMuted,
+              color: isOk ? theme.successText : theme.fgMuted,
             ),
           ),
         ],

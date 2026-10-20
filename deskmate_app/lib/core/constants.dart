@@ -28,7 +28,8 @@ abstract final class AppConstants {
 
 abstract final class PrefsKeys {
   static const String conversationId = 'deskmate_conversation_id';
-  static const String personalConversationId = 'deskmate_personal_conversation_id';
+  static const String personalConversationId =
+      'deskmate_personal_conversation_id';
   static const String backendUrl = 'deskmate_backend_url';
   static const String selectedModel = 'deskmate_selected_model';
   static const String geminiApiKey = 'deskmate_gemini_api_key';
@@ -57,7 +58,8 @@ abstract final class ApiPaths {
   static const String meetingSummarize = '/api/meeting/summarize';
   static const String meetingSyncTasks = '/api/meeting/sync-tasks';
   static String meetingPdf(String id) => '/api/meeting/pdf/$id';
-  static String meetingAsset(String sid, String file) => '/api/meeting/asset/$sid/$file';
+  static String meetingAsset(String sid, String file) =>
+      '/api/meeting/asset/$sid/$file';
   static const String meetingExportDrive = '/api/meeting/export-drive';
   static const String meetingSendEmail = '/api/meeting/send-email';
 

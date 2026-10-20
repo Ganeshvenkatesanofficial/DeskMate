@@ -155,9 +155,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                       tooltip: _isCopied
                                           ? 'Copied'
                                           : 'Copy query',
-                                      color: _isCopied
-                                          ? theme.statusOk
-                                          : null,
+                                      color: _isCopied ? theme.statusOk : null,
                                       onTap: _copyToClipboard,
                                       theme: theme,
                                     ),
@@ -224,9 +222,7 @@ class _ChatBubbleState extends State<ChatBubble> {
                                     ? Icons.check_rounded
                                     : Icons.copy_rounded,
                                 tooltip: _isCopied ? 'Copied' : 'Copy response',
-                                color: _isCopied
-                                    ? theme.statusOk
-                                    : null,
+                                color: _isCopied ? theme.statusOk : null,
                                 onTap: _copyToClipboard,
                                 theme: theme,
                               ),
@@ -267,12 +263,7 @@ class _ChatBubbleState extends State<ChatBubble> {
             : const Color(0x1A000000),
         child: Padding(
           padding: const EdgeInsets.all(4.0),
-          child: Icon(
-            icon,
-            size: 13,
-            color:
-                color ?? theme.fgMuted,
-          ),
+          child: Icon(icon, size: 13, color: color ?? theme.fgMuted),
         ),
       ),
     );

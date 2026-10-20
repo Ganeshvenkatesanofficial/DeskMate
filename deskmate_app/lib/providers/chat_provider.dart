@@ -44,12 +44,14 @@ class ChatProvider extends ChangeNotifier {
     if (_mode == AgentMode.personal) return _personalMessages;
     return _fileMessages;
   }
+
   bool get isSending => _isSending;
   String get errorMessage => _errorMessage;
   String get conversationId {
     if (_mode == AgentMode.personal) return _personalConversationId;
     return _fileConversationId;
   }
+
   String get backendUrl => _backendUrl;
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
@@ -330,7 +332,9 @@ class ChatProvider extends ChangeNotifier {
     _healthTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       var health = await _apiService.checkHealth();
       if (health['status'] != 'ok') {
-        for (final candidate in AppConstants.candidateUrls(BackendManager.backendUrl)) {
+        for (final candidate in AppConstants.candidateUrls(
+          BackendManager.backendUrl,
+        )) {
           if (candidate != _backendUrl) {
             try {
               final fbService = ApiService(baseUrl: candidate);
@@ -418,9 +422,7 @@ class ChatProvider extends ChangeNotifier {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(
-      isPersonal
-          ? PrefsKeys.personalConversationId
-          : PrefsKeys.conversationId,
+      isPersonal ? PrefsKeys.personalConversationId : PrefsKeys.conversationId,
     );
     if (prevId.isNotEmpty) {
       await _apiService.resetChat(prevId);

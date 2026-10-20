@@ -134,7 +134,7 @@ def get_personal_assistant_agent(
 
 def run_personal_assistant(
     user_input: str,
-    history: Optional[List[Dict[str, str]]] = None,
+    history: Optional[list[dict[str, str]]] = None,
     api_key: Optional[str] = None,
     model_id: Optional[str] = None,
 ) -> str:
@@ -150,12 +150,12 @@ def run_personal_assistant(
 
 def stream_personal_assistant(
     user_input: str,
-    history: Optional[List[Dict[str, str]]] = None,
+    history: Optional[list[dict[str, str]]] = None,
     api_key: Optional[str] = None,
     model_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
-    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
-) -> Generator[Dict[str, Any], None, None]:
+    on_event: Optional[Callable[[dict[str, Any]], None]] = None,
+) -> Generator[dict[str, Any], None, None]:
     """Streaming execution of Personal Assistant yielding real-time telemetry steps."""
     if is_local_filesystem_query(user_input):
         conv_id = (
@@ -190,7 +190,7 @@ def is_genuine_credential(val: Optional[str]) -> bool:
     return bool(s and not any(p in s for p in placeholders))
 
 
-def check_personal_health() -> Dict[str, Any]:
+def check_personal_health() -> dict[str, Any]:
     """Check availability of Google OAuth tokens, credentials file, and database services."""
     user_data_dir = get_user_data_dir()
     has_env_creds = is_genuine_credential(os.getenv("GOOGLE_CLIENT_ID")) and is_genuine_credential(os.getenv("GOOGLE_CLIENT_SECRET"))

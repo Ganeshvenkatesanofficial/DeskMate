@@ -315,7 +315,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                             provider.messages.length +
                                             (provider.isSending ? 1 : 0),
                                         itemBuilder: (context, index) {
-                                          if (index == provider.messages.length) {
+                                          if (index ==
+                                              provider.messages.length) {
                                             return _buildTypingIndicator(
                                               provider,
                                               theme,
@@ -328,7 +329,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                             onEdit: () {
                                               _onEditMessage(
                                                 index,
-                                                provider.messages[index].content,
+                                                provider
+                                                    .messages[index]
+                                                    .content,
                                               );
                                             },
                                           );
@@ -542,9 +545,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                              color:
-                                  theme.successText
-                                      .withValues(alpha: 0.12),
+                              color: theme.successText.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Icon(

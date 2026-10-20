@@ -12,10 +12,7 @@ import '../utils/open_external.dart';
 class MeetingScribeView extends StatefulWidget {
   final void Function([AgentMode? mode])? onOpenSetupGuide;
 
-  const MeetingScribeView({
-    super.key,
-    this.onOpenSetupGuide,
-  });
+  const MeetingScribeView({super.key, this.onOpenSetupGuide});
 
   @override
   State<MeetingScribeView> createState() => _MeetingScribeViewState();
@@ -52,12 +49,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   // Transcript filter and search state
   String _transcriptSearchQuery = '';
   String? _selectedSpeakerFilter;
-  final TextEditingController _transcriptSearchController = TextEditingController();
+  final TextEditingController _transcriptSearchController =
+      TextEditingController();
 
   // Custom Focus Inquiries / Columns state
   final List<Map<String, String>> _customFocusTopics = [];
   final TextEditingController _topicNameController = TextEditingController();
-  final TextEditingController _topicInstructionController = TextEditingController();
+  final TextEditingController _topicInstructionController =
+      TextEditingController();
   bool _showTopicInput = false;
 
   @override
@@ -86,7 +85,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       final status = await provider.apiService.getMeetingStatus();
       if (mounted) {
         setState(() {
-          _isRecording = status['state'] == 'recording' || status['state'] == 'running';
+          _isRecording =
+              status['state'] == 'recording' || status['state'] == 'running';
           _currentSessionId = status['session_id'];
           _uptimeSeconds = (status['uptime_seconds'] as num?)?.toInt() ?? 0;
           _framesProcessed = (status['frames_processed'] as num?)?.toInt() ?? 0;
@@ -110,10 +110,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         final status = await provider.apiService.getMeetingStatus();
         if (mounted) {
           setState(() {
-            _isRecording = status['state'] == 'recording' || status['state'] == 'running';
-            _uptimeSeconds = (status['uptime_seconds'] as num?)?.toInt() ?? _uptimeSeconds + 1;
-            _framesProcessed = (status['frames_processed'] as num?)?.toInt() ?? _framesProcessed;
-            _eventsDetected = (status['events_detected'] as num?)?.toInt() ?? _eventsDetected;
+            _isRecording =
+                status['state'] == 'recording' || status['state'] == 'running';
+            _uptimeSeconds =
+                (status['uptime_seconds'] as num?)?.toInt() ??
+                _uptimeSeconds + 1;
+            _framesProcessed =
+                (status['frames_processed'] as num?)?.toInt() ??
+                _framesProcessed;
+            _eventsDetected =
+                (status['events_detected'] as num?)?.toInt() ?? _eventsDetected;
             if (status.containsKey('mic_muted')) {
               _isMicMuted = status['mic_muted'] == true;
             }
@@ -131,7 +137,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     setState(() => _isStarting = true);
     final provider = Provider.of<ChatProvider>(context, listen: false);
     try {
-      final startFuture = provider.apiService.startMeeting(monitor: 1, fps: 2.0);
+      final startFuture = provider.apiService.startMeeting(
+        monitor: 1,
+        fps: 2.0,
+      );
       final delayFuture = Future.delayed(const Duration(milliseconds: 1200));
       final results = await Future.wait([startFuture, delayFuture]);
       final res = results[0] as Map<String, dynamic>;
@@ -203,7 +212,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 ),
               ],
             ),
-            backgroundColor: targetMuted ? const Color(0xFFD97706) : AppTheme.emerald,
+            backgroundColor: targetMuted
+                ? const Color(0xFFD97706)
+                : AppTheme.emerald,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
           ),
@@ -240,16 +251,23 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
       if (mounted) {
         final summaryText = summaryRes['summary'] as String? ?? '';
-        final important = (summaryRes['important_steps'] as List?)?.map((e) => e.toString()).toList() ?? [];
-        final desc = summaryRes['step_descriptions'] as Map<String, dynamic>? ?? {};
-        final customAnalysis = (summaryRes['custom_fields'] as Map<String, dynamic>?) ?? {};
+        final important =
+            (summaryRes['important_steps'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+        final desc =
+            summaryRes['step_descriptions'] as Map<String, dynamic>? ?? {};
+        final customAnalysis =
+            (summaryRes['custom_fields'] as Map<String, dynamic>?) ?? {};
         final transcript = summaryRes['transcript'] as Map<String, dynamic>?;
         final steps = (summaryRes['steps'] as List<dynamic>?) ?? [];
 
         // Extract action items
         final extractedActions = <String>[];
         for (final line in summaryText.split('\n')) {
-          if (line.contains('[ACTION ITEM]') || line.contains('[HIGH PRIORITY]')) {
+          if (line.contains('[ACTION ITEM]') ||
+              line.contains('[HIGH PRIORITY]')) {
             extractedActions.add(line.replaceAll('**', '').trim());
           }
         }
@@ -271,9 +289,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     } catch (e) {
       if (mounted) {
         setState(() => _isSummarizing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Summarization error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Summarization error: $e')));
       }
     }
   }
@@ -291,7 +309,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         setState(() => _isSyncingTasks = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully synced ${res['tasks_created']} action items into DeskMate Tasks!'),
+            content: Text(
+              'Successfully synced ${res['tasks_created']} action items into DeskMate Tasks!',
+            ),
             backgroundColor: AppTheme.emerald,
           ),
         );
@@ -299,9 +319,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     } catch (e) {
       if (mounted) {
         setState(() => _isSyncingTasks = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Task sync failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Task sync failed: $e')));
       }
     }
   }
@@ -325,7 +345,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         final link = res['view_link'] ?? '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Uploaded to Google Drive in "DeskMate Meetings"! ${link.isNotEmpty ? "(Link ready)" : ""}'),
+            content: Text(
+              'Uploaded to Google Drive in "DeskMate Meetings"! ${link.isNotEmpty ? "(Link ready)" : ""}',
+            ),
             backgroundColor: AppTheme.emerald,
             action: link.isNotEmpty
                 ? SnackBarAction(
@@ -353,54 +375,62 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     if (_currentSessionId == null) return;
     final emailController = TextEditingController();
 
-    final send = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.email_outlined, color: AppTheme.purplePrimary, size: 22),
-            SizedBox(width: 8),
-            Text('Email Meeting Summary & PDF'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter recipient email. DeskMate will send the executive summary with the generated PDF attached via your connected Gmail.',
-              style: TextStyle(fontSize: 13, height: 1.4),
+    final send =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(
+                  Icons.email_outlined,
+                  color: AppTheme.purplePrimary,
+                  size: 22,
+                ),
+                SizedBox(width: 8),
+                Text('Email Meeting Summary & PDF'),
+              ],
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: emailController,
-              autofocus: true,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Recipient Email',
-                hintText: 'colleague@example.com',
-                prefixIcon: Icon(Icons.alternate_email_rounded, size: 18),
-                border: OutlineInputBorder(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter recipient email. DeskMate will send the executive summary with the generated PDF attached via your connected Gmail.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: emailController,
+                  autofocus: true,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Recipient Email',
+                    hintText: 'colleague@example.com',
+                    prefixIcon: Icon(Icons.alternate_email_rounded, size: 18),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.purplePrimary,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Send Email'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.purplePrimary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Send Email'),
-          ),
-        ],
-      ),
-    ).then((value) { emailController.dispose(); return value; });
+        ).then((value) {
+          emailController.dispose();
+          return value;
+        });
 
     if (send == true && emailController.text.trim().isNotEmpty) {
       if (!mounted) return;
@@ -424,9 +454,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       } catch (e) {
         if (mounted) {
           setState(() => _isSendingEmail = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to send email: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to send email: $e')));
         }
       }
     }
@@ -482,13 +512,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   ],
 
                   // --- KEY VISUAL MOMENTS ---
-                  if (_importantSteps.isNotEmpty || _meetingSteps.isNotEmpty) ...[
+                  if (_importantSteps.isNotEmpty ||
+                      _meetingSteps.isNotEmpty) ...[
                     _buildVisualMomentsCard(theme),
                     const SizedBox(height: 20),
                   ],
 
                   // --- VOXTRAL 4B DIARIZED TRANSCRIPT ---
-                  if (_transcriptData != null || (_executiveSummary != null && _executiveSummary!.isNotEmpty)) ...[
+                  if (_transcriptData != null ||
+                      (_executiveSummary != null &&
+                          _executiveSummary!.isNotEmpty)) ...[
                     _buildTranscriptCard(theme),
                     const SizedBox(height: 20),
                   ],
@@ -544,7 +577,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: _isRecording
                             ? AppTheme.recordingRed.withValues(alpha: 0.12)
@@ -624,14 +660,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               mainAxisSize: MainAxisSize.min,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => widget.onOpenSetupGuide?.call(AgentMode.meeting),
+                  onPressed: () =>
+                      widget.onOpenSetupGuide?.call(AgentMode.meeting),
                   icon: const Icon(Icons.menu_book_rounded, size: 16),
                   label: const Text('User Guide'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: theme.fgDefault,
                     side: BorderSide(color: theme.borderDefault),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -641,15 +683,25 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.play_arrow_rounded, size: 20),
-                  label: Text(_isStarting ? 'Starting...' : 'Start Meeting Scribe'),
+                  label: Text(
+                    _isStarting ? 'Starting...' : 'Start Meeting Scribe',
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.accentFg,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ],
@@ -666,16 +718,24 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+                            color: _isMicMuted
+                                ? AppTheme.amber
+                                : AppTheme.emerald,
                           ),
                         )
                       : Icon(
-                          _isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                          _isMicMuted
+                              ? Icons.mic_off_rounded
+                              : Icons.mic_rounded,
                           size: 18,
-                          color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+                          color: _isMicMuted
+                              ? AppTheme.amber
+                              : AppTheme.emerald,
                         ),
                   label: Text(
-                    _isMicMuted ? 'Mic Muted (Room Blocked)' : 'Mic Active (Voice In)',
+                    _isMicMuted
+                        ? 'Mic Muted (Room Blocked)'
+                        : 'Mic Active (Voice In)',
                     style: TextStyle(
                       color: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
                       fontWeight: FontWeight.w600,
@@ -691,20 +751,32 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     backgroundColor: _isMicMuted
                         ? AppTheme.amber.withValues(alpha: 0.1)
                         : AppTheme.emerald.withValues(alpha: 0.1),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 ElevatedButton.icon(
                   onPressed: _stopRecording,
                   icon: const Icon(Icons.stop_rounded, size: 20),
-                  label: Text('End Meeting (${_formatDuration(_uptimeSeconds)})'),
+                  label: Text(
+                    'End Meeting (${_formatDuration(_uptimeSeconds)})',
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.recordingRed,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ],
@@ -749,7 +821,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             theme: theme,
             title: 'Audio Capture Mode',
             value: _isMicMuted ? 'Earphones Only' : 'Earphones + Mic',
-            icon: _isMicMuted ? Icons.headset_rounded : Icons.headset_mic_rounded,
+            icon: _isMicMuted
+                ? Icons.headset_rounded
+                : Icons.headset_mic_rounded,
             valueColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
             iconColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
           ),
@@ -829,7 +903,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           const SizedBox(height: 16),
           Text(
             'Analyzing Meeting Intelligence...',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: theme.fgDefault,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -859,11 +937,19 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             children: [
               Row(
                 children: [
-                  Icon(Icons.auto_awesome_rounded, color: theme.accentFg, size: 20),
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: theme.accentFg,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Executive Session Summary',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: theme.fgDefault,
+                    ),
                   ),
                 ],
               ),
@@ -872,13 +958,21 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => _showScreenshotModal(context, 0, _getDisplaySteps()),
+                    onPressed: () =>
+                        _showScreenshotModal(context, 0, _getDisplaySteps()),
                     icon: const Icon(Icons.photo_library_outlined, size: 16),
-                    label: Text('Inspect Screenshots (${_getDisplaySteps().length})'),
+                    label: Text(
+                      'Inspect Screenshots (${_getDisplaySteps().length})',
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: theme.accentFg,
-                      side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      side: BorderSide(
+                        color: theme.accentFg.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(
@@ -887,8 +981,13 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     label: const Text('View Transcript'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: theme.accentFg,
-                      side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      side: BorderSide(
+                        color: theme.accentFg.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                   if (_pdfUrl != null) ...[
@@ -899,31 +998,56 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       style: OutlinedButton.styleFrom(
                         foregroundColor: theme.accentFg,
                         side: BorderSide(color: theme.accentFg),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                     ),
                     ElevatedButton.icon(
-                      onPressed: _isExportingDrive ? null : _exportToGoogleDrive,
+                      onPressed: _isExportingDrive
+                          ? null
+                          : _exportToGoogleDrive,
                       icon: _isExportingDrive
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
                           : const Icon(Icons.cloud_upload_outlined, size: 16),
                       label: const Text('Save to Drive'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.purplePrimary,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                     ),
                     ElevatedButton.icon(
                       onPressed: _isSendingEmail ? null : _promptSendEmail,
                       icon: _isSendingEmail
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
                           : const Icon(Icons.mail_outline_rounded, size: 16),
                       label: const Text('Email PDF'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF161B22),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                     ),
                   ],
@@ -937,11 +1061,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               data: _executiveSummary!,
               selectable: false,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                p: TextStyle(
-                  fontSize: 14,
-                  height: 1.6,
-                  color: theme.fgDefault,
-                ),
+                p: TextStyle(fontSize: 14, height: 1.6, color: theme.fgDefault),
                 h1: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -1011,24 +1131,42 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.check_circle_outline_rounded, color: AppTheme.amber, size: 20),
+                  const Icon(
+                    Icons.check_circle_outline_rounded,
+                    color: AppTheme.amber,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Extracted Action Items',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: theme.fgDefault,
+                    ),
                   ),
                 ],
               ),
               ElevatedButton.icon(
                 onPressed: _isSyncingTasks ? null : _syncTasksToDeskMate,
                 icon: _isSyncingTasks
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.sync_rounded, size: 16),
                 label: const Text('Sync to DeskMate Tasks'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.emerald,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                 ),
               ),
             ],
@@ -1042,13 +1180,21 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 children: [
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
-                    child: Icon(Icons.arrow_right_rounded, size: 18, color: AppTheme.amber),
+                    child: Icon(
+                      Icons.arrow_right_rounded,
+                      size: 18,
+                      color: AppTheme.amber,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       item,
-                      style: TextStyle(fontSize: 13, height: 1.4, color: theme.fgDefault),
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: theme.fgDefault,
+                      ),
                     ),
                   ),
                 ],
@@ -1062,11 +1208,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   bool _isInternalNoiseStep(Map<String, dynamic> step, String stepId) {
     final summary = (step['summary']?.toString() ?? '').toLowerCase();
-    final meta = _stepDescriptions[stepId] ??
+    final meta =
+        _stepDescriptions[stepId] ??
         _stepDescriptions['step_$stepId'] ??
         _stepDescriptions[stepId.replaceAll(RegExp(r'[^0-9]'), '')];
-    final title = (meta is Map ? (meta['title']?.toString() ?? '') : '').toLowerCase();
-    final desc = (meta is Map ? (meta['description']?.toString() ?? '') : '').toLowerCase();
+    final title = (meta is Map ? (meta['title']?.toString() ?? '') : '')
+        .toLowerCase();
+    final desc = (meta is Map ? (meta['description']?.toString() ?? '') : '')
+        .toLowerCase();
     final combined = '$summary $title $desc';
     const noiseKeywords = [
       'deskmate',
@@ -1092,20 +1241,25 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         Map<String, dynamic>? match;
         for (final s in _meetingSteps) {
           if (s is Map) {
-            final sId = s['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), '');
+            final sId = s['step_id']?.toString().replaceAll(
+              RegExp(r'[^0-9]'),
+              '',
+            );
             if (sId == cleanId || s['step_id']?.toString() == stepId) {
               match = Map<String, dynamic>.from(s);
               break;
             }
           }
         }
-        final candidate = match ?? {
-          'step_id': stepId,
-          'summary': 'Step $stepId',
-          'timestamp': '',
-          'screenshot_path': '',
-          'actions': [],
-        };
+        final candidate =
+            match ??
+            {
+              'step_id': stepId,
+              'summary': 'Step $stepId',
+              'timestamp': '',
+              'screenshot_path': '',
+              'actions': [],
+            };
         if (!_isInternalNoiseStep(candidate, stepId)) {
           list.add(candidate);
         }
@@ -1150,7 +1304,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       color: theme.accentFg.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.photo_library_outlined, color: theme.accentFg, size: 20),
+                    child: Icon(
+                      Icons.photo_library_outlined,
+                      color: theme.accentFg,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -1158,7 +1316,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     children: [
                       Text(
                         'Key Visual Moments (${displaySteps.length} Steps Identified)',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -1175,134 +1337,176 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 label: const Text('View Gallery Mode'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.accentFg,
-                  side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  side: BorderSide(
+                    color: theme.accentFg.withValues(alpha: 0.4),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
           for (int i = 0; i < displaySteps.length; i++) ...[
-            Builder(builder: (context) {
-              final step = displaySteps[i];
-              final stepId = step['step_id']?.toString() ?? '${i + 1}';
-              final cleanId = stepId.replaceAll(RegExp(r'[^0-9]'), '');
-              final meta = _stepDescriptions[stepId] ??
-                  _stepDescriptions['step_$stepId'] ??
-                  _stepDescriptions['step_$cleanId'] ??
-                  _stepDescriptions[cleanId];
-              final summary = step['summary']?.toString() ?? 'Step $stepId';
-              final title = meta is Map ? (meta['title'] ?? summary) : summary;
-              final desc = meta is Map ? (meta['description'] ?? '') : '';
-              final timestamp = step['timestamp']?.toString() ?? '';
+            Builder(
+              builder: (context) {
+                final step = displaySteps[i];
+                final stepId = step['step_id']?.toString() ?? '${i + 1}';
+                final cleanId = stepId.replaceAll(RegExp(r'[^0-9]'), '');
+                final meta =
+                    _stepDescriptions[stepId] ??
+                    _stepDescriptions['step_$stepId'] ??
+                    _stepDescriptions['step_$cleanId'] ??
+                    _stepDescriptions[cleanId];
+                final summary = step['summary']?.toString() ?? 'Step $stepId';
+                final title = meta is Map
+                    ? (meta['title'] ?? summary)
+                    : summary;
+                final desc = meta is Map ? (meta['description'] ?? '') : '';
+                final timestamp = step['timestamp']?.toString() ?? '';
 
-              String screenshotPath = step['screenshot_path']?.toString() ?? '';
-              if (screenshotPath.isEmpty) {
-                final actions = (step['actions'] as List?) ?? [];
-                for (final a in actions) {
-                  if (a is Map && (a['asset_path']?.toString().isNotEmpty ?? false)) {
-                    screenshotPath = a['asset_path'].toString();
-                    break;
+                String screenshotPath =
+                    step['screenshot_path']?.toString() ?? '';
+                if (screenshotPath.isEmpty) {
+                  final actions = (step['actions'] as List?) ?? [];
+                  for (final a in actions) {
+                    if (a is Map &&
+                        (a['asset_path']?.toString().isNotEmpty ?? false)) {
+                      screenshotPath = a['asset_path'].toString();
+                      break;
+                    }
                   }
                 }
-              }
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: InkWell(
-                  onTap: () => _showScreenshotModal(context, i, displaySteps),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.bgCanvas,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: theme.borderDefault),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildStepThumbnail(
-                          screenshotPath,
-                          theme,
-                          width: 120,
-                          height: 76,
-                          onTap: () => _showScreenshotModal(context, i, displaySteps),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: theme.accentFg.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      'STEP $stepId',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: theme.accentFg,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: InkWell(
+                    onTap: () => _showScreenshotModal(context, i, displaySteps),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.bgCanvas,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: theme.borderDefault),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildStepThumbnail(
+                            screenshotPath,
+                            theme,
+                            width: 120,
+                            height: 76,
+                            onTap: () =>
+                                _showScreenshotModal(context, i, displaySteps),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: theme.accentFg.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'STEP $stepId',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: theme.accentFg,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  if (timestamp.isNotEmpty) ...[
-                                    const SizedBox(width: 8),
-                                    Row(
-                                      children: [
-                                        Icon(Icons.schedule_rounded, size: 12, color: theme.fgMuted),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          timestamp,
-                                          style: TextStyle(fontSize: 11, color: theme.fgMuted, fontWeight: FontWeight.w500),
+                                    if (timestamp.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule_rounded,
+                                            size: 12,
+                                            color: theme.fgMuted,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            timestamp,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: theme.fgMuted,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    TextButton.icon(
+                                      onPressed: () => _showScreenshotModal(
+                                        context,
+                                        i,
+                                        displaySteps,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.fullscreen_rounded,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Inspect'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: theme.accentFg,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
                                         ),
-                                      ],
+                                        visualDensity: VisualDensity.compact,
+                                      ),
                                     ),
                                   ],
-                                  const Spacer(),
-                                  TextButton.icon(
-                                    onPressed: () => _showScreenshotModal(context, i, displaySteps),
-                                    icon: const Icon(Icons.fullscreen_rounded, size: 16),
-                                    label: const Text('Inspect'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: theme.accentFg,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      visualDensity: VisualDensity.compact,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  title.toString(),
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.fgDefault,
+                                  ),
+                                ),
+                                if (desc.toString().isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    desc.toString(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.4,
+                                      color: theme.fgMuted,
                                     ),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                title.toString(),
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.fgDefault,
-                                ),
-                              ),
-                              if (desc.toString().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  desc.toString(),
-                                  style: TextStyle(fontSize: 12, height: 1.4, color: theme.fgMuted),
-                                ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            }),
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -1317,24 +1521,37 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     VoidCallback? onTap,
   }) {
     Widget imageWidget;
-    if (screenshotPath != null && screenshotPath.isNotEmpty && File(screenshotPath).existsSync()) {
+    if (screenshotPath != null &&
+        screenshotPath.isNotEmpty &&
+        File(screenshotPath).existsSync()) {
       imageWidget = Image.file(
         File(screenshotPath),
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(theme, width, height),
+        errorBuilder: (context, error, stackTrace) =>
+            _buildImagePlaceholder(theme, width, height),
       );
-    } else if (screenshotPath != null && screenshotPath.isNotEmpty && _currentSessionId != null) {
-      final filename = screenshotPath.split(Platform.pathSeparator).last.split('/').last;
+    } else if (screenshotPath != null &&
+        screenshotPath.isNotEmpty &&
+        _currentSessionId != null) {
+      final filename = screenshotPath
+          .split(Platform.pathSeparator)
+          .last
+          .split('/')
+          .last;
       final provider = Provider.of<ChatProvider>(context, listen: false);
-      final assetUrl = provider.apiService.getMeetingAssetUrl(_currentSessionId!, filename);
+      final assetUrl = provider.apiService.getMeetingAssetUrl(
+        _currentSessionId!,
+        filename,
+      );
       imageWidget = Image.network(
         assetUrl,
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(theme, width, height),
+        errorBuilder: (context, error, stackTrace) =>
+            _buildImagePlaceholder(theme, width, height),
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
           return Container(
@@ -1345,7 +1562,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               child: SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: theme.accentFg),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.accentFg,
+                ),
               ),
             ),
           );
@@ -1381,7 +1601,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 color: Colors.black.withValues(alpha: 0.65),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
+              child: const Icon(
+                Icons.zoom_in_rounded,
+                size: 14,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
@@ -1401,7 +1625,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           const SizedBox(height: 2),
           Text(
             'Visual Step',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: theme.fgMuted),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: theme.fgMuted,
+            ),
           ),
         ],
       ),
@@ -1424,7 +1652,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  void _showScreenshotModal(BuildContext context, int initialIndex, List<Map<String, dynamic>> steps) {
+  void _showScreenshotModal(
+    BuildContext context,
+    int initialIndex,
+    List<Map<String, dynamic>> steps,
+  ) {
     if (steps.isEmpty) return;
     final theme = Theme.of(context);
 
@@ -1439,7 +1671,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             final cleanId = stepId.replaceAll(RegExp(r'[^0-9]'), '');
             final timestamp = step['timestamp']?.toString() ?? '';
             final summary = step['summary']?.toString() ?? 'Step $stepId';
-            final meta = _stepDescriptions[stepId] ??
+            final meta =
+                _stepDescriptions[stepId] ??
                 _stepDescriptions['step_$stepId'] ??
                 _stepDescriptions['step_$cleanId'] ??
                 _stepDescriptions[cleanId];
@@ -1450,7 +1683,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             String screenshotPath = step['screenshot_path']?.toString() ?? '';
             if (screenshotPath.isEmpty) {
               for (final a in actions) {
-                if (a is Map && (a['asset_path']?.toString().isNotEmpty ?? false)) {
+                if (a is Map &&
+                    (a['asset_path']?.toString().isNotEmpty ?? false)) {
                   screenshotPath = a['asset_path'].toString();
                   break;
                 }
@@ -1458,20 +1692,33 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             }
 
             Widget fullImage;
-            if (screenshotPath.isNotEmpty && File(screenshotPath).existsSync()) {
+            if (screenshotPath.isNotEmpty &&
+                File(screenshotPath).existsSync()) {
               fullImage = Image.file(
                 File(screenshotPath),
                 fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => _buildModalImageError(theme),
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildModalImageError(theme),
               );
             } else if (screenshotPath.isNotEmpty && _currentSessionId != null) {
-              final filename = screenshotPath.split(Platform.pathSeparator).last.split('/').last;
-              final provider = Provider.of<ChatProvider>(context, listen: false);
-              final assetUrl = provider.apiService.getMeetingAssetUrl(_currentSessionId!, filename);
+              final filename = screenshotPath
+                  .split(Platform.pathSeparator)
+                  .last
+                  .split('/')
+                  .last;
+              final provider = Provider.of<ChatProvider>(
+                context,
+                listen: false,
+              );
+              final assetUrl = provider.apiService.getMeetingAssetUrl(
+                _currentSessionId!,
+                filename,
+              );
               fullImage = Image.network(
                 assetUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => _buildModalImageError(theme),
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildModalImageError(theme),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
                   return Center(
@@ -1485,31 +1732,49 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
             return Dialog(
               backgroundColor: theme.bgCanvas,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 20,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(color: theme.borderDefault),
               ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040, maxHeight: 760),
+                constraints: const BoxConstraints(
+                  maxWidth: 1040,
+                  maxHeight: 760,
+                ),
                 child: Column(
                   children: [
                     // Header Bar
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.bgSubtle,
-                        border: Border(bottom: BorderSide(color: theme.borderDefault)),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                        border: Border(
+                          bottom: BorderSide(color: theme.borderDefault),
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(14),
+                        ),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: theme.accentFg.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+                              border: Border.all(
+                                color: theme.accentFg.withValues(alpha: 0.3),
+                              ),
                             ),
                             child: Text(
                               'STEP $stepId',
@@ -1523,7 +1788,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           if (timestamp.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: theme.bgCanvas,
                                 borderRadius: BorderRadius.circular(6),
@@ -1532,11 +1800,19 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.access_time_rounded, size: 12, color: theme.fgMuted),
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 12,
+                                    color: theme.fgMuted,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     timestamp,
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: theme.fgMuted),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.fgMuted,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1555,7 +1831,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: theme.bgCanvas,
                               borderRadius: BorderRadius.circular(20),
@@ -1563,7 +1842,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             ),
                             child: Text(
                               '${activeIndex + 1} / ${steps.length}',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: theme.fgMuted),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: theme.fgMuted,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1596,10 +1879,15 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                   onPressed: () {
                                     setModalState(() => activeIndex--);
                                   },
-                                  icon: const Icon(Icons.chevron_left_rounded, size: 28),
+                                  icon: const Icon(
+                                    Icons.chevron_left_rounded,
+                                    size: 28,
+                                  ),
                                   tooltip: 'Previous Step',
                                   style: IconButton.styleFrom(
-                                    backgroundColor: Colors.black.withValues(alpha: 0.65),
+                                    backgroundColor: Colors.black.withValues(
+                                      alpha: 0.65,
+                                    ),
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.all(8),
                                   ),
@@ -1612,10 +1900,15 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                   onPressed: () {
                                     setModalState(() => activeIndex++);
                                   },
-                                  icon: const Icon(Icons.chevron_right_rounded, size: 28),
+                                  icon: const Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 28,
+                                  ),
                                   tooltip: 'Next Step',
                                   style: IconButton.styleFrom(
-                                    backgroundColor: Colors.black.withValues(alpha: 0.65),
+                                    backgroundColor: Colors.black.withValues(
+                                      alpha: 0.65,
+                                    ),
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.all(8),
                                   ),
@@ -1628,11 +1921,18 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
                     // Bottom Insight & NVIDIA LocateAnything Detections
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.bgSubtle,
-                        border: Border(top: BorderSide(color: theme.borderDefault)),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
+                        border: Border(
+                          top: BorderSide(color: theme.borderDefault),
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(14),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1641,40 +1941,73 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           if (desc.toString().isNotEmpty) ...[
                             Text(
                               desc.toString(),
-                              style: TextStyle(fontSize: 13, height: 1.45, color: theme.fgDefault),
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.45,
+                                color: theme.fgDefault,
+                              ),
                             ),
                             const SizedBox(height: 8),
                           ],
                           Row(
                             children: [
-                              Icon(Icons.gps_fixed_rounded, size: 14, color: theme.accentFg),
+                              Icon(
+                                Icons.gps_fixed_rounded,
+                                size: 14,
+                                color: theme.accentFg,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 'NVIDIA LocateAnything-3B Visual Grounding Detections:',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: theme.fgMuted),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.fgMuted,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               if (actions.isEmpty)
-                                Text('Visual baseline step frame', style: TextStyle(fontSize: 11, color: theme.fgMuted))
+                                Text(
+                                  'Visual baseline step frame',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.fgMuted,
+                                  ),
+                                )
                               else
                                 Expanded(
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: Row(
                                       children: actions.take(6).map((act) {
-                                        final event = act['event']?.toString() ?? 'action';
-                                        final target = act['target']?.toString() ?? '';
+                                        final event =
+                                            act['event']?.toString() ??
+                                            'action';
+                                        final target =
+                                            act['target']?.toString() ?? '';
                                         return Container(
-                                          margin: const EdgeInsets.only(right: 6),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          margin: const EdgeInsets.only(
+                                            right: 6,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: theme.bgCanvas,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: theme.borderDefault),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                            border: Border.all(
+                                              color: theme.borderDefault,
+                                            ),
                                           ),
                                           child: Text(
                                             '$event: "$target"',
-                                            style: TextStyle(fontSize: 11, color: theme.fgDefault),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: theme.fgDefault,
+                                            ),
                                           ),
                                         );
                                       }).toList(),
@@ -1706,7 +2039,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   String _formatSegmentTime(dynamic sec) {
     if (sec == null) return '00:00';
-    final s = (sec is num) ? sec.toDouble() : (double.tryParse(sec.toString()) ?? 0.0);
+    final s = (sec is num)
+        ? sec.toDouble()
+        : (double.tryParse(sec.toString()) ?? 0.0);
     final m = s ~/ 60;
     final remSec = (s % 60).toInt();
     return '${m.toString().padLeft(2, '0')}:${remSec.toString().padLeft(2, '0')}';
@@ -1719,7 +2054,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Text('$label copied to clipboard!'),
           ],
@@ -1733,7 +2072,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   Widget _buildTranscriptCard(ThemeData theme) {
     final segments = (_transcriptData?['segments'] as List?) ?? [];
-    final fullTranscript = _transcriptData?['full_transcript']?.toString() ?? '';
+    final fullTranscript =
+        _transcriptData?['full_transcript']?.toString() ?? '';
 
     // Collect all speakers
     final Set<String> allSpeakers = {};
@@ -1751,7 +2091,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       if (_selectedSpeakerFilter != null && spk != _selectedSpeakerFilter) {
         return false;
       }
-      if (_transcriptSearchQuery.isNotEmpty && !text.toLowerCase().contains(_transcriptSearchQuery.toLowerCase())) {
+      if (_transcriptSearchQuery.isNotEmpty &&
+          !text.toLowerCase().contains(_transcriptSearchQuery.toLowerCase())) {
         return false;
       }
       return true;
@@ -1779,7 +2120,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       color: theme.accentFg.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.record_voice_over_rounded, color: theme.accentFg, size: 20),
+                    child: Icon(
+                      Icons.record_voice_over_rounded,
+                      color: theme.accentFg,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -1789,19 +2134,30 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         children: [
                           Text(
                             'Voxtral 4B Diarized Transcript',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: theme.fgDefault,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           if (allSpeakers.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: theme.accentFg.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 '${allSpeakers.length} Speakers',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: theme.accentFg),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.accentFg,
+                                ),
                               ),
                             ),
                         ],
@@ -1835,14 +2191,22 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         } else {
                           buffer.write(fullTranscript);
                         }
-                        _copyTranscriptToClipboard(buffer.toString(), label: 'Full Transcript');
+                        _copyTranscriptToClipboard(
+                          buffer.toString(),
+                          label: 'Full Transcript',
+                        );
                       },
                       icon: const Icon(Icons.copy_rounded, size: 15),
                       label: const Text('Copy All'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: theme.accentFg,
-                        side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        side: BorderSide(
+                          color: theme.accentFg.withValues(alpha: 0.4),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                     ),
                     ElevatedButton.icon(
@@ -1852,7 +2216,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.accentFg,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                     ),
                   ],
@@ -1874,7 +2241,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     decoration: InputDecoration(
                       hintText: 'Search transcript dialogue turns...',
                       hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      prefixIcon: Icon(Icons.search_rounded, size: 18, color: theme.fgMuted),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        size: 18,
+                        color: theme.fgMuted,
+                      ),
                       suffixIcon: _transcriptSearchQuery.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear_rounded, size: 16),
@@ -1885,7 +2256,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             )
                           : null,
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: theme.borderDefault),
@@ -1903,13 +2277,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   FilterChip(
                     label: const Text('All Speakers'),
                     selected: _selectedSpeakerFilter == null,
-                    onSelected: (_) => setState(() => _selectedSpeakerFilter = null),
+                    onSelected: (_) =>
+                        setState(() => _selectedSpeakerFilter = null),
                     selectedColor: theme.accentFg.withValues(alpha: 0.2),
                     checkmarkColor: theme.accentFg,
                     labelStyle: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _selectedSpeakerFilter == null ? theme.accentFg : theme.fgDefault,
+                      color: _selectedSpeakerFilter == null
+                          ? theme.accentFg
+                          : theme.fgDefault,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1922,14 +2299,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       label: Text(spk),
                       selected: _selectedSpeakerFilter == spk,
                       onSelected: (_) => setState(() {
-                        _selectedSpeakerFilter = (_selectedSpeakerFilter == spk) ? null : spk;
+                        _selectedSpeakerFilter = (_selectedSpeakerFilter == spk)
+                            ? null
+                            : spk;
                       }),
-                      selectedColor: _getSpeakerColor(spk).withValues(alpha: 0.2),
+                      selectedColor: _getSpeakerColor(
+                        spk,
+                      ).withValues(alpha: 0.2),
                       checkmarkColor: _getSpeakerColor(spk),
                       labelStyle: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: _selectedSpeakerFilter == spk ? _getSpeakerColor(spk) : theme.fgDefault,
+                        color: _selectedSpeakerFilter == spk
+                            ? _getSpeakerColor(spk)
+                            : theme.fgDefault,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1959,7 +2342,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       children: [
                         Text(
                           'No Speech Audio Captured',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.fgDefault,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -1982,7 +2369,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               ),
               child: SelectableText(
                 fullTranscript,
-                style: TextStyle(fontSize: 13.5, height: 1.55, color: theme.fgDefault),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.55,
+                  color: theme.fgDefault,
+                ),
               ),
             )
           else ...[
@@ -2013,34 +2404,53 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: color.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: color.withValues(alpha: 0.4)),
+                                border: Border.all(
+                                  color: color.withValues(alpha: 0.4),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  CircleAvatar(radius: 4, backgroundColor: color),
+                                  CircleAvatar(
+                                    radius: 4,
+                                    backgroundColor: color,
+                                  ),
                                   const SizedBox(width: 6),
                                   Text(
                                     speaker,
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: color,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: theme.bgSubtle,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '$start → $end',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: theme.fgMuted),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.fgMuted,
+                                ),
                               ),
                             ),
                             const Spacer(),
@@ -2049,7 +2459,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               tooltip: 'Copy Turn',
                               color: theme.fgMuted,
                               onPressed: () {
-                                _copyTranscriptToClipboard('[$start -> $end] $speaker: $text', label: '$speaker Dialogue');
+                                _copyTranscriptToClipboard(
+                                  '[$start -> $end] $speaker: $text',
+                                  label: '$speaker Dialogue',
+                                );
                               },
                             ),
                           ],
@@ -2057,7 +2470,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         const SizedBox(height: 8),
                         SelectableText(
                           text,
-                          style: TextStyle(fontSize: 13, height: 1.5, color: theme.fgDefault),
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.5,
+                            color: theme.fgDefault,
+                          ),
                         ),
                       ],
                     ),
@@ -2073,7 +2490,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   void _showTranscriptModal(BuildContext context, ThemeData theme) {
     final segments = (_transcriptData?['segments'] as List?) ?? [];
-    final fullTranscript = _transcriptData?['full_transcript']?.toString() ?? '';
+    final fullTranscript =
+        _transcriptData?['full_transcript']?.toString() ?? '';
 
     final Set<String> allSpeakers = {};
     for (final seg in segments) {
@@ -2096,7 +2514,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               final spk = seg['speaker']?.toString() ?? 'Speaker 1';
               final text = seg['text']?.toString() ?? '';
               if (modalSpeaker != null && spk != modalSpeaker) return false;
-              if (modalSearch.isNotEmpty && !text.toLowerCase().contains(modalSearch.toLowerCase())) {
+              if (modalSearch.isNotEmpty &&
+                  !text.toLowerCase().contains(modalSearch.toLowerCase())) {
                 return false;
               }
               return true;
@@ -2104,25 +2523,42 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
             return Dialog(
               backgroundColor: theme.bgCanvas,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 28,
+                vertical: 24,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(color: theme.borderDefault),
               ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 900, maxHeight: 750),
+                constraints: const BoxConstraints(
+                  maxWidth: 900,
+                  maxHeight: 750,
+                ),
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.bgSubtle,
-                        border: Border(bottom: BorderSide(color: theme.borderDefault)),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                        border: Border(
+                          bottom: BorderSide(color: theme.borderDefault),
+                        ),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(14),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.record_voice_over_rounded, color: theme.accentFg, size: 22),
+                          Icon(
+                            Icons.record_voice_over_rounded,
+                            color: theme.accentFg,
+                            size: 22,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -2130,12 +2566,19 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               children: [
                                 Text(
                                   'Voxtral 4B Diarized Transcript Reader',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.fgDefault),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.fgDefault,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${segments.length} spoken dialogue turns • ${allSpeakers.length} unique speakers identified',
-                                  style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.fgMuted,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2152,13 +2595,19 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                   buffer.writeln('[$start -> $end] $spk: $txt');
                                 }
                               }
-                              _copyTranscriptToClipboard(buffer.toString(), label: 'Complete Transcript');
+                              _copyTranscriptToClipboard(
+                                buffer.toString(),
+                                label: 'Complete Transcript',
+                              );
                             },
                             icon: const Icon(Icons.copy_rounded, size: 14),
                             label: const Text('Copy All'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: theme.accentFg,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -2179,16 +2628,30 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           children: [
                             TextField(
                               controller: searchCtrl,
-                              onChanged: (val) => setModalState(() => modalSearch = val),
+                              onChanged: (val) =>
+                                  setModalState(() => modalSearch = val),
                               decoration: InputDecoration(
-                                hintText: 'Search spoken keywords or phrases...',
-                                hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
-                                prefixIcon: Icon(Icons.search_rounded, size: 18, color: theme.fgMuted),
+                                hintText:
+                                    'Search spoken keywords or phrases...',
+                                hintStyle: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.fgMuted,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search_rounded,
+                                  size: 18,
+                                  color: theme.fgMuted,
+                                ),
                                 isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: theme.borderDefault),
+                                  borderSide: BorderSide(
+                                    color: theme.borderDefault,
+                                  ),
                                 ),
                               ),
                             ),
@@ -2200,20 +2663,31 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                   FilterChip(
                                     label: const Text('All Speakers'),
                                     selected: modalSpeaker == null,
-                                    onSelected: (_) => setModalState(() => modalSpeaker = null),
-                                    selectedColor: theme.accentFg.withValues(alpha: 0.2),
+                                    onSelected: (_) => setModalState(
+                                      () => modalSpeaker = null,
+                                    ),
+                                    selectedColor: theme.accentFg.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     checkmarkColor: theme.accentFg,
                                   ),
                                   const SizedBox(width: 8),
                                   for (final spk in allSpeakers) ...[
                                     FilterChip(
-                                      avatar: CircleAvatar(radius: 5, backgroundColor: _getSpeakerColor(spk)),
+                                      avatar: CircleAvatar(
+                                        radius: 5,
+                                        backgroundColor: _getSpeakerColor(spk),
+                                      ),
                                       label: Text(spk),
                                       selected: modalSpeaker == spk,
                                       onSelected: (_) => setModalState(() {
-                                        modalSpeaker = (modalSpeaker == spk) ? null : spk;
+                                        modalSpeaker = (modalSpeaker == spk)
+                                            ? null
+                                            : spk;
                                       }),
-                                      selectedColor: _getSpeakerColor(spk).withValues(alpha: 0.2),
+                                      selectedColor: _getSpeakerColor(
+                                        spk,
+                                      ).withValues(alpha: 0.2),
                                       checkmarkColor: _getSpeakerColor(spk),
                                     ),
                                     const SizedBox(width: 8),
@@ -2230,16 +2704,26 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         padding: const EdgeInsets.all(16),
                         child: segments.isEmpty
                             ? SelectableText(
-                                fullTranscript.isNotEmpty ? fullTranscript : 'No audio transcript available.',
-                                style: TextStyle(fontSize: 13.5, height: 1.6, color: theme.fgDefault),
+                                fullTranscript.isNotEmpty
+                                    ? fullTranscript
+                                    : 'No audio transcript available.',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.6,
+                                  color: theme.fgDefault,
+                                ),
                               )
                             : ListView.separated(
                                 itemCount: filtered.length,
-                                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(height: 10),
                                 itemBuilder: (context, idx) {
                                   final seg = filtered[idx] as Map;
-                                  final spk = seg['speaker']?.toString() ?? 'Speaker 1';
-                                  final start = _formatSegmentTime(seg['start']);
+                                  final spk =
+                                      seg['speaker']?.toString() ?? 'Speaker 1';
+                                  final start = _formatSegmentTime(
+                                    seg['start'],
+                                  );
                                   final end = _formatSegmentTime(seg['end']);
                                   final txt = seg['text']?.toString() ?? '';
                                   final col = _getSpeakerColor(spk);
@@ -2249,37 +2733,64 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                     decoration: BoxDecoration(
                                       color: theme.bgSubtle,
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: theme.borderDefault),
+                                      border: Border.all(
+                                        color: theme.borderDefault,
+                                      ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: col.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: col.withValues(alpha: 0.4)),
+                                                color: col.withValues(
+                                                  alpha: 0.15,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: col.withValues(
+                                                    alpha: 0.4,
+                                                  ),
+                                                ),
                                               ),
                                               child: Text(
                                                 spk,
-                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: col),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: col,
+                                                ),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
                                               '$start → $end',
-                                              style: TextStyle(fontSize: 10, color: theme.fgMuted),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: theme.fgMuted,
+                                              ),
                                             ),
                                             const Spacer(),
                                             IconButton(
-                                              icon: const Icon(Icons.copy_rounded, size: 14),
+                                              icon: const Icon(
+                                                Icons.copy_rounded,
+                                                size: 14,
+                                              ),
                                               tooltip: 'Copy Turn',
                                               color: theme.fgMuted,
                                               onPressed: () {
-                                                _copyTranscriptToClipboard('[$start -> $end] $spk: $txt', label: '$spk Dialogue');
+                                                _copyTranscriptToClipboard(
+                                                  '[$start -> $end] $spk: $txt',
+                                                  label: '$spk Dialogue',
+                                                );
                                               },
                                             ),
                                           ],
@@ -2287,7 +2798,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                         const SizedBox(height: 8),
                                         SelectableText(
                                           txt,
-                                          style: TextStyle(fontSize: 13.5, height: 1.5, color: theme.fgDefault),
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            height: 1.5,
+                                            color: theme.fgDefault,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -2361,7 +2876,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               child: Text(
                 'Click the button above or "Start Meeting Scribe" in the top bar to begin real-time screen capture and Voxtral 4B audio recording. Key interactions will be automatically detected with NVIDIA LocateAnything-3B.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, height: 1.5, color: theme.fgMuted),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: theme.fgMuted,
+                ),
               ),
             ),
           ],
@@ -2401,7 +2920,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: green.withValues(alpha: (1.0 - wave1) * 0.45),
+                            color: green.withValues(
+                              alpha: (1.0 - wave1) * 0.45,
+                            ),
                             width: 1.8,
                           ),
                         ),
@@ -2478,7 +2999,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               decoration: BoxDecoration(
                 color: green.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: green.withValues(alpha: 0.4), width: 1),
+                border: Border.all(
+                  color: green.withValues(alpha: 0.4),
+                  width: 1,
+                ),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2486,7 +3010,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   SizedBox(
                     width: 12,
                     height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: green),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: green,
+                    ),
                   ),
                   SizedBox(width: 8),
                   Text(
@@ -2637,7 +3164,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             child: GestureDetector(
               onTap: _stopRecording,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: red,
                   borderRadius: BorderRadius.circular(24),
@@ -2692,7 +3222,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   color: theme.accentFg.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.psychology_rounded, size: 20, color: theme.accentFg),
+                child: Icon(
+                  Icons.psychology_rounded,
+                  size: 20,
+                  color: theme.accentFg,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2723,9 +3257,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 label: Text(_showTopicInput ? 'Close' : 'Add Custom Topic'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.accentFg,
-                  side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  side: BorderSide(
+                    color: theme.accentFg.withValues(alpha: 0.4),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],
@@ -2741,16 +3282,25 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 final idx = entry.key;
                 final topic = entry.value;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.accentFg.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: theme.accentFg.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.label_important_rounded, size: 14, color: theme.accentFg),
+                      Icon(
+                        Icons.label_important_rounded,
+                        size: 14,
+                        color: theme.accentFg,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         topic['name'] ?? '',
@@ -2765,7 +3315,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         onTap: () {
                           setState(() => _customFocusTopics.removeAt(idx));
                         },
-                        child: Icon(Icons.close_rounded, size: 14, color: theme.fgMuted),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: theme.fgMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -2832,34 +3386,54 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 children: [
                   Text(
                     'Topic or Column Name',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgDefault,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _topicNameController,
                     decoration: InputDecoration(
-                      hintText: 'e.g. Database Migrations, Client Feedback, Budget',
+                      hintText:
+                          'e.g. Database Migrations, Client Feedback, Budget',
                       hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Instructions for AI Extraction',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.fgDefault),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.fgDefault,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _topicInstructionController,
                     maxLines: 2,
                     decoration: InputDecoration(
-                      hintText: 'e.g. Extract any table changes, SQL statements, or ORM migrations shown or spoken.',
+                      hintText:
+                          'e.g. Extract any table changes, SQL statements, or ORM migrations shown or spoken.',
                       hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2867,8 +3441,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: () => setState(() => _showTopicInput = false),
-                        child: Text('Cancel', style: TextStyle(color: theme.fgMuted)),
+                        onPressed: () =>
+                            setState(() => _showTopicInput = false),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: theme.fgMuted),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -2879,7 +3457,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             setState(() {
                               _customFocusTopics.add({
                                 'name': name,
-                                'instruction': inst.isNotEmpty ? inst : 'Provide detailed analysis on $name.',
+                                'instruction': inst.isNotEmpty
+                                    ? inst
+                                    : 'Provide detailed analysis on $name.',
                               });
                               _topicNameController.clear();
                               _topicInstructionController.clear();
@@ -2890,7 +3470,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.accentFg,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                         child: const Text('Add Focus Topic'),
                       ),
@@ -2905,7 +3487,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildPresetChip(ThemeData theme, String label, String name, String instruction) {
+  Widget _buildPresetChip(
+    ThemeData theme,
+    String label,
+    String name,
+    String instruction,
+  ) {
     final alreadyAdded = _customFocusTopics.any((t) => t['name'] == name);
     return ActionChip(
       label: Text(
@@ -2915,15 +3502,22 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           color: alreadyAdded ? theme.fgMuted : theme.accentFg,
         ),
       ),
-      backgroundColor: alreadyAdded ? theme.bgCanvas : theme.accentFg.withValues(alpha: 0.08),
+      backgroundColor: alreadyAdded
+          ? theme.bgCanvas
+          : theme.accentFg.withValues(alpha: 0.08),
       side: BorderSide(
-        color: alreadyAdded ? theme.borderDefault : theme.accentFg.withValues(alpha: 0.3),
+        color: alreadyAdded
+            ? theme.borderDefault
+            : theme.accentFg.withValues(alpha: 0.3),
       ),
       onPressed: alreadyAdded
           ? null
           : () {
               setState(() {
-                _customFocusTopics.add({'name': name, 'instruction': instruction});
+                _customFocusTopics.add({
+                  'name': name,
+                  'instruction': instruction,
+                });
               });
             },
     );
@@ -2949,7 +3543,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   color: theme.accentFg.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.analytics_rounded, size: 20, color: theme.accentFg),
+                child: Icon(
+                  Icons.analytics_rounded,
+                  size: 20,
+                  color: theme.accentFg,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
@@ -2989,7 +3587,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.accentFg.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -3005,21 +3606,31 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                       ),
                       if (relevantSteps.isNotEmpty) ...[
                         const Spacer(),
-                        ...relevantSteps.map((step) => Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: Chip(
-                                label: Text(step.toString(), style: const TextStyle(fontSize: 10)),
-                                padding: EdgeInsets.zero,
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ...relevantSteps.map(
+                          (step) => Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Chip(
+                              label: Text(
+                                step.toString(),
+                                style: const TextStyle(fontSize: 10),
                               ),
-                            )),
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 10),
                   SelectableText(
                     content,
-                    style: TextStyle(fontSize: 13, height: 1.5, color: theme.fgDefault),
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: theme.fgDefault,
+                    ),
                   ),
                 ],
               ),
