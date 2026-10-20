@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -54,7 +54,7 @@ class ChatResponse(BaseModel):
 
 
 # In-memory session history for REST backward compatibility
-_CONVERSATIONS: Dict[str, List[ChatMessage]] = {}
+_CONVERSATIONS: dict[str, list[ChatMessage]] = {}
 _MAX_CONVERSATIONS = 50
 
 
@@ -85,13 +85,23 @@ def health():
         "local_llm": llm_info.get("status", "offline"),
         "models": llm_info.get("models", []),
         "default_model": llm_info.get("default_model"),
+        "has_vision": llm_info.get("has_vision", False),
+        "vision_models": llm_info.get("vision_models", []),
+        "vision_model": llm_info.get("default_vision_model"),
     }
 
 
 @router.get("/api/models")
 def get_models():
-    """List all detected chat-capable local models from Ollama."""
-    return {"models": get_installed_chat_models()}
+    """List all detected chat-capable local models and vision models from Ollama."""
+    from core.models import get_installed_vision_models
+    vision_models = get_installed_vision_models()
+    return {
+        "models": get_installed_chat_models(),
+        "vision_models": vision_models,
+        "has_vision": bool(vision_models),
+        "vision_model": vision_models[0] if vision_models else None,
+    }
 
 
 @router.get("/api/file/health")

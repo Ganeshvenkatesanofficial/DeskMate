@@ -5,7 +5,7 @@ Fuses screen interaction logs, key screenshot OCR data, and Voxtral 4B
 diarized audio transcripts into an executive report.
 
 Supported Engines:
-  - Google Gemini 2.5 Flash (Default Multimodal Vision Cloud)
+  - Google Gemini 1.5 Flash (Default Multimodal Vision Cloud)
   - Local Ollama (100% Offline Fallback)
 """
 
@@ -47,9 +47,17 @@ class MeetingSummarizer:
         "recording dashboard",
         "telemetry",
         "deskmate live",
+        "deskmate ai",
+        "modal_window",
+        "modal",
+        "runner",
+        "flutter",
+        "electron",
+        "deskmate_app",
         "save to drive",
         "download pdf",
         "email pdf",
+        "email meeting summary",
         "sync to deskmate",
         "app switcher",
         "mission control",
@@ -159,7 +167,7 @@ class MeetingSummarizer:
                 except Exception as e:
                     logger.debug(f"Failed to attach screenshot for {s_id}: {e}")
 
-        # 5. Query Gemini 2.5 Flash (or fallback to local Ollama)
+        # 5. Query Gemini 1.5 Flash (or fallback to local Ollama)
         raw_response = self._query_llm(parts, prompt)
 
         # 6. Parse structured blocks
@@ -273,8 +281,27 @@ Relevant code commands, configuration flags, client requests, or operational par
 {custom_delimiters}
 """
 
+    def _resolve_available_ollama_model(self) -> str:
+        """Resolve an active Ollama model. If configured model is missing, fallback to any available installed model."""
+        try:
+            r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+            if r.status_code == 200:
+                available = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
+                # Exact or partial match
+                for m in available:
+                    if self.ollama_model and (self.ollama_model in m or m in self.ollama_model):
+                        return m
+                # Fallback to any installed text generation model (ignore embedding models)
+                llm_candidates = [m for m in available if "embed" not in m.lower()]
+                if llm_candidates:
+                    logger.info(f"Ollama preferred model '{self.ollama_model}' not installed; dynamically using '{llm_candidates[0]}'")
+                    return llm_candidates[0]
+        except Exception as e:
+            logger.debug(f"Failed to query Ollama tags: {e}")
+        return self.ollama_model
+
     def _query_llm(self, parts: list[dict[str, Any]], plain_prompt: str) -> str:
-        """Query Gemini 2.5 Flash via REST or fallback to local Ollama."""
+        """Query Gemini 1.5 Flash via REST or fallback to local Ollama."""
         # 1. Gemini REST
         if self.gemini_api_key:
             try:
@@ -297,10 +324,11 @@ Relevant code commands, configuration flags, client requests, or operational par
 
         # 2. Local Ollama fallback
         try:
+            active_model = self._resolve_available_ollama_model()
             res = requests.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
-                    "model": self.ollama_model,
+                    "model": active_model,
                     "prompt": plain_prompt,
                     "stream": False,
                     "options": {"num_ctx": 16384},

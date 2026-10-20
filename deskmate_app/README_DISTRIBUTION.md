@@ -82,3 +82,39 @@ Release/
 * **Backend Active**: Green dot indicates local API service is online (`http://127.0.0.1:8080`).
 * **Local LLM Active**: Green dot indicates local Ollama / LM Studio server is detected on port `11434` / `1234`.
 * **Personal Services Health**: Shows individual green checkmarks for each Google Workspace service once authorized.
+
+---
+
+## ✉️ Meeting Scribe Email Dispatch & Screenshot Filtering
+
+* **Dynamic Synthesis**: Executive summaries, key decisions, and action items are synthesized in real-time from active screens and Voxtral 4B diarized transcripts (zero mock or placeholder text).
+* **Sender Attribution & Designation**: Emails are sent directly from your connected Gmail with your verified Name, Designation / Role, and contact email in the header banner and signature card.
+* **DeskMate App Screenshot Redaction**: Internal DeskMate host application windows and UI dialogs are automatically filtered out, ensuring visual audit cards and PDF attachments only feature external presentations, code, slides, and shared windows.
+* **Properly-Named PDF Attachment**: Attached PDF reports are formatted professionally (e.g., `DeskMate_Executive_Meeting_Report_YYYY-MM-DD.pdf`).
+* **Creator & Open-Source Branding**: Emails feature DeskMate AI branding, Ganesh Venkatesan creator attribution, and LinkedIn profile verification (`https://www.linkedin.com/in/ganesh-venkatesan-3a4516256/`).
+
+---
+
+## 👁️ Visual Intelligence & Model Requirements
+
+### 1. Where Does NVIDIA LocateAnything-3B Work?
+* **Live Recording Grounding**: Operates **during the live meeting session**. Whenever a click or UI event occurs, `LocateAnythingDetector` (Parallel Box Decoding) localizes the exact button, dialog, slide region, or code element clicked into spatial bounding boxes and records them in the event narrative.
+
+### 2. Visual Intelligence: 3 Flexible Options
+DeskMate provides 3 flexible ways to process meetings, making it extremely feasible for both high-end workstations and small laptops:
+* **Option A: 💻 Lightweight Laptop Mode (Small Laptops / 8GB–16GB RAM)**:
+  * **Zero heavy downloads**: Users on compact ultrabooks or low-spec laptops do not need to pull multi-gigabyte vision weights.
+  * DeskMate combines high-precision screen OCR + NVIDIA bounding box coordinates with your **active local reasoning model** (e.g. `qwen2.5-coder:1.5b` or `gpt-oss:20b`) and Voxtral speech diarization.
+  * **1-Click Activation**: Click the Vision status indicator in the Meeting sidebar or modal to toggle Lightweight Laptop Mode instantly.
+* **Option B: 🦙 Full Multimodal Vision (`llama3.2-vision`)**:
+  * For 16GB+ RAM laptops. Pull via `ollama run llama3.2-vision` to inspect raw screenshots pixel-by-pixel.
+* **Option C: ☁️ Google Gemini Cloud Vision**:
+  * When a **Google Gemini API Key** is configured in Settings, cloud multimodal reasoning is used natively. **Zero local RAM needed**, and no local vision model download is required.
+
+### 3. Agentic Post-Recording Telemetry Flow
+When you click **"End Meeting"**, DeskMate replaces the opaque loading spinner with an animated **Live Agentic Mission Control Stepper**:
+1. **Audio Prep**: Buffer flush and conversion to 16kHz mono PCM WAV.
+2. **Voxtral 4B Diarization**: In-memory speaker clustering and timestamped conversational turns.
+3. **Multimodal Synthesis**: Cross-referencing visual OCR and dialogue via your active model.
+4. **PDF Compilation**: Generating vector PDF reports with redacted host UI and syncing action items.
+* Features a live elapsed stopwatch timer (`00:08s`) and streaming console feed.

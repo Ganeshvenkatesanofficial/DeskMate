@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../core/constants.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
@@ -12,6 +13,7 @@ import '../widgets/sidebar.dart';
 import '../widgets/credentials_setup_dialog.dart';
 import '../widgets/database_explorer_dialog.dart';
 import '../widgets/meeting_scribe_view.dart';
+import '../widgets/circular_close_button.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -47,22 +49,95 @@ class _ChatScreenState extends State<ChatScreen> {
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
-  String? _topNotificationMessage;
-  Timer? _topNotificationTimer;
+  OverlayEntry? _topToastOverlayEntry;
+  Timer? _topToastTimer;
 
   void _showTopNotification(String message) {
-    _topNotificationTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _topNotificationMessage = message;
-      });
-    }
-    _topNotificationTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && _topNotificationMessage != null) {
-        setState(() {
-          _topNotificationMessage = null;
-        });
-      }
+    if (!mounted) return;
+    _topToastTimer?.cancel();
+    _topToastOverlayEntry?.remove();
+    _topToastOverlayEntry = null;
+
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    final theme = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
+
+    _topToastOverlayEntry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        top: isDesktop ? 38 : 16,
+        left: 0,
+        right: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 12),
+              constraints: const BoxConstraints(maxWidth: 580),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: theme.isDark
+                    ? const Color(0xFF0F2D1A)
+                    : const Color(0xFFEAFBF0),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.isDark
+                      ? const Color(0xFF1E6038)
+                      : const Color(0xFF8CE4AC),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: theme.isDark ? 0.35 : 0.08,
+                    ),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    size: 16,
+                    color: theme.successFg,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.successText,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  CircularCloseButton(
+                    size: 16,
+                    tooltip: 'Dismiss',
+                    onTap: () {
+                      _topToastTimer?.cancel();
+                      _topToastOverlayEntry?.remove();
+                      _topToastOverlayEntry = null;
+                    },
+                  ),
+                ],
+              ),
+            ).animate().fadeIn(duration: 180.ms).slideY(begin: -0.2, end: 0.0),
+          ),
+        ),
+      ),
+    );
+
+    overlayState.insert(_topToastOverlayEntry!);
+
+    _topToastTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      _topToastOverlayEntry?.remove();
+      _topToastOverlayEntry = null;
     });
   }
 
@@ -108,7 +183,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    _topNotificationTimer?.cancel();
+    _topToastTimer?.cancel();
+    _topToastOverlayEntry?.remove();
+    _topToastOverlayEntry = null;
     _messageController.dispose();
     _messageFocusNode.dispose();
     _scrollController.dispose();
@@ -263,6 +340,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       _isSetupGuideOpen = true;
                     });
                   },
+                  onShowTopNotification: _showTopNotification,
                 ),
               ),
         body: Stack(
@@ -283,6 +361,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           _isSetupGuideOpen = true;
                         });
                       },
+                      onShowTopNotification: _showTopNotification,
                     ),
                   ),
                 Expanded(
@@ -341,11 +420,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               _buildInputArea(provider, theme),
                             ],
                           ),
-                        if (_topNotificationMessage != null)
-                          _buildTopNotificationBanner(
-                            theme,
-                            isDesktop: isDesktop,
-                          ),
                       ],
                     ),
                   ),
@@ -384,11 +458,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: GestureDetector(
                   onTap: () => setState(() => _isSetupGuideOpen = false),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    filter: ImageFilter.blur(sigmaX: 4.5, sigmaY: 4.5),
                     child: Container(
                       color: theme.isDark
-                          ? const Color(0x99010409)
-                          : const Color(0x661F2328),
+                          ? const Color(0x66010409)
+                          : const Color(0x401F2328),
                     ),
                   ),
                 ).animate().fadeIn(duration: 150.ms),
@@ -418,11 +492,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: GestureDetector(
                   onTap: () => setState(() => _isDatabaseExplorerOpen = false),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                    filter: ImageFilter.blur(sigmaX: 4.5, sigmaY: 4.5),
                     child: Container(
                       color: theme.isDark
-                          ? const Color(0x99010409)
-                          : const Color(0x661F2328),
+                          ? const Color(0x66010409)
+                          : const Color(0x401F2328),
                     ),
                   ),
                 ).animate().fadeIn(duration: 150.ms),
@@ -449,11 +523,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: GestureDetector(
                   onTap: () => provider.dismissModelSelectionDialog(),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    filter: ImageFilter.blur(sigmaX: 4.5, sigmaY: 4.5),
                     child: Container(
                       color: theme.isDark
-                          ? const Color(0x99010409)
-                          : const Color(0x661F2328),
+                          ? const Color(0x66010409)
+                          : const Color(0x401F2328),
                     ),
                   ),
                 ).animate().fadeIn(duration: 150.ms),
@@ -475,102 +549,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildTopNotificationBanner(ThemeData theme, {bool isDesktop = true}) {
-    if (_topNotificationMessage == null) return const SizedBox.shrink();
-
-    return Positioned(
-      top: isDesktop ? 38 : 16,
-      left: 0,
-      right: 0,
-      child: Center(
-        child:
-            Container(
-                  margin: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 12),
-                  constraints: const BoxConstraints(maxWidth: 580),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.isDark
-                        ? const Color(0xFF0F2D1A)
-                        : const Color(0xFFEAFBF0),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.isDark
-                          ? const Color(0xFF1E6038)
-                          : const Color(0xFF8CE4AC),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: theme.isDark ? 0.35 : 0.08,
-                        ),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 16,
-                        color: theme.isDark
-                            ? const Color(0xFF3FB950)
-                            : const Color(0xFF1A7F37),
-                      ),
-                      const SizedBox(width: 9),
-                      Flexible(
-                        child: Text(
-                          _topNotificationMessage!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: theme.successText,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _topNotificationMessage = null;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: theme.successText.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: theme.successText,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-                .animate()
-                .slideY(
-                  begin: -0.6,
-                  end: 0,
-                  duration: 220.ms,
-                  curve: Curves.easeOutCubic,
-                )
-                .fadeIn(duration: 180.ms),
-      ),
-    );
-  }
-
   Widget _buildSettingsPanel(ChatProvider provider, ThemeData theme) {
     return Container(
       decoration: BoxDecoration(
@@ -585,7 +563,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             // ─── Compact, Modern Header ──────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+              padding: const EdgeInsets.fromLTRB(18, 20, 18, 14),
               decoration: BoxDecoration(
                 color: theme.isDark ? theme.bgCanvas : Colors.white,
                 border: Border(
@@ -660,7 +638,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 14,
+                  vertical: 16,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,10 +649,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       icon: Icons.memory_rounded,
                       title: 'AI ENGINE & LOCAL MODEL',
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 9),
                     _buildAiEngineCard(provider, theme),
 
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 18),
 
                     // ─── SECTION 2: GOOGLE WORKSPACE OAUTH ─────────────────
                     _buildSettingsSectionHeader(
@@ -682,10 +660,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       icon: Icons.vpn_key_rounded,
                       title: 'GOOGLE WORKSPACE OAUTH 2.0',
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 9),
                     _buildOAuthCard(provider, theme),
 
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 18),
 
                     // ─── SECTION 3: BACKEND SERVER ─────────────────────────
                     _buildSettingsSectionHeader(
@@ -693,10 +671,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       icon: Icons.dns_rounded,
                       title: 'BACKEND SERVER',
                     ),
-                    const SizedBox(height: 7),
-                    _buildBackendAndSaveCard(provider, theme),
+                    const SizedBox(height: 9),
+                    _buildBackendCard(provider, theme),
 
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 18),
 
                     // ─── SECTION 4: APPEARANCE ─────────────────────────────
                     _buildSettingsSectionHeader(
@@ -704,41 +682,121 @@ class _ChatScreenState extends State<ChatScreen> {
                       icon: Icons.palette_outlined,
                       title: 'APPEARANCE',
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 9),
                     _buildThemeSelectorInSettings(provider, theme),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
             ),
 
-            // ─── PINNED FOOTER: SYSTEM & BUILD INFO (AT THE BOTTOM) ───────
+            // ─── PINNED FOOTER: UNIFIED SAVE BUTTON & BUILD INFO ───────
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: theme.isDark ? theme.bgCanvas : Colors.white,
                 border: Border(
                   top: BorderSide(color: theme.borderDefault, width: 0.8),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: theme.isDark ? 0.25 : 0.05,
+                    ),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    'DeskMate AI • v1.0.0',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: theme.fgMuted.withValues(alpha: 0.8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 38,
+                    child: MouseRegion(
+                      cursor: _isSavingAllSettings
+                          ? SystemMouseCursors.basic
+                          : SystemMouseCursors.click,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSavingAllSettings
+                            ? null
+                            : () => _handleSaveAllSettings(provider, theme),
+                        style: ButtonStyle(
+                          elevation: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.hovered)) {
+                              return 2.0;
+                            }
+                            return 0.0;
+                          }),
+                          backgroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.disabled)) {
+                              return theme.bgEmphasis;
+                            }
+                            if (states.contains(WidgetState.hovered)) {
+                              return theme.accentHover;
+                            }
+                            if (states.contains(WidgetState.pressed)) {
+                              return AppTheme.purpleActive;
+                            }
+                            return theme.accentEmphasis;
+                          }),
+                          foregroundColor: WidgetStateProperty.all(
+                            Colors.white,
+                          ),
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                        icon: _isSavingAllSettings
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_rounded, size: 16),
+                        label: Text(
+                          _isSavingAllSettings
+                              ? 'Validating & Saving...'
+                              : 'Save Configuration',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Open Source AI Copilot & Personal Agent',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      color: theme.fgMuted.withValues(alpha: 0.6),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Text(
+                      '${AppConstants.appName} • v${AppConstants.version}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: theme.fgMuted.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Center(
+                    child: Text(
+                      'Open Source AI Copilot & Personal Agent',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        color: theme.fgMuted.withValues(alpha: 0.6),
+                      ),
                     ),
                   ),
                 ],
@@ -818,38 +876,50 @@ class _ChatScreenState extends State<ChatScreen> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: theme.borderDefault, width: 0.8),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  provider.isUsingGemini
-                      ? Icons.cloud_done_rounded
-                      : Icons.memory_rounded,
-                  size: 14,
-                  color: provider.isUsingGemini
-                      ? theme.accentFg
-                      : (provider.isLocalLlmOnline
-                            ? theme.statusOk
-                            : theme.dangerFg),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    provider.isUsingGemini
-                        ? 'Active: Gemini 2.5 Flash Cloud'
-                        : (provider.selectedLocalModel.isNotEmpty
-                              ? 'Active: ${provider.selectedLocalModel} (Offline)'
-                              : (provider.isLocalLlmOnline
-                                    ? 'Active: Local Ollama Model'
-                                    : 'Local Ollama: Offline')),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: theme.fgDefault,
+            child: Builder(
+              builder: (context) {
+                final isUsingLocal =
+                    provider.isLocalLlmOnline &&
+                    provider.selectedLocalModel.isNotEmpty;
+                final isGemini = provider.isUsingGemini;
+                final activeIcon = isUsingLocal
+                    ? Icons.memory_rounded
+                    : (isGemini
+                          ? Icons.cloud_done_rounded
+                          : Icons.memory_rounded);
+                final activeColor = isUsingLocal
+                    ? theme.statusOk
+                    : (isGemini
+                          ? theme.accentFg
+                          : (provider.isLocalLlmOnline
+                                ? theme.statusOk
+                                : theme.dangerFg));
+                final activeLabel = isUsingLocal
+                    ? 'Active: ${provider.selectedLocalModel} (Offline)'
+                    : (isGemini
+                          ? 'Active: Gemini 1.5 Flash Cloud'
+                          : (provider.isLocalLlmOnline
+                                ? 'Active: Local Ollama Model'
+                                : 'Local Ollama: Offline'));
+
+                return Row(
+                  children: [
+                    Icon(activeIcon, size: 14, color: activeColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        activeLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: theme.fgDefault,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 11),
@@ -1303,7 +1373,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildBackendAndSaveCard(ChatProvider provider, ThemeData theme) {
+  Widget _buildBackendCard(ChatProvider provider, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
@@ -1361,74 +1431,6 @@ class _ChatScreenState extends State<ChatScreen> {
             hintText: 'http://127.0.0.1:8000',
             prefixIcon: Icons.link,
             isMonospace: true,
-          ),
-          const SizedBox(height: 12),
-
-          // Unified Save Button
-          SizedBox(
-            width: double.infinity,
-            height: 38,
-            child: MouseRegion(
-              cursor: _isSavingAllSettings
-                  ? SystemMouseCursors.basic
-                  : SystemMouseCursors.click,
-              child: ElevatedButton.icon(
-                onPressed: _isSavingAllSettings
-                    ? null
-                    : () => _handleSaveAllSettings(provider, theme),
-                style: ButtonStyle(
-                  elevation: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.hovered)) {
-                      return 2.0;
-                    }
-                    return 0.0;
-                  }),
-                  mouseCursor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.disabled)) {
-                      return SystemMouseCursors.basic;
-                    }
-                    return SystemMouseCursors.click;
-                  }),
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.disabled)) {
-                      return theme.bgEmphasis;
-                    }
-                    if (states.contains(WidgetState.hovered)) {
-                      return theme.accentHover;
-                    }
-                    if (states.contains(WidgetState.pressed)) {
-                      return AppTheme.purpleActive;
-                    }
-                    return theme.accentEmphasis;
-                  }),
-                  foregroundColor: WidgetStateProperty.all(Colors.white),
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-                icon: _isSavingAllSettings
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_rounded, size: 16),
-                label: Text(
-                  _isSavingAllSettings
-                      ? 'Validating & Saving...'
-                      : 'Save Configuration',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -1622,6 +1624,40 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  String _getDynamicModelCapability(String modelName) {
+    final lower = modelName.toLowerCase();
+    if (lower.contains('vision') ||
+        lower.contains('llava') ||
+        lower.contains('vl')) {
+      return 'Multimodal Vision & Visual Intelligence';
+    }
+    if (lower.contains('coder') ||
+        lower.contains('code') ||
+        lower.contains('starcoder')) {
+      return 'Optimized for Fast Coding & Development';
+    }
+    if (lower.contains('r1') ||
+        lower.contains('reason') ||
+        lower.contains('deepseek')) {
+      return 'Advanced Step-by-Step Reasoning & Logic';
+    }
+    final paramRegex = RegExp(r':?(\d+(?:\.\d+)?b)\b');
+    final match = paramRegex.firstMatch(lower);
+    if (match != null) {
+      final param = match.group(1)!.toUpperCase();
+      return 'General Intelligence & Reasoning ($param)';
+    }
+    if (lower.contains('llama') ||
+        lower.contains('gpt') ||
+        lower.contains('mistral') ||
+        lower.contains('qwen') ||
+        lower.contains('phi') ||
+        lower.contains('gemma')) {
+      return 'General Purpose Chat & Knowledge Reasoning';
+    }
+    return 'Local Air-Gapped LLM Inference';
+  }
+
   Widget _buildModelSelectionPopup(
     BuildContext context,
     ChatProvider provider,
@@ -1693,16 +1729,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ],
                         ),
-                      ),
-                      IconButton(
-                        mouseCursor: SystemMouseCursors.click,
-                        icon: Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: theme.fgMuted,
-                        ),
-                        tooltip: 'Close',
-                        onPressed: () => provider.dismissModelSelectionDialog(),
                       ),
                     ],
                   ),
@@ -1805,21 +1831,53 @@ class _ChatScreenState extends State<ChatScreen> {
                                     groupValue: tempSelected,
                                     dense: true,
                                     activeColor: theme.accentFg,
-                                    title: Text(
-                                      modelName,
-                                      style: TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: 12,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.normal,
-                                        color: theme.fgDefault,
-                                      ),
+                                    title: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            modelName,
+                                            style: TextStyle(
+                                              fontFamily: 'monospace',
+                                              fontSize: 12,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.w700
+                                                  : FontWeight.normal,
+                                              color: theme.fgDefault,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: theme.accentFg.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: theme.accentFg
+                                                    .withValues(alpha: 0.35),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'SELECTED',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.5,
+                                                color: theme.accentFg,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     subtitle: Text(
-                                      isSelected
-                                          ? 'Active Model'
-                                          : 'Click to select',
+                                      _getDynamicModelCapability(modelName),
                                       style: TextStyle(
                                         fontSize: 10.5,
                                         color: isSelected
@@ -1994,7 +2052,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                         ),
-                        child: const Text('Use Defaults / Offline'),
+                        child: Text(
+                          provider.hasConfiguredAi ? 'Cancel' : 'Skip for Now',
+                        ),
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
@@ -2536,21 +2596,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     ),
-                    Tooltip(
-                      message: 'Cancel editing (Esc)',
-                      child: InkWell(
-                        onTap: _cancelEditing,
-                        borderRadius: BorderRadius.circular(4),
-                        mouseCursor: SystemMouseCursors.click,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2.0),
-                          child: Icon(
-                            Icons.close_rounded,
-                            size: 14,
-                            color: theme.fgMuted,
-                          ),
-                        ),
-                      ),
+                    CircularCloseButton(
+                      size: 15,
+                      tooltip: 'Cancel editing (Esc)',
+                      onTap: _cancelEditing,
                     ),
                   ],
                 ),

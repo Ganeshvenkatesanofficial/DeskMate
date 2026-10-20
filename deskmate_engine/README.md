@@ -13,7 +13,7 @@ deskmate_engine/
 ├── core/                        # Shared infrastructure layer
 │   ├── config.py                # Cross-platform user data paths, logging & parent watchdog
 │   ├── database.py              # SQLite tasks, memories, notes, and session models
-│   ├── models.py                # Multi-LLM client (Gemini 2.5 Flash & Ollama — Zero Groq)
+│   ├── models.py                # Multi-LLM client (Gemini 1.5 Flash & Ollama — Zero Groq)
 │   └── telemetry.py             # SmolAgents live step streaming & prompt builders
 │
 ├── services/                    # Specialized agent subsystems
@@ -30,7 +30,7 @@ deskmate_engine/
 │       ├── screen_capture.py    # Non-blocking MSS screen frame grabber (2.0 FPS)
 │       ├── live_pipeline.py     # 8-stage real-time computer vision detection pipeline
 │       ├── locate_anything.py   # NVIDIA LocateAnything-3B visual UI grounding (PBD)
-│       ├── summarizer.py        # Multimodal Gemini 2.5 Flash & Ollama reasoning engine
+│       ├── summarizer.py        # Multimodal Gemini 1.5 Flash & Ollama reasoning engine
 │       ├── pdf_generator.py     # Production DeskMate-branded executive FPDF2 layout engine
 │       ├── export_service.py    # Google Drive folder upload & Gmail PDF dispatch
 │       ├── config.py            # Computer vision detection thresholds & margins
@@ -94,7 +94,7 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
 | Feature / Dimension | 📁 File Explorer Copilot | 👤 Personal Workspace Assistant | 🎙️ Meeting Scribe & Intelligence |
 | :--- | :--- | :--- | :--- |
 | **Primary Domain** | Local filesystem, codebases & repositories | Personal life, emails, calendar, tasks, notes | Real-time meetings, screen events, voice & PDF reports |
-| **LLM Inference** | **Local LLM via Ollama** (`127.0.0.1:11434`) | Cloud LLM (Gemini BYOK) / Built-in | Multimodal Gemini 2.5 Flash / Local Ollama Vision |
+| **LLM Inference** | **Local LLM via Ollama** (`127.0.0.1:11434`) | Cloud LLM (Gemini BYOK) / Built-in | Multimodal Gemini 1.5 Flash / Local Ollama Vision |
 | **Visual Engine** | None | None | **NVIDIA LocateAnything-3B** (Parallel Box Decoding) |
 | **Audio Engine** | None | None | **Voxtral 4B** (Native Speaker Diarization — Zero Whisper) |
 | **Privacy & Air-Gap** | **100% Offline / Air-Gapped** (Zero cloud data) | Authorized Google APIs & DuckDuckGo | Local frame differencing & optional Gemini cloud OCR |
@@ -132,12 +132,23 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
   - `AudioExtractor` with -23 LUFS loudness normalization and 16 kHz mono WAV conversion.
   - `ChunkedTranscriber` for multi-chunk partitioning and stitching of long meetings (> 15 minutes).
   - Voice Activity Detection (`VoiceActivityDetector`) to skip dead silence.
-- **Multimodal Gemini 2.5 Flash / Ollama Summarizer**:
+- **Multimodal Reasoner: 3 Flexible Options**:
+  - *Lightweight Laptop Mode (Small Laptops / 8GB–16GB RAM)*: Zero heavy 8GB+ downloads. Uses the active local reasoning model (`qwen2.5-coder:1.5b`, `gpt-oss:20b`) combined with screen OCR + Voxtral diarization to synthesize meeting minutes and action items.
+  - *Full Local Offline Mode*: Requires `llama3.2-vision` active in Ollama (`ollama run llama3.2-vision`) for pixel-by-pixel multimodal image reasoning.
+  - *Cloud Mode (Gemini API Key)*: If a Google Gemini API Key is configured in Settings, cloud multimodal reasoning is used natively—`llama3.2-vision` is **NOT required**.
   - Merges visual action chronology, Base64 screenshot OCR details, and diarized Voxtral transcripts.
   - Structured output with strict delimiters (`===SUMMARY===`, `===IMPORTANT_STEPS===`, `===STEP_DESCRIPTIONS===`).
   - Action item extraction with `**[ACTION ITEM]**` and `**[HIGH PRIORITY]**` tags.
+- **Agentic Post-Recording Telemetry Flow**:
+  - Broadcasts live phase milestones over WebSocket (`/ws/meeting`):
+    1. `audio_prep` (20%): PCM buffer flush and 16kHz mono WAV conversion.
+    2. `transcription` (45%): Voxtral 4B acoustic conversational turn diarization.
+    3. `vision_synthesis` (70%): Multimodal timeline & OCR fusion via active engine.
+    4. `pdf_compilation` (90%): Executive report rendering with DeskMate host UI redaction.
+    5. `completed` (100%): Full structured briefing ready.
 - **Executive PDF Report Generator**:
-  - Full-fidelity FPDF2 layout engine with Primer dark canvas (`#161B22`), signature purple (`#6A35F5`), metric cards, and key visual moment screenshot pills.
+  - Full-fidelity ReportLab vector layout engine with Primer dark canvas (`#161B22`), signature purple (`#6A35F5`), metric cards, and key visual moment screenshot pills.
+  - Automatically redacts internal DeskMate UI modals, windows, and transient task switchers.
   - 100% DeskMate branded (zero Thunai residue).
 - **Google Workspace Cloud Export & Auto-Retention**:
   - Direct 1-click upload to a `"DeskMate Meetings"` folder in Google Drive.
@@ -152,7 +163,7 @@ All agents utilize DeskMate's **Dynamic Query Rewriter** (`core.telemetry.resolv
 - **Adaptive Fallback Engine**:
   1. Priority 1: Fast local Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`, `phi3:mini`) in <80ms with $0 cost.
   2. Priority 2: Configured / default local Ollama model.
-  3. Priority 3: Gemini Flash (`gemini-2.5-flash`) if an API key is provided.
+  3. Priority 3: Gemini Flash (`gemini-1.5-flash`) if an API key is provided.
   4. Priority 4: Safe, zero-crash fallback to raw user input if completely offline.
 
 ---
@@ -701,7 +712,7 @@ curl -X POST "http://127.0.0.1:8080/api/meeting/audio/20261019_213000" \
 * **What**: Executes the complete reasoning pipeline:
   1. Resamples and normalizes audio via `AudioExtractor` (-23 LUFS).
   2. Transcribes with speaker diarization via `VoxtralSpeechEngine` & `ChunkedTranscriber`.
-  3. Fuses timeline and Base64 screenshot OCR with Gemini 2.5 Flash / Ollama.
+  3. Fuses timeline and Base64 screenshot OCR with Gemini 1.5 Flash / Ollama.
   4. Generates DeskMate-branded executive PDF (`deskmate_report_{session_id}.pdf`).
   5. Purges heavy raw JPG frames and prunes sessions older than 15.
 

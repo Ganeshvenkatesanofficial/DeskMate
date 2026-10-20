@@ -188,6 +188,17 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         return 'Search GitHub Issues';
       case 'create_github_issue':
         return 'Create GitHub Issue';
+      case 'audio_normalization':
+        return 'Audio Normalization (16kHz PCM WAV)';
+      case 'voxtral_diarization':
+      case 'speech_diarization':
+        return 'Voxtral 4B Diarization & Voiceprints';
+      case 'vision_synthesis':
+      case 'multimodal_synthesis':
+        return 'Multimodal Vision & Screen OCR Fusion';
+      case 'report_compilation':
+      case 'pdf_compilation':
+        return 'Executive Report & PDF Compilation';
       default:
         return tool
             .split('_')

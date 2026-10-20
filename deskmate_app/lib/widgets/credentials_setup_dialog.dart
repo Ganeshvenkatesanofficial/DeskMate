@@ -1279,7 +1279,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       ),
                     ),
                     Text(
-                      isGemini ? 'Gemini 2.5 Flash' : modelName,
+                      isGemini ? 'Gemini 1.5 Flash' : modelName,
                       style: TextStyle(
                         fontFamily: isGemini ? null : 'monospace',
                         fontSize: 12,
@@ -4761,12 +4761,39 @@ RAG_CHUNK_OVERLAP=200
           ),
           _buildMeetingEngineRow(
             theme,
+            icon: Icons.graphic_eq_rounded,
+            color: const Color(0xFF8957E5),
+            label: 'Mistral Voxtral 4B',
+            badge: 'Speech Extraction',
+            desc:
+                'Native speaker diarization — no Whisper dependency. Runs in-memory on MPS/CUDA.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
             icon: Icons.grid_on_rounded,
             color: const Color(0xFF1F883D),
             label: 'NVIDIA LocateAnything-3B',
-            badge: 'Vision Grounding',
+            badge: 'Live GUI Grounding',
             desc:
-                'Dense bounding-box coordinate tracking of UI interactions, buttons, and windows.',
+                'Runs during live recording: Sub-second UI element localization and bounding-box coordinates for clicks, slides, and dialogs via Parallel Box Decoding (PBD).',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.visibility_rounded,
+            color: const Color(0xFFD97706),
+            label: 'Llama 3.2 Vision (Ollama)',
+            badge: 'Local Vision (Compulsory if No API Key)',
+            desc:
+                'Runs post-recording for 100% offline vision synthesis. Required before recording unless a Gemini API key is configured.',
+          ),
+          _buildMeetingEngineRow(
+            theme,
+            icon: Icons.auto_awesome_rounded,
+            color: theme.accentFg,
+            label: 'Gemini 1.5 Flash (Cloud Alternative)',
+            badge: 'Zero Local Vision Needed',
+            desc:
+                'If you add a Google Gemini API Key in Settings, cloud multimodal vision is used natively—llama3.2-vision is NOT required.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -4785,15 +4812,6 @@ RAG_CHUNK_OVERLAP=200
             badge: 'Room Noise Block',
             desc:
                 'When mic is muted, buffer frames are zeroed at hardware level. Room chatter cannot enter the recording.',
-          ),
-          _buildMeetingEngineRow(
-            theme,
-            icon: Icons.auto_awesome_rounded,
-            color: theme.accentFg,
-            label: 'Gemini 2.5 Flash / Ollama',
-            badge: 'NeuroSummarizer',
-            desc:
-                'Generates executive takeaways, action items, speaker attribution, and structured briefing.',
           ),
 
           const SizedBox(height: 16),
@@ -4830,9 +4848,9 @@ RAG_CHUNK_OVERLAP=200
           _buildStepCard(
             theme: theme,
             stepNumber: '2',
-            title: 'Start Meeting Scribe',
+            title: 'Verify Vision & Start Meeting Scribe',
             description:
-                'Click the Start Meeting Scribe button. A 2.0-second settling window ensures DeskMate application clicks are never recorded as meeting steps.',
+                'Ensure either "llama3.2-vision" is active in Ollama or a Google Gemini API Key is saved in Settings. Click "Start Meeting Scribe" to begin.',
           ),
           _buildStepCard(
             theme: theme,
@@ -4844,9 +4862,9 @@ RAG_CHUNK_OVERLAP=200
           _buildStepCard(
             theme: theme,
             stepNumber: '4',
-            title: 'End Meeting & Review Report',
+            title: 'End Meeting & Agentic Telemetry Processing',
             description:
-                'Click End Meeting. The engine automatically diarizes audio, correlates visual moments with speaker statements, generates action items, and compiles an executive PDF report ready for export.',
+                'Click End Meeting. Watch the live 4-phase agentic stepper as DeskMate normalizes audio, runs Voxtral 4B diarization, performs multimodal OCR synthesis, and compiles an executive PDF report ready for export.',
           ),
         ],
       ),
@@ -5138,30 +5156,37 @@ RAG_CHUNK_OVERLAP=200
           _buildMeetingInfoCard(
             theme,
             icon: Icons.table_rows_outlined,
-            title: 'Meeting Header',
+            title: 'Dynamic Executive Briefing',
             desc:
-                'Date, time, session duration, and attendee list (derived from Voxtral 4B speaker diarization).',
+                'Real-time meeting synopsis, key decisions, and prioritized action items synthesized dynamically from screen interactions and Voxtral 4B diarized audio.',
           ),
           _buildMeetingInfoCard(
             theme,
-            icon: Icons.format_list_bulleted_rounded,
-            title: 'Executive Takeaways',
+            icon: Icons.badge_outlined,
+            title: 'Sender Attribution & Designation',
             desc:
-                'Concise 3-5 bullet point briefing authored by the NeuroSummarizer. Structured for quick stakeholder review.',
+                'Dispatched directly from your connected Gmail address, prominently displaying your verified Name, official Designation / Role, and contact email.',
           ),
           _buildMeetingInfoCard(
             theme,
-            icon: Icons.task_alt_rounded,
-            title: 'Action Items & Ownership',
+            icon: Icons.hide_image_outlined,
+            title: 'Application Screenshot Redaction',
             desc:
-                'High-priority task checklist with assignees extracted from speaker statements and conversation context.',
+                'DeskMate automatically detects and filters out its own host application windows and UI dialogs, ensuring only external meeting slides, tools, and code are captured.',
           ),
           _buildMeetingInfoCard(
             theme,
-            icon: Icons.link_rounded,
-            title: 'PDF Download / Drive Link',
+            icon: Icons.workspace_premium_outlined,
+            title: 'Open Source & LinkedIn Branding',
             desc:
-                'A direct link to the full cloud PDF report on Google Drive is embedded in the email for complete archival access.',
+                'Responsive HTML layout featuring DeskMate AI signature branding, Ganesh Venkatesan creator attribution, and direct LinkedIn profile badge verification.',
+          ),
+          _buildMeetingInfoCard(
+            theme,
+            icon: Icons.picture_as_pdf_rounded,
+            title: 'Properly-Named PDF Attachment',
+            desc:
+                'Multi-page executive report attached with professional formatting (e.g. DeskMate_Executive_Meeting_Report_YYYY-MM-DD.pdf).',
           ),
 
           const SizedBox(height: 4),
@@ -5578,11 +5603,11 @@ RAG_CHUNK_OVERLAP=200
             endpoint: '/api/meeting/send-email',
             title: 'Email Summary & PDF Dispatch',
             description:
-                'Sends an email via Gmail API with the executive meeting briefing in the HTML body and the full DeskMate PDF attached.',
+                'Dispatches dynamic executive debrief via Gmail API with author name, designation, sender email, and properly-named attached PDF report.',
             curlCommand:
-                'curl -X POST "http://127.0.0.1:2026/api/meeting/send-email" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"session_id": "20261020_113000", "recipient": "team@example.com"}\'',
+                'curl -X POST "http://127.0.0.1:2026/api/meeting/send-email" \\\n  -H "Content-Type: application/json" \\\n  -d \'{\n    "session_id": "20261020_113000",\n    "to_email": "team@example.com",\n    "user_name": "Ganesh Venkatesan",\n    "designation": "Lead Architect",\n    "sender_email": "user@gmail.com"\n  }\'',
             responseJson:
-                '{\n  "status": "sent",\n  "recipient": "team@example.com",\n  "session_id": "20261020_113000"\n}',
+                '{\n  "status": "success",\n  "message_id": "18f2d5e9b7a4c102",\n  "recipient": "team@example.com",\n  "sender": "\\"Ganesh Venkatesan (Lead Architect)\\" <user@gmail.com>",\n  "pdf_name": "DeskMate_Executive_Meeting_Report_2026-10-20.pdf"\n}',
           ),
 
           const SizedBox(height: 14),

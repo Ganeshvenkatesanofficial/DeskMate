@@ -258,9 +258,14 @@ class ApiService {
   Future<Map<String, dynamic>> startMeeting({
     int monitor = 1,
     double fps = 2.0,
+    bool allowLightweightMode = false,
   }) async {
     final url = Uri.parse('$baseUrl/api/meeting/start');
-    return _postJson(url, {'monitor': monitor, 'fps': fps});
+    return _postJson(url, {
+      'monitor': monitor,
+      'fps': fps,
+      'allow_lightweight_mode': allowLightweightMode,
+    });
   }
 
   Future<Map<String, dynamic>> stopMeeting() async {
@@ -332,13 +337,27 @@ class ApiService {
     required String toEmail,
     String? subject,
     String? ccEmail,
+    String? userName,
+    String? designation,
+    String? senderEmail,
+    String? pdfName,
   }) async {
     final url = Uri.parse('$baseUrl/api/meeting/send-email');
     return _postJson(url, {
       'session_id': sessionId,
       'to_email': toEmail,
-      'subject': subject,
-      'cc_email': ccEmail,
+      if (subject != null && subject.trim().isNotEmpty)
+        'subject': subject.trim(),
+      if (ccEmail != null && ccEmail.trim().isNotEmpty)
+        'cc_email': ccEmail.trim(),
+      if (userName != null && userName.trim().isNotEmpty)
+        'user_name': userName.trim(),
+      if (designation != null && designation.trim().isNotEmpty)
+        'designation': designation.trim(),
+      if (senderEmail != null && senderEmail.trim().isNotEmpty)
+        'sender_email': senderEmail.trim(),
+      if (pdfName != null && pdfName.trim().isNotEmpty)
+        'pdf_name': pdfName.trim(),
     });
   }
 

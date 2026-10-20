@@ -17,7 +17,9 @@ DeskMate provides an interactive, low-latency interface to communicate with the 
 * **Telemetry Accordion**: Live step-by-step reasoning visualization displaying AI thoughts, tool execution pills, timings, and expandable observation drawers.
 * **Dual-Agent Mode Switching**: Instant transition between **File Copilot** (semantic workspace & document assistant) and **Personal Agent** (offline Google Workspace, task, note, and memory manager).
 * **Built-in SQLite Explorer**: In-app database inspector with live search, record viewer, and read-only SQL query console for inspecting local memories, tasks, and notes.
-* **Dynamic Local Model Routing**: Instant discovery of installed Ollama models with seamless live selection.
+* **Dynamic Local Model Routing**: Instant discovery of installed Ollama models with automatic capability tagging (Multimodal Vision, Fast Coding, Step-by-Step Reasoning, Parameter scale).
+* **Zero-Model Graceful Fallback**: Comprehensive UI guidance, copyable setup commands (`ollama run llama3.2`), live re-check status actions, and Google Gemini cloud bypass.
+* **Meeting Scribe Visual Modes**: Seamless toggle between Lightweight Laptop Mode (0GB download), Local Ollama Vision (`llama3.2-vision`), and Gemini 1.5 Flash Cloud Vision.
 
 ---
 
@@ -41,6 +43,7 @@ lib/
     ├── chat_bubble.dart             # Message bubble with copy, edit, and retry actions
     ├── credentials_setup_dialog.dart# Google Workspace & Gemini BYOK setup modal
     ├── database_explorer_dialog.dart# SQLite table browser & query console
+    ├── meeting_scribe_view.dart     # Meeting intelligence live recorder, visual timeline & PDF brief
     ├── model_selector_popup.dart    # Centered Ollama & cloud model picker
     ├── sidebar.dart                 # Collapsible navigation, health status & mode selector
     └── telemetry_accordion.dart     # Collapsible live thought process & tool call inspector

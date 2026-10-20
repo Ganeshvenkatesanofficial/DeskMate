@@ -133,19 +133,13 @@ class MeetingPDFGenerator:
         try:
             logger.info(f"Generating DeskMate PDF report for session {session_id}...")
 
-            # Programmatically filter out internal UI states and window switching
+            # Programmatically filter out DeskMate internal application UI states and window switching
+            step_map = {str(s.get("step_id", "")): s for s in steps if isinstance(s, dict)}
             filtered_ids = []
-            internal_noise_patterns = [
-                "deskmate", "meeting scribe", "recording dashboard",
-                "start meeting", "end meeting", "stop meeting",
-                "app switcher", "mission control", "dock", "window switch",
-                "deskmate live", "taskbar"
-            ]
             for sid in important_step_ids:
-                desc = self._find_step_description(sid, step_descriptions).lower()
-                title = self._find_step_title(sid, step_descriptions, "").lower()
-                combined = f"{desc} {title} {str(sid).lower()}"
-                if any(kw in combined for kw in internal_noise_patterns):
+                clean_id = re.sub(r'[^0-9]', '', str(sid))
+                step_obj = step_map.get(str(sid)) or step_map.get(clean_id) or step_map.get(f"step_{clean_id}") or {}
+                if self._is_internal_deskmate_step(step_obj, step_descriptions):
                     continue
                 filtered_ids.append(sid)
             important_step_ids = filtered_ids
@@ -589,6 +583,40 @@ class MeetingPDFGenerator:
         pdf.set_left_margin(old_l)
         pdf.set_right_margin(old_r)
 
+    @staticmethod
+    def _is_internal_deskmate_step(step: dict, step_descriptions: dict = None) -> bool:
+        """Determines if a step is an internal DeskMate host app UI screenshot that must not be shown."""
+        if not step or not isinstance(step, dict):
+            return False
+        step_descriptions = step_descriptions or {}
+        step_id_val = str(step.get("step_id", ""))
+        summary = str(step.get("summary") or "").lower()
+        actions = step.get("actions", [])
+        action_parts = []
+        for a in actions:
+            if isinstance(a, dict):
+                action_parts.append(str(a.get("target") or ""))
+                action_parts.append(str(a.get("description") or ""))
+                action_parts.append(str(a.get("event") or ""))
+                action_parts.append(str(a.get("app_name") or ""))
+                action_parts.append(str(a.get("window_title") or ""))
+        action_text = " ".join(action_parts).lower()
+        meta = step_descriptions.get(step_id_val) or step_descriptions.get(f"step_{step_id_val}") or {}
+        desc = (meta.get("description") or "").lower() if isinstance(meta, dict) else ""
+        title = (meta.get("title") or "").lower() if isinstance(meta, dict) else ""
+        combined = f"{summary} {action_text} {desc} {title}".lower()
+
+        deskmate_noise_keywords = [
+            "deskmate", "meeting scribe", "recording dashboard",
+            "start meeting", "end meeting", "stop meeting",
+            "save to drive", "download pdf", "email pdf", "email meeting summary",
+            "sync to deskmate", "modal_window", "modal", "runner",
+            "flutter", "electron", "deskmate_app", "app switcher", "mission control",
+            "dock", "taskbar", "window switch", "switching window",
+            "switch to", "deskmate live", "locateanything",
+        ]
+        return any(kw in combined for kw in deskmate_noise_keywords)
+
     def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None):
         if step_descriptions is None:
             step_descriptions = {}
@@ -612,6 +640,10 @@ class MeetingPDFGenerator:
                 or str(step_id_val).lower().strip() in [s.lower().strip() for s in important_step_ids]
             )
             if not is_important:
+                continue
+
+            # Exclude internal DeskMate application screenshots
+            if self._is_internal_deskmate_step(step, step_descriptions):
                 continue
 
             actions = step.get("actions", [])

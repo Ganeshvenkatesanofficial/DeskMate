@@ -61,8 +61,8 @@ PORT: int = int(os.getenv("PORT", "2026"))
 HOST: str = os.getenv("HOST", "127.0.0.1")
 
 # ─── LLM & AI Model Settings ────────────────────────────────────────────────
-DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-2.5-flash")
-GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash")
+DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-1.5-flash")
+GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-1.5-flash")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
 VOXTRAL_MODEL: str = os.getenv("VOXTRAL_MODEL", "voxtral-mini-latest")

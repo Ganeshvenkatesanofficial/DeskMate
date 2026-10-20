@@ -62,14 +62,38 @@ def get_default_model() -> str:
     return models[0] if models else ""
 
 
+def get_installed_vision_models() -> list[str]:
+    """Retrieve list of vision-capable models (e.g. llama3.2-vision, llava) installed in Ollama."""
+    try:
+        res = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
+        if res.status_code == 200:
+            models = res.json().get("models", [])
+            vision_models: list[str] = []
+            for m in models:
+                name = m.get("name", "")
+                if not name:
+                    continue
+                name_lower = name.lower()
+                if any(x in name_lower for x in ["vision", "llava", "bakllava", "llama3.2-vision"]):
+                    vision_models.append(name)
+            return vision_models
+    except Exception as e:
+        logger.debug(f"Failed to query Ollama vision models: {e}")
+    return []
+
+
 def check_local_llm_status() -> dict[str, Any]:
     """Return status dictionary of local Ollama runtime and detected models."""
     try:
         models = get_installed_chat_models()
+        vision_models = get_installed_vision_models()
         return {
             "status": "online" if models else "no_models",
             "models": models,
             "default_model": models[0] if models else None,
+            "vision_models": vision_models,
+            "has_vision": bool(vision_models),
+            "default_vision_model": vision_models[0] if vision_models else None,
         }
     except Exception as exc:
         return {
@@ -77,6 +101,9 @@ def check_local_llm_status() -> dict[str, Any]:
             "error": str(exc),
             "models": [],
             "default_model": None,
+            "vision_models": [],
+            "has_vision": False,
+            "default_vision_model": None,
         }
 
 

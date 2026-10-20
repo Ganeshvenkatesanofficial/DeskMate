@@ -1,5 +1,28 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+/// Display a dialog with the signature DeskMate frosted-glass blurred backdrop (matches Reasoning modal)
+Future<T?> showBlurredDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  Color? barrierColor,
+}) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final effectiveBarrierColor =
+      barrierColor ??
+      (isDark ? const Color(0x66010409) : const Color(0x401F2328));
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierColor: effectiveBarrierColor,
+    builder: (ctx) => BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 4.5, sigmaY: 4.5),
+      child: builder(ctx),
+    ),
+  );
+}
 
 /// GitHub Primer Design System Tokens & DeskMate Purple Theme
 class AppTheme {

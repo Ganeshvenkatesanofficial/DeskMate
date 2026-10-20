@@ -10,10 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -54,17 +53,18 @@ _SESSION_STATE: dict[str, Any] = {
 class StartMeetingRequest(BaseModel):
     monitor: int = 1
     fps: float = DEFAULT_SCREEN_FPS
+    allow_lightweight_mode: bool = False
 
 
 class SummarizeMeetingRequest(BaseModel):
     session_id: Optional[str] = None
-    custom_fields: Optional[List[Dict[str, str]]] = None
+    custom_fields: Optional[list[dict[str, str]]] = None
     purge_raw_assets_after: bool = False
 
 
 class SyncTasksRequest(BaseModel):
     session_id: str
-    action_items: List[str]
+    action_items: list[str]
 
 
 class ExportDriveRequest(BaseModel):
@@ -77,6 +77,10 @@ class SendEmailRequest(BaseModel):
     to_email: str
     subject: Optional[str] = None
     cc_email: Optional[str] = None
+    user_name: Optional[str] = None
+    designation: Optional[str] = None
+    sender_email: Optional[str] = None
+    pdf_name: Optional[str] = None
 
 
 class CleanupSessionsRequest(BaseModel):
@@ -96,6 +100,26 @@ async def start_meeting(req: StartMeetingRequest):
                 "status": "already_running",
                 "session_id": _SESSION_STATE["active_session_id"],
             }
+
+        # Compulsory Vision Model Verification (or Lightweight Laptop Mode)
+        from core.models import get_installed_vision_models, get_installed_chat_models
+        vision_models = get_installed_vision_models()
+        has_gemini = bool(_SESSION_STATE["summarizer"].gemini_api_key)
+        installed_chat_models = get_installed_chat_models()
+
+        if not vision_models and not has_gemini:
+            if req.allow_lightweight_mode:
+                if not installed_chat_models:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No local LLM found in Ollama for Lightweight Mode. Please pull a chat model (e.g. `ollama run qwen2.5-coder:1.5b`) or configure a Gemini API key.",
+                    )
+                logger.info(f"Starting meeting under Lightweight Laptop Mode using reasoning model: {installed_chat_models[0]}")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Vision Model Required: 'llama3.2-vision' is not active in Ollama. Run `ollama run llama3.2-vision` to enable visual intelligence, or switch to Lightweight Laptop Mode to synthesize meetings using your active chat model.",
+                )
 
         loop = asyncio.get_running_loop()
         def on_meeting_event(event):
@@ -133,7 +157,7 @@ async def start_meeting(req: StartMeetingRequest):
         }
     except Exception as e:
         logger.exception(f"Failed to start meeting session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Meeting start failed")
 
 
 @router.get("/status")
@@ -234,10 +258,13 @@ async def upload_session_audio(session_id: str, file: UploadFile = File(...)):
 
 @router.post("/summarize")
 async def summarize_meeting(req: SummarizeMeetingRequest):
-    """Run multimodal Gemini 2.5 Flash / Ollama summarization and generate DeskMate PDF."""
+    """Run multimodal Gemini 1.5 Flash / Ollama summarization and generate DeskMate PDF."""
     session_id = req.session_id or _SESSION_STATE.get("active_session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="No session_id provided or active.")
+
+    if "/" in session_id or "\\" in session_id or ".." in session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
 
     output_dir = Path(_SESSION_STATE["output_dir"])
     report_file = output_dir / f"session_{session_id}.json"
@@ -253,6 +280,18 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 
         steps = report_data.get("steps", [])
 
+        # Stage 1: Audio Prep & Normalization Telemetry
+        await meeting_ws_manager.broadcast({
+            "type": "post_processing_telemetry",
+            "session_id": session_id,
+            "stage": "audio_prep",
+            "stage_index": 1,
+            "total_stages": 4,
+            "progress": 0.20,
+            "title": "Audio Normalization",
+            "detail": "Flushing PCM buffer and converting stream to 16kHz mono WAV...",
+        })
+
         # Check for recorded audio (wav, webm, mp3, m4a)
         audio_path = None
         for cand in ["audio.wav", "audio.webm", "audio.mp3", "audio.m4a"]:
@@ -265,12 +304,37 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         if audio_path and Path(audio_path).exists():
             extractor = AudioExtractor()
             normalized_path = extractor.extract_and_normalize(audio_path)
+
+            # Stage 2: Voxtral 4B Diarization Telemetry
+            await meeting_ws_manager.broadcast({
+                "type": "post_processing_telemetry",
+                "session_id": session_id,
+                "stage": "transcription",
+                "stage_index": 2,
+                "total_stages": 4,
+                "progress": 0.45,
+                "title": "Voxtral 4B Diarization",
+                "detail": "Transcribing speech and diarizing speaker conversational turns...",
+            })
+
             voxtral = _SESSION_STATE["voxtral"]
             chunker = ChunkedTranscriber(voxtral)
             transcript_data = await chunker.transcribe_long_file(normalized_path)
 
-        # Execute multimodal reasoning in thread pool
+        # Stage 3: Multimodal Reasoning & Visual Synthesis Telemetry
         summarizer: MeetingSummarizer = _SESSION_STATE["summarizer"]
+        active_engine = "Gemini 1.5 Flash" if summarizer.gemini_api_key else f"Ollama ({summarizer._resolve_available_ollama_model()})"
+        await meeting_ws_manager.broadcast({
+            "type": "post_processing_telemetry",
+            "session_id": session_id,
+            "stage": "vision_synthesis",
+            "stage_index": 3,
+            "total_stages": 4,
+            "progress": 0.70,
+            "title": "Multimodal Synthesis",
+            "detail": f"Fusing screen OCR and visual timeline via {active_engine}...",
+        })
+
         loop = asyncio.get_running_loop()
         summary_md, important_steps, step_desc, custom_fields_res = await loop.run_in_executor(
             None,
@@ -280,7 +344,18 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             req.custom_fields,
         )
 
-        # Generate DeskMate branded PDF
+        # Stage 4: PDF Report Compilation Telemetry
+        await meeting_ws_manager.broadcast({
+            "type": "post_processing_telemetry",
+            "session_id": session_id,
+            "stage": "pdf_compilation",
+            "stage_index": 4,
+            "total_stages": 4,
+            "progress": 0.90,
+            "title": "PDF Compilation",
+            "detail": "Rendering high-resolution vector PDF report with redacted host UI...",
+        })
+
         pdf_path = str(session_dir / f"deskmate_report_{session_id}.pdf")
         pdf_gen: MeetingPDFGenerator = _SESSION_STATE["pdf_generator"]
         pdf_ok = await loop.run_in_executor(
@@ -295,6 +370,18 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             req.custom_fields,
             custom_fields_res,
         )
+
+        # Stage 5: Completed Telemetry
+        await meeting_ws_manager.broadcast({
+            "type": "post_processing_telemetry",
+            "session_id": session_id,
+            "stage": "completed",
+            "stage_index": 4,
+            "total_stages": 4,
+            "progress": 1.0,
+            "title": "Executive Briefing Ready",
+            "detail": "Report generated with decisions, action items, and audit trail.",
+        })
 
         # Update session report with summary
         report_data["summary"] = summary_md
@@ -328,7 +415,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         }
     except Exception as e:
         logger.exception(f"Summarization error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Summarization failed")
 
 
 @router.get("/asset/{session_id}/{filename}")
@@ -384,11 +471,17 @@ async def send_meeting_email(req: SendEmailRequest):
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
-        exporter.send_email_with_pdf,
-        req.session_id,
-        req.to_email,
-        req.subject,
-        req.cc_email,
+        lambda: exporter.send_email_with_pdf(
+            session_id=req.session_id,
+            to_email=req.to_email,
+            subject=req.subject,
+            cc_email=req.cc_email,
+            summary_text=None,
+            user_name=req.user_name,
+            pdf_name=req.pdf_name,
+            designation=req.designation,
+            sender_email=req.sender_email,
+        ),
     )
     if result.get("status") == "error":
         raise HTTPException(status_code=500, detail=result.get("message", "Email failed"))
@@ -424,7 +517,7 @@ async def sync_action_items_to_tasks(req: SyncTasksRequest):
         return {"status": "synced", "tasks_created": saved_count}
     except Exception as e:
         logger.exception(f"Failed to sync action items to tasks: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Task sync failed")
 
 
 @router.get("/sessions")

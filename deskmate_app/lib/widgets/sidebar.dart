@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants.dart';
 import '../providers/chat_provider.dart';
+import '../utils/clipboard_utils.dart';
 import '../theme/app_theme.dart';
 import 'database_explorer_dialog.dart';
 
@@ -9,11 +10,13 @@ class Sidebar extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final void Function([AgentMode? mode])? onOpenSetupGuide;
   final VoidCallback? onOpenDatabaseExplorer;
+  final void Function(String message)? onShowTopNotification;
   const Sidebar({
     super.key,
     this.onOpenSettings,
     this.onOpenSetupGuide,
     this.onOpenDatabaseExplorer,
+    this.onShowTopNotification,
   });
 
   @override
@@ -384,28 +387,37 @@ class _SidebarState extends State<Sidebar> {
           ),
           const SizedBox(height: 2),
 
-          // Processor / Chip Icon for Local LLM or Cloud Icon for Gemini (Clickable to open Model Configuration)
+          // 1. Reasoning Model Row (Local Chat LLM or Gemini)
           Builder(
             builder: (context) {
               final isGemini = provider.isUsingGemini;
               final isLlmOnline = provider.isLocalLlmOnline;
-              final Color llmColor = isGemini
-                  ? theme.accentFg
-                  : (isLlmOnline ? theme.successFg : theme.dangerFg);
-              final IconData llmIcon = isGemini
-                  ? Icons.cloud_done_rounded
-                  : Icons.memory_rounded; // Microchip / Processor icon
+              final hasSelectedLocal = provider.selectedLocalModel.isNotEmpty;
+              final isUsingLocalReasoning = isLlmOnline && hasSelectedLocal;
 
-              final modelText = isGemini
-                  ? 'Gemini (Flash) Active'
-                  : (isLlmOnline
-                        ? (provider.selectedLocalModel.isNotEmpty
-                              ? 'Local: ${provider.selectedLocalModel}'
-                              : 'Local LLM Active')
-                        : 'Local LLM Offline');
+              final Color llmColor = isUsingLocalReasoning
+                  ? theme.successFg
+                  : (isGemini
+                        ? theme.accentFg
+                        : (isLlmOnline ? theme.successFg : theme.dangerFg));
+              final IconData llmIcon = isUsingLocalReasoning
+                  ? Icons.memory_rounded
+                  : (isGemini
+                        ? Icons.cloud_done_rounded
+                        : Icons.memory_rounded);
+
+              final reasoningText = isUsingLocalReasoning
+                  ? 'Reasoning: ${provider.selectedLocalModel}'
+                  : (isGemini
+                        ? 'Reasoning: Gemini 1.5 Flash (Cloud)'
+                        : (isLlmOnline
+                              ? (provider.effectiveModel.isNotEmpty
+                                    ? 'Reasoning: ${provider.effectiveModel}'
+                                    : 'Reasoning: Local LLM')
+                              : 'Reasoning: Offline'));
 
               return Tooltip(
-                message: 'Click to configure AI model & Gemini key',
+                message: 'Click to configure AI reasoning chat model',
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -436,7 +448,7 @@ class _SidebarState extends State<Sidebar> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              modelText,
+                              reasoningText,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -459,9 +471,911 @@ class _SidebarState extends State<Sidebar> {
               );
             },
           ),
+          // 2. Vision Model Row (Shown only in Meeting Scribe mode)
+          if (provider.mode == AgentMode.meeting) ...[
+            const SizedBox(height: 2),
+            Builder(
+              builder: (context) {
+                final hasVision = provider.hasVisionModel;
+                final isGemini = provider.isUsingGemini;
+                final isLightweight = provider.useLightweightVision;
+                final isVisionActive = isLightweight || hasVision || isGemini;
+
+                final Color visionColor = isVisionActive
+                    ? (isLightweight
+                          ? const Color(0xFF0D9488)
+                          : (hasVision ? theme.successFg : theme.accentFg))
+                    : theme.attentionFg;
+                final IconData visionIcon = isLightweight
+                    ? Icons.laptop_chromebook_rounded
+                    : (hasVision
+                          ? Icons.visibility_rounded
+                          : (isGemini
+                                ? Icons.cloud_done_rounded
+                                : Icons.visibility_off_rounded));
+
+                final String visionModelText;
+                if (isLightweight) {
+                  final name = provider.effectiveModel.isNotEmpty
+                      ? provider.effectiveModel
+                      : 'Chat LLM';
+                  visionModelText = 'Vision: Lightweight ($name)';
+                } else if (hasVision) {
+                  final name = provider.visionModelName.isNotEmpty
+                      ? provider.visionModelName
+                      : 'llama3.2-vision';
+                  visionModelText = 'Vision: $name';
+                } else if (isGemini) {
+                  visionModelText = 'Vision: Gemini 1.5 Flash (Cloud)';
+                } else {
+                  visionModelText = 'Vision: Setup Required';
+                }
+
+                return Tooltip(
+                  message: isGemini
+                      ? 'Gemini Multimodal Cloud Active — No local vision model required. Click to manage.'
+                      : (hasVision
+                            ? 'Llama Vision active in Ollama. Click to view settings.'
+                            : (isLightweight
+                                  ? 'Lightweight Laptop Mode: Using ${provider.effectiveModel} + OCR for small laptops. Click to manage.'
+                                  : 'Click to setup: Pull llama3.2-vision, enable Lightweight Mode, or configure Gemini.')),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      mouseCursor: SystemMouseCursors.click,
+                      onTap: () {
+                        _showVisionHelperDialog(context, theme, provider);
+                      },
+                      borderRadius: BorderRadius.circular(5),
+                      hoverColor: visionColor.withValues(alpha: 0.08),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: visionColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: visionColor.withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Icon(
+                                visionIcon,
+                                size: 13,
+                                color: visionColor,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                visionModelText,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isVisionActive
+                                      ? theme.fgDefault
+                                      : theme.attentionFg,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 13,
+                              color: theme.fgMuted.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  void _showVisionHelperDialog(
+    BuildContext context,
+    ThemeData theme,
+    ChatProvider provider,
+  ) {
+    final geminiInputController = TextEditingController(
+      text: provider.geminiApiKey,
+    );
+    bool showGeminiInput = false;
+    bool obscureGemini = true;
+    bool isRechecking = false;
+
+    showBlurredDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final isLightweight = provider.useLightweightVision;
+          final hasVision = provider.hasVisionModel;
+          final isGemini = provider.isUsingGemini;
+          final isReady = isLightweight || hasVision || isGemini;
+
+          final Color badgeColor = isReady
+              ? (isLightweight ? const Color(0xFF0D9488) : theme.successFg)
+              : theme.attentionFg;
+
+          return AlertDialog(
+            backgroundColor: theme.bgSubtle,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: theme.borderDefault),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isReady
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    color: badgeColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Visual Intelligence Options',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Choose how DeskMate processes slides & screen content',
+                        style: TextStyle(fontSize: 11.5, color: theme.fgMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status summary banner (dynamically updates when re-checked or switched)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isReady
+                                ? Icons.check_circle_rounded
+                                : Icons.info_outline_rounded,
+                            size: 15,
+                            color: badgeColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isGemini
+                                  ? 'Active: Using Google Gemini Cloud Vision'
+                                  : (isLightweight
+                                        ? 'Active: Using Lightweight Laptop Mode (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : "Chat LLM"})'
+                                        : (hasVision
+                                              ? 'Active: Using Ollama Vision (${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"})'
+                                              : 'Action Required: Choose an option below to enable recording')),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: badgeColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Option 1: Lightweight Laptop Mode (Ideal for low-spec laptops)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isLightweight
+                            ? const Color(0xFF0D9488).withValues(alpha: 0.08)
+                            : theme.bgCanvas,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isLightweight
+                              ? const Color(0xFF0D9488).withValues(alpha: 0.5)
+                              : theme.borderDefault,
+                          width: isLightweight ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.laptop_chromebook_rounded,
+                                size: 18,
+                                color: const Color(0xFF0D9488),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Lightweight Laptop Mode',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.fgDefault,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isLightweight
+                                      ? theme.successFg.withValues(alpha: 0.12)
+                                      : (theme.isDark
+                                            ? const Color(
+                                                0xFF7C2D12,
+                                              ).withValues(alpha: 0.28)
+                                            : const Color(0xFFFFF7ED)),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isLightweight
+                                        ? theme.successFg.withValues(alpha: 0.3)
+                                        : (theme.isDark
+                                              ? const Color(
+                                                  0xFF9A3412,
+                                                ).withValues(alpha: 0.55)
+                                              : const Color(0xFFFED7AA)),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  isLightweight
+                                      ? '✓ CURRENTLY IN USE'
+                                      : 'Small Laptop / 8-16GB RAM',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isLightweight
+                                        ? theme.successFg
+                                        : (theme.isDark
+                                              ? const Color(0xFFFDBA74)
+                                              : const Color(0xFFC2410C)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Does not require downloading multi-gigabyte vision weights! Uses your active local chat model (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : 'Ollama chat model'}) with screen OCR and Voxtral speech diarization to generate complete meeting minutes and action items.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.fgMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (!isLightweight) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.bolt_rounded, size: 16),
+                                label: const Text(
+                                  'Switch to Lightweight Laptop Mode',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0D9488),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  await provider.setUseLightweightVision(true);
+                                  if (!context.mounted) return;
+                                  setDialogState(() {});
+                                  widget.onShowTopNotification?.call(
+                                    'Active: Lightweight Laptop Mode enabled',
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Option 2: Pull Local Multimodal Vision Model
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: hasVision && !isLightweight && !isGemini
+                            ? theme.successFg.withValues(alpha: 0.08)
+                            : theme.bgCanvas,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: hasVision && !isLightweight && !isGemini
+                              ? theme.successFg.withValues(alpha: 0.5)
+                              : (hasVision
+                                    ? theme.successFg.withValues(alpha: 0.3)
+                                    : theme.borderDefault),
+                          width: (hasVision && !isLightweight && !isGemini)
+                              ? 1.5
+                              : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.visibility_rounded,
+                                size: 18,
+                                color: hasVision
+                                    ? theme.successFg
+                                    : theme.accentFg,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Full Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"}',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.fgDefault,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      (hasVision && !isLightweight && !isGemini
+                                              ? theme.successFg
+                                              : (hasVision
+                                                    ? theme.successFg
+                                                    : theme.accentFg))
+                                          .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  hasVision && !isLightweight && !isGemini
+                                      ? '✓ CURRENTLY IN USE'
+                                      : (hasVision
+                                            ? '✓ INSTALLED IN OLLAMA'
+                                            : 'High-End Laptops / 16GB+ RAM'),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: hasVision
+                                        ? theme.successFg
+                                        : theme.accentFg,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            hasVision
+                                ? '${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"} is installed in Ollama for 100% offline pixel-by-pixel screen analysis.'
+                                : 'Inspects raw screenshots pixel-by-pixel. Pull and run this model in Ollama via your Mac terminal:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.fgMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (hasVision) ...[
+                            if (isLightweight || isGemini) ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    'Select ${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"} as Active Mode',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: theme.successFg,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    await provider.setUseLightweightVision(
+                                      false,
+                                    );
+                                    if (!context.mounted) return;
+                                    setDialogState(() {});
+                                    widget.onShowTopNotification?.call(
+                                      'Active: Full Vision Mode (${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"})',
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ] else ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.bgSubtle,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: theme.borderDefault),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: SelectableText(
+                                      'ollama run llama3.2-vision',
+                                      style: TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.accentFg,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.copy_rounded,
+                                      size: 16,
+                                    ),
+                                    tooltip: 'Copy Command',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () {
+                                      copyWithFeedback(
+                                        context,
+                                        'ollama run llama3.2-vision',
+                                        label: 'Command copied',
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Option 3: Gemini Cloud Vision (with tune icon and API key setup)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isGemini
+                            ? theme.successFg.withValues(alpha: 0.08)
+                            : theme.bgCanvas,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isGemini
+                              ? theme.successFg.withValues(alpha: 0.5)
+                              : theme.borderDefault,
+                          width: isGemini ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.cloud_done_rounded,
+                                size: 18,
+                                color: isGemini
+                                    ? theme.successFg
+                                    : theme.accentFg,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Google Gemini Cloud Vision',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.fgDefault,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isGemini
+                                      ? theme.successFg.withValues(alpha: 0.12)
+                                      : (theme.isDark
+                                            ? const Color(
+                                                0xFF581C87,
+                                              ).withValues(alpha: 0.28)
+                                            : const Color(0xFFF3E8FF)),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isGemini
+                                        ? theme.successFg.withValues(alpha: 0.3)
+                                        : (theme.isDark
+                                              ? const Color(
+                                                  0xFF7E22CE,
+                                                ).withValues(alpha: 0.55)
+                                              : const Color(0xFFE9D5FF)),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  isGemini
+                                      ? '✓ CURRENTLY IN USE'
+                                      : 'Zero RAM / Cloud',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isGemini
+                                        ? theme.successFg
+                                        : (theme.isDark
+                                              ? const Color(0xFFD8B4FE)
+                                              : const Color(0xFF7E22CE)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Zero local RAM used. Multimodal vision is processed natively via Gemini 1.5 Flash in Google Cloud.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.fgMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (showGeminiInput) ...[
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: theme.bgSubtle,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: theme.borderDefault),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.tune_rounded, size: 14),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Google Gemini API Key',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: theme.fgDefault,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  TextField(
+                                    controller: geminiInputController,
+                                    obscureText: obscureGemini,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Enter API Key (AIzaSy...)',
+                                      hintStyle: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.fgMuted,
+                                      ),
+                                      isDense: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: theme.borderDefault,
+                                        ),
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          obscureGemini
+                                              ? Icons.visibility_rounded
+                                              : Icons.visibility_off_rounded,
+                                          size: 16,
+                                        ),
+                                        onPressed: () {
+                                          setDialogState(
+                                            () =>
+                                                obscureGemini = !obscureGemini,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () {
+                                          setDialogState(
+                                            () => showGeminiInput = false,
+                                          );
+                                        },
+                                        child: Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: theme.fgMuted,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      ElevatedButton.icon(
+                                        icon: const Icon(
+                                          Icons.check_rounded,
+                                          size: 14,
+                                        ),
+                                        label: const Text(
+                                          'Save & Activate',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: theme.accentFg,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                        ),
+                                        onPressed: () async {
+                                          final key = geminiInputController.text
+                                              .trim();
+                                          if (key.isNotEmpty) {
+                                            await provider.saveAiConfiguration(
+                                              model:
+                                                  provider.selectedLocalModel,
+                                              geminiApiKey: key,
+                                            );
+                                            if (!context.mounted) return;
+                                            setDialogState(() {
+                                              showGeminiInput = false;
+                                            });
+                                            widget.onShowTopNotification?.call(
+                                              'Active: Google Gemini Cloud Vision activated',
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(
+                                      Icons.tune_rounded,
+                                      size: 15,
+                                    ),
+                                    label: Text(
+                                      isGemini
+                                          ? 'Configure / Edit Gemini API Key'
+                                          : 'Setup Gemini API Key',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isGemini
+                                          ? theme.bgSubtle
+                                          : theme.accentFg,
+                                      foregroundColor: isGemini
+                                          ? theme.fgDefault
+                                          : Colors.white,
+                                      side: isGemini
+                                          ? BorderSide(
+                                              color: theme.borderDefault,
+                                            )
+                                          : BorderSide.none,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      setDialogState(
+                                        () => showGeminiInput = true,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (isGemini) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 16,
+                                    ),
+                                    tooltip: 'Remove Gemini Key',
+                                    onPressed: () async {
+                                      await provider.saveAiConfiguration(
+                                        model: provider.selectedLocalModel,
+                                        geminiApiKey: '',
+                                      );
+                                      if (!context.mounted) return;
+                                      geminiInputController.text = '';
+                                      setDialogState(() {});
+                                      widget.onShowTopNotification?.call(
+                                        'Gemini API key removed',
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text('Close', style: TextStyle(color: theme.fgMuted)),
+              ),
+              ElevatedButton.icon(
+                onPressed: isRechecking
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          isRechecking = true;
+                        });
+                        try {
+                          await provider.retryConnecting();
+                          await provider.fetchAvailableModels();
+                        } catch (e) {
+                          // ignore error
+                        } finally {
+                          final isLightweight = provider.useLightweightVision;
+                          final hasVision = provider.hasVisionModel;
+                          final isGemini = provider.isUsingGemini;
+                          final String statusText;
+                          if (isGemini) {
+                            statusText =
+                                'Active: Google Gemini 1.5 Flash Cloud Vision';
+                          } else if (isLightweight) {
+                            statusText =
+                                'Active: Lightweight Laptop Mode (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : "Local Chat LLM"})';
+                          } else if (hasVision) {
+                            statusText =
+                                'Active: Local Ollama Vision (${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"})';
+                          } else {
+                            statusText =
+                                '${provider.availableLocalModels.length} models detected. Vision model setup needed.';
+                          }
+
+                          setDialogState(() {
+                            isRechecking = false;
+                          });
+                          widget.onShowTopNotification?.call(
+                            'Refreshed: $statusText',
+                          );
+                        }
+                      },
+                icon: isRechecking
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(isRechecking ? 'Checking...' : 'Re-check Status'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.accentFg,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) => geminiInputController.dispose());
   }
 
   Widget _buildNewChatButton(ChatProvider provider, ThemeData theme) {
@@ -923,7 +1837,7 @@ class _SidebarState extends State<Sidebar> {
           if (widget.onOpenDatabaseExplorer != null) {
             widget.onOpenDatabaseExplorer!();
           } else {
-            showDialog(
+            showBlurredDialog(
               context: context,
               builder: (ctx) => DatabaseExplorerDialog(
                 onClose: () => Navigator.of(ctx).pop(),

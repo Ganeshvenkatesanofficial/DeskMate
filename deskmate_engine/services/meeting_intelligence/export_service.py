@@ -16,14 +16,35 @@ import os
 from pathlib import Path
 import shutil
 from datetime import datetime
+from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Optional
 
 from settings import DRIVE_TOKEN_PATH, GMAIL_TOKEN_PATH
+from services.meeting_intelligence.email_template import (
+    parse_meeting_summary,
+    resolve_proper_pdf_name,
+    generate_meeting_email_html,
+    generate_meeting_email_text,
+)
 
 logger = logging.getLogger("deskmate.export_service")
+
+
+def _resolve_logo_path() -> Optional[Path]:
+    base = Path(__file__).resolve().parent
+    candidates = [
+        base / ".." / ".." / ".." / "deskmate_app" / "assets" / "app_icon.png",
+        base / ".." / ".." / "deskmate_app" / "assets" / "app_icon.png",
+        Path("deskmate_app/assets/app_icon.png").resolve(),
+        Path("../deskmate_app/assets/app_icon.png").resolve(),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p.resolve()
+    return None
 
 
 class MeetingExportService:
@@ -50,13 +71,14 @@ class MeetingExportService:
         Uploads the generated meeting PDF to the user's Google Drive.
         Creates a 'DeskMate Meetings' folder if one does not exist.
         """
+        session_id = self._safe_session_id(session_id)
         session_dir = self.output_dir / session_id
         pdf_path = session_dir / f"deskmate_report_{session_id}.pdf"
 
         if not pdf_path.exists():
             return {
                 "status": "error",
-                "message": f"PDF report not found at {pdf_path}. Please summarize first.",
+                "message": "PDF report not found. Please summarize first.",
             }
 
         try:
@@ -123,10 +145,16 @@ class MeetingExportService:
         subject: Optional[str] = None,
         cc_email: Optional[str] = None,
         summary_text: Optional[str] = None,
+        user_name: Optional[str] = None,
+        pdf_name: Optional[str] = None,
+        designation: Optional[str] = None,
+        sender_email: Optional[str] = None,
     ) -> dict[str, Any]:
         """
-        Sends an email with the executive meeting summary and attached PDF.
+        Sends an email with a high-end, responsive HTML template, structured meeting
+        debrief, creator & open-source branding, and an attached, properly-named PDF.
         """
+        session_id = self._safe_session_id(session_id)
         session_dir = self.output_dir / session_id
         pdf_path = session_dir / f"deskmate_report_{session_id}.pdf"
         report_path = self.output_dir / f"session_{session_id}.json"
@@ -134,18 +162,18 @@ class MeetingExportService:
         if not pdf_path.exists():
             return {
                 "status": "error",
-                "message": f"PDF not found at {pdf_path}. Run summarization first.",
+                "message": "PDF not found. Run summarization first.",
             }
 
-        # Retrieve summary if not passed
-        body_text = summary_text
-        if not body_text and report_path.exists():
+        # 1. Retrieve session data and summary text
+        session_data: dict[str, Any] = {}
+        if report_path.exists():
             try:
-                data = json.loads(report_path.read_text(encoding="utf-8"))
-                body_text = data.get("summary", "")
+                session_data = json.loads(report_path.read_text(encoding="utf-8"))
             except Exception as e:
                 logger.debug(f"Failed to read summary from report {report_path}: {e}")
 
+        body_text = summary_text or session_data.get("summary", "")
         if not body_text:
             body_text = "Please find attached the DeskMate Executive Meeting Intelligence Report."
 
@@ -157,50 +185,138 @@ class MeetingExportService:
                 "v1",
             )
 
-            # Build multipart email message
-            msg = MIMEMultipart()
+            # 2. Resolve Authenticated User Email, Display Name & Designation
+            user_email = (sender_email or "").strip()
+            user_display_name = (user_name or "").strip()
+            user_designation = (designation or "").strip()
+
+            # Attempt to query user profile from Gmail API if email not provided
+            if not user_email:
+                try:
+                    profile = svc.users().getProfile(userId="me").execute()
+                    if profile and profile.get("emailAddress"):
+                        user_email = profile.get("emailAddress", "")
+                except Exception as e:
+                    logger.debug(f"Could not retrieve Gmail profile: {e}")
+
+            # Attempt to query sendAs settings for primary email and display name if missing
+            if not user_display_name or not user_email:
+                try:
+                    send_as_resp = svc.users().settings().sendAs().list(userId="me").execute()
+                    send_as_list = send_as_resp.get("sendAs", [])
+                    for entry in send_as_list:
+                        if entry.get("isPrimary") or entry.get("isDefault"):
+                            if not user_email:
+                                user_email = entry.get("sendAsEmail", "")
+                            if not user_display_name and entry.get("displayName"):
+                                user_display_name = entry.get("displayName", "")
+                            break
+                    if not user_email and send_as_list:
+                        user_email = send_as_list[0].get("sendAsEmail", "")
+                    if not user_display_name and send_as_list and send_as_list[0].get("displayName"):
+                        user_display_name = send_as_list[0].get("displayName", "")
+                except Exception as e:
+                    logger.debug(f"Could not retrieve Gmail sendAs settings: {e}")
+
+            # Fallback for display name if still unknown
+            if not user_display_name:
+                import getpass
+                try:
+                    user_display_name = getpass.getuser().replace(".", " ").title()
+                except Exception:
+                    user_display_name = "DeskMate User"
+
+            # 3. Parse Meeting Content & Determine Clean, Proper PDF Name
+            meeting_content = parse_meeting_summary(body_text, session_data)
+            proper_pdf_filename = resolve_proper_pdf_name(session_id, pdf_name, subject)
+
+            # 4. Generate Responsive HTML Body & Structured Plain-Text Fallback
+            html_body = generate_meeting_email_html(
+                session_id=session_id,
+                user_name=user_display_name,
+                user_email=user_email,
+                content=meeting_content,
+                pdf_filename=proper_pdf_filename,
+                designation=user_designation,
+            )
+            plain_body = generate_meeting_email_text(
+                session_id=session_id,
+                user_name=user_display_name,
+                user_email=user_email,
+                content=meeting_content,
+                pdf_filename=proper_pdf_filename,
+                designation=user_designation,
+            )
+
+            # 5. Build Multipart Email Message
+            # Root container: multipart/mixed
+            msg = MIMEMultipart("mixed")
             msg["To"] = to_email
-            msg["Subject"] = subject or f"[DeskMate Intelligence] Meeting Report — {session_id}"
+            email_subject = subject or f"[DeskMate Intelligence] {meeting_content.title}"
+            msg["Subject"] = email_subject
+
+            # Configure From & Reply-To with user email, designation and display name
+            sender_label = f"{user_display_name} ({user_designation})" if user_designation else user_display_name
+            if user_email:
+                if sender_label:
+                    msg["From"] = f'"{sender_label}" <{user_email}>'
+                    msg["Reply-To"] = f'"{user_display_name}" <{user_email}>'
+                else:
+                    msg["From"] = user_email
+                    msg["Reply-To"] = user_email
+            elif sender_label:
+                msg["From"] = sender_label
+
             if cc_email:
                 msg["Cc"] = cc_email
 
-            # Clean body
-            email_body = f"""Hello,
+            # Related container: multipart/related (contains alternative text/html + inline CID logo)
+            related_part = MIMEMultipart("related")
 
-Here is your executive meeting report generated by DeskMate AI.
+            # Alternative container: multipart/alternative
+            alt_part = MIMEMultipart("alternative")
+            alt_part.attach(MIMEText(plain_body, "plain", "utf-8"))
+            alt_part.attach(MIMEText(html_body, "html", "utf-8"))
+            related_part.attach(alt_part)
 
-============================================================
-EXECUTIVE SUMMARY
-============================================================
+            # Attach inline DeskMate logo (CID: deskmate_logo)
+            logo_path = _resolve_logo_path()
+            if logo_path and logo_path.exists():
+                try:
+                    logo_bytes = logo_path.read_bytes()
+                    img_part = MIMEImage(logo_bytes, _subtype="png")
+                    img_part.add_header("Content-ID", "<deskmate_logo>")
+                    img_part.add_header("Content-Disposition", "inline", filename="app_icon.png")
+                    related_part.attach(img_part)
+                except Exception as e:
+                    logger.debug(f"Failed to attach inline logo image: {e}")
 
-{body_text}
+            msg.attach(related_part)
 
-============================================================
-Full visual interaction chronology and action item checklist are
-attached as a PDF report.
-
-Generated with DeskMate Meeting Scribe.
-"""
-            msg.attach(MIMEText(email_body, "plain"))
-
-            # Attach PDF
+            # 6. Attach PDF Report with proper, professional filename
             pdf_data = pdf_path.read_bytes()
-            part = MIMEApplication(pdf_data, _subtype="pdf")
-            part.add_header(
+            pdf_part = MIMEApplication(pdf_data, _subtype="pdf")
+            pdf_part.add_header(
                 "Content-Disposition",
                 "attachment",
-                filename=f"DeskMate_Meeting_Report_{session_id}.pdf",
+                filename=proper_pdf_filename,
             )
-            msg.attach(part)
+            msg.attach(pdf_part)
 
+            # 7. Dispatch via Gmail API
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
             sent = svc.users().messages().send(userId="me", body={"raw": raw}).execute()
 
-            logger.info(f"Email sent successfully with PDF attached. Message ID: {sent.get('id')}")
+            logger.info(
+                f"Email sent successfully with PDF '{proper_pdf_filename}' attached. Message ID: {sent.get('id')}"
+            )
             return {
                 "status": "success",
                 "message_id": sent.get("id"),
                 "recipient": to_email,
+                "sender": f'"{sender_label}" <{user_email}>' if user_email else sender_label,
+                "pdf_name": proper_pdf_filename,
+                "subject": email_subject,
             }
 
         except Exception as e:
@@ -332,14 +448,34 @@ Generated with DeskMate Meeting Scribe.
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                summary = str(data.get("summary") or "")
-                # Extract first clean headline or snippet for title
-                first_line = summary.strip().split("\n")[0].replace("#", "").strip() if summary else ""
-                title = first_line if first_line and len(first_line) < 80 else f"Meeting {sid}"
+                custom_fields = data.get("custom_fields") or {}
+                topic = custom_fields.get("meeting_topic") or data.get("topic") or data.get("title")
 
-                preview = summary.replace("#", "").strip()
+                summary = str(data.get("summary") or "")
+                dt_obj = datetime.fromtimestamp(mtime)
+                formatted_dt = dt_obj.strftime("%b %d, %Y • %I:%M %p")
+
+                # Extract first meaningful headline or topic for title
+                lines = [l.strip().lstrip("#").strip() for l in summary.split("\n") if l.strip()]
+                first_meaningful_line = ""
+                for line in lines:
+                    clean = line.replace("*", "").strip()
+                    if clean and not clean.lower().startswith(("meeting summary", "executive summary", "summary:", "overview")):
+                        first_meaningful_line = clean
+                        break
+
+                if topic and str(topic).strip():
+                    title = str(topic).strip()
+                elif first_meaningful_line and len(first_meaningful_line) < 80:
+                    title = first_meaningful_line
+                else:
+                    title = f"Meeting • {dt_obj.strftime('%b %d, %Y at %I:%M %p')}"
+
+                preview = summary.replace("#", "").replace("*", "").strip()
                 if len(preview) > 160:
                     preview = preview[:160].rstrip() + "..."
+                elif not preview:
+                    preview = "Recorded meeting session with visual slides and speech transcript."
 
                 transcript = data.get("transcript") or {}
                 segments = transcript.get("segments") or []
@@ -355,7 +491,7 @@ Generated with DeskMate Meeting Scribe.
                     "session_id": sid,
                     "title": title,
                     "summary_preview": preview,
-                    "created_at": datetime.fromtimestamp(mtime).strftime("%b %d, %Y • %I:%M %p"),
+                    "created_at": formatted_dt,
                     "timestamp": mtime,
                     "has_summary": bool(summary),
                     "has_pdf": has_pdf,
@@ -377,8 +513,8 @@ Generated with DeskMate Meeting Scribe.
                     has_audio = (item / "audio.wav").exists() or (item / "meeting_audio.wav").exists()
                     sessions[sid] = {
                         "session_id": sid,
-                        "title": f"Meeting {sid}",
-                        "summary_preview": "In-progress or raw recorded meeting session.",
+                        "title": f"Meeting • {datetime.fromtimestamp(mtime).strftime('%b %d, %Y at %I:%M %p')}",
+                        "summary_preview": "Recorded meeting session with visual slides and audio transcript.",
                         "created_at": datetime.fromtimestamp(mtime).strftime("%b %d, %Y • %I:%M %p"),
                         "timestamp": mtime,
                         "has_summary": False,

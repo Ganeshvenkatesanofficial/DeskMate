@@ -36,6 +36,9 @@ class ChatProvider extends ChangeNotifier {
   String _selectedLocalModel = '';
   bool _showModelSelectionDialog = false;
   bool _hasConfiguredAi = false;
+  bool _hasVisionModel = false;
+  String _visionModelName = '';
+  bool _useLightweightVision = false;
 
   // Gemini API key – persisted in SharedPreferences so it survives app restarts.
   String _geminiApiKey = '';
@@ -70,6 +73,16 @@ class ChatProvider extends ChangeNotifier {
       : (_availableLocalModels.isNotEmpty ? _availableLocalModels.first : '');
   bool get showModelSelectionDialog => _showModelSelectionDialog;
   bool get hasConfiguredAi => _hasConfiguredAi;
+  bool get hasVisionModel =>
+      _hasVisionModel || _detectVisionInModels(_availableLocalModels);
+  String get visionModelName {
+    if (_visionModelName.isNotEmpty) return _visionModelName;
+    return _getVisionModelFromModels(_availableLocalModels);
+  }
+
+  bool get useLightweightVision => _useLightweightVision;
+  bool get isVisionActive =>
+      hasVisionModel || isUsingGemini || _useLightweightVision;
   List<AgentStepTelemetry> get activeTelemetry => _activeTelemetry;
   String get activeStatusTitle => _activeStatusTitle;
   ApiService get apiService => _apiService;
@@ -110,6 +123,8 @@ class ChatProvider extends ChangeNotifier {
     }
     _selectedLocalModel = prefs.getString(PrefsKeys.selectedModel) ?? '';
     _geminiApiKey = prefs.getString(PrefsKeys.geminiApiKey) ?? '';
+    _useLightweightVision =
+        prefs.getBool(PrefsKeys.useLightweightVision) ?? false;
     _hasConfiguredAi =
         prefs.getBool(PrefsKeys.hasConfiguredAi) ??
         (_selectedLocalModel.isNotEmpty);
@@ -127,11 +142,55 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setUseLightweightVision(bool enable) async {
+    _useLightweightVision = enable;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(PrefsKeys.useLightweightVision, enable);
+    notifyListeners();
+  }
+
+  static bool _isVisionModel(String name) {
+    final lower = name.toLowerCase();
+    return lower.contains('vision') ||
+        lower.contains('llava') ||
+        lower.contains('bakllava');
+  }
+
+  bool _detectVisionInModels(List<String> models) {
+    return models.any(_isVisionModel);
+  }
+
+  String _getVisionModelFromModels(List<String> models) {
+    return models.firstWhere(_isVisionModel, orElse: () => '');
+  }
+
+  void _updateVisionState(Map<String, dynamic> health) {
+    final healthModels =
+        (health['models'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+    _hasVisionModel =
+        health['has_vision'] == true ||
+        _detectVisionInModels(healthModels) ||
+        _detectVisionInModels(_availableLocalModels);
+    _visionModelName =
+        (health['vision_model'] as String?) ??
+        _getVisionModelFromModels(healthModels);
+    if (_visionModelName.isEmpty) {
+      _visionModelName = _getVisionModelFromModels(_availableLocalModels);
+    }
+  }
+
   Future<void> fetchAvailableModels() async {
     if (!_isBackendOnline) return;
     try {
       final models = await _apiService.getAvailableModels();
       _availableLocalModels = models;
+      if (_detectVisionInModels(_availableLocalModels)) {
+        _hasVisionModel = true;
+        _visionModelName = _getVisionModelFromModels(_availableLocalModels);
+      }
       if (_availableLocalModels.isNotEmpty) {
         // If no model has ever been selected, set the first available one as initial default
         if (_selectedLocalModel.isEmpty) {
@@ -302,6 +361,7 @@ class ChatProvider extends ChangeNotifier {
             _wsClient = AgentWebSocketClient(baseUrl: candidateUrl);
             _isBackendOnline = true;
             _isLocalLlmOnline = health['local_llm'] == 'online';
+            _updateVisionState(health);
             _isConnecting = false;
             _errorMessage = '';
             final prefs = await SharedPreferences.getInstance();
@@ -321,6 +381,8 @@ class ChatProvider extends ChangeNotifier {
     _isConnecting = false;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
+    _hasVisionModel = false;
+    _visionModelName = '';
     _errorMessage =
         'Failed to connect to local backend. Please ensure the backend server is running.';
     notifyListeners();
@@ -353,11 +415,16 @@ class ChatProvider extends ChangeNotifier {
         }
       }
 
-      bool newBackendOnline = health['status'] == 'ok';
-      bool newLocalLlmOnline = health['local_llm'] == 'online';
+      final bool newBackendOnline = health['status'] == 'ok';
+      final bool newLocalLlmOnline = health['local_llm'] == 'online';
+      final bool oldHasVision = _hasVisionModel;
+      final String oldVisionName = _visionModelName;
+      _updateVisionState(health);
 
       if (_isBackendOnline != newBackendOnline ||
           _isLocalLlmOnline != newLocalLlmOnline ||
+          _hasVisionModel != oldHasVision ||
+          _visionModelName != oldVisionName ||
           _isConnecting) {
         _isBackendOnline = newBackendOnline;
         _isLocalLlmOnline = newLocalLlmOnline;

@@ -36,6 +36,10 @@ abstract final class PrefsKeys {
   static const String hasConfiguredAi = 'deskmate_has_configured_ai';
   static const String themeMode = 'deskmate_theme_mode';
   static const String agentMode = 'deskmate_agent_mode';
+  static const String userName = 'deskmate_user_name';
+  static const String userDesignation = 'deskmate_user_designation';
+  static const String userEmail = 'deskmate_user_email';
+  static const String useLightweightVision = 'deskmate_use_lightweight_vision';
 }
 
 abstract final class ApiPaths {
@@ -67,6 +71,7 @@ abstract final class ApiPaths {
 
   static const String wsFileAgent = '/ws/file-agent';
   static const String wsPersonalAgent = '/ws/personal-agent';
+  static const String wsMeeting = '/ws/meeting';
 }
 
 abstract final class AppTimeouts {
