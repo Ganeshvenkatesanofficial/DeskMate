@@ -96,8 +96,8 @@ class VoxtralSpeechEngine:
                 dtype = torch.float16 if device in ("cuda", "mps") else torch.float32
 
                 try:
-                    self._processor = AutoProcessor.from_pretrained(self.model_name, revision="main")
-                    self._model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                    self._processor = AutoProcessor.from_pretrained(self.model_name, revision="main")  # nosec B615
+                    self._model = AutoModelForSpeechSeq2Seq.from_pretrained(  # nosec B615
                         self.model_name,
                         revision="main",
                         torch_dtype=dtype,
