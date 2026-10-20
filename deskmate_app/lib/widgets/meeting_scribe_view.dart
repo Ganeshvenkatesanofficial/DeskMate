@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
@@ -84,6 +85,102 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   // Past sessions archive state
   List<Map<String, dynamic>> _savedSessions = [];
 
+  OverlayEntry? _topToastOverlayEntry;
+  Timer? _topToastTimer;
+
+  void _showTopNotification(String message, {bool isError = false}) {
+    if (!mounted) return;
+    _topToastTimer?.cancel();
+    _topToastOverlayEntry?.remove();
+    _topToastOverlayEntry = null;
+
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    final theme = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
+
+    final Color bgColor = isError
+        ? (theme.isDark ? const Color(0xFF381515) : const Color(0xFFFEECEB))
+        : (theme.isDark ? const Color(0xFF0F2D1A) : const Color(0xFFEAFBF0));
+
+    final Color borderColor = isError
+        ? (theme.isDark ? const Color(0xFF782525) : const Color(0xFFF9A8A8))
+        : (theme.isDark ? const Color(0xFF1E6038) : const Color(0xFF8CE4AC));
+
+    final Color fgColor = isError
+        ? (theme.isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C))
+        : (theme.isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D));
+
+    final IconData icon =
+        isError ? Icons.error_outline_rounded : Icons.check_circle_rounded;
+
+    _topToastOverlayEntry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        top: isDesktop ? 38 : 16,
+        left: 0,
+        right: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 12),
+              constraints: const BoxConstraints(maxWidth: 580),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: theme.isDark ? 0.35 : 0.08,
+                    ),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: fgColor),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: fgColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  CircularCloseButton(
+                    size: 16,
+                    tooltip: 'Dismiss',
+                    onTap: () {
+                      _topToastTimer?.cancel();
+                      _topToastOverlayEntry?.remove();
+                      _topToastOverlayEntry = null;
+                    },
+                  ),
+                ],
+              ),
+            ).animate().fadeIn(duration: 180.ms).slideY(begin: -0.2, end: 0.0),
+          ),
+        ),
+      ),
+    );
+
+    overlayState.insert(_topToastOverlayEntry!);
+
+    _topToastTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      _topToastOverlayEntry?.remove();
+      _topToastOverlayEntry = null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +193,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   @override
   void dispose() {
+    _topToastTimer?.cancel();
+    _topToastOverlayEntry?.remove();
+    _topToastOverlayEntry = null;
     _pulseController.dispose();
     _statusTimer?.cancel();
     _postProcessingTimer?.cancel();
@@ -185,23 +285,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           );
         });
         if (showNotification) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Loaded meeting report: $sessionId'),
-              backgroundColor: AppTheme.emerald,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          _showTopNotification('Loaded meeting report: $sessionId');
         }
       }
     } catch (e) {
       if (showNotification && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load session: $e'),
-            backgroundColor: AppTheme.recordingRed,
-          ),
-        );
+        _showTopNotification('Failed to load session: $e', isError: true);
       }
     }
   }
@@ -269,12 +358,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       final provider = Provider.of<ChatProvider>(context, listen: false);
       final ok = await provider.apiService.deleteMeetingSession(sessionId);
       if (ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Permanently deleted session $sessionId from disk'),
-            backgroundColor: AppTheme.emerald,
-            duration: const Duration(seconds: 2),
-          ),
+        _showTopNotification(
+          'Permanently deleted session $sessionId from disk',
         );
         if (_currentSessionId == sessionId) {
           setState(() {
@@ -293,11 +378,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         }
         await _loadSavedSessions(autoLoadLatest: false);
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete session from disk'),
-            backgroundColor: AppTheme.recordingRed,
-          ),
+        _showTopNotification(
+          'Failed to delete session from disk',
+          isError: true,
         );
       }
     }
@@ -867,14 +950,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     } catch (e) {
       if (mounted) {
         setState(() => _isStarting = false);
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start meeting: $e'),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        _showTopNotification('Failed to start meeting: $e', isError: true);
       }
     }
   }
@@ -1208,44 +1284,18 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           _isMicMuted = targetMuted;
           _isTogglingMic = false;
         });
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(
-                  targetMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    targetMuted
-                        ? 'Mic Muted — Ambient room noise blocked (Earphones / System audio only)'
-                        : 'Mic Active — Mixed Earphones/System Audio + User Speech',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: targetMuted
-                ? const Color(0xFFD97706)
-                : AppTheme.emerald,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
+        _showTopNotification(
+          targetMuted
+              ? 'Mic Muted — Ambient room noise blocked'
+              : 'Mic Active — Mixed Earphones & Speech',
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isTogglingMic = false);
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update mic mute state: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        _showTopNotification(
+          'Failed to update mic mute state: $e',
+          isError: true,
         );
       }
     }
@@ -1577,9 +1627,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       _meetingWebSocket = null;
       if (mounted) {
         setState(() => _isSummarizing = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Summarization error: $e')));
+        _showTopNotification('Summarization error: $e', isError: true);
       }
     }
   }
@@ -1677,21 +1725,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       );
       if (mounted) {
         setState(() => _isSyncingTasks = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Successfully synced ${res['tasks_created']} action items into DeskMate Tasks!',
-            ),
-            backgroundColor: AppTheme.emerald,
-          ),
+        _showTopNotification(
+          'Successfully synced ${res['tasks_created']} action items into DeskMate Tasks!',
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isSyncingTasks = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Task sync failed: $e')));
+        _showTopNotification('Task sync failed: $e', isError: true);
       }
     }
   }
@@ -1713,30 +1754,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       if (mounted) {
         setState(() => _isExportingDrive = false);
         final link = res['view_link'] ?? '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Uploaded to Google Drive in "DeskMate Meetings"! ${link.isNotEmpty ? "(Link ready)" : ""}',
-            ),
-            backgroundColor: AppTheme.emerald,
-            action: link.isNotEmpty
-                ? SnackBarAction(
-                    label: 'Open Drive',
-                    textColor: Colors.white,
-                    onPressed: () {
-                      openExternal(link);
-                    },
-                  )
-                : null,
-          ),
+        _showTopNotification(
+          'Uploaded to Google Drive in "DeskMate Meetings"! ${link.isNotEmpty ? "(Link ready)" : ""}',
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isExportingDrive = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google Drive export failed: $e')),
-        );
+        _showTopNotification('Google Drive export failed: $e', isError: true);
       }
     }
   }
@@ -2106,22 +2131,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         if (mounted) {
           setState(() => _isSendingEmail = false);
           final pdfDisplayName = res['pdf_name'] ?? defaultPdfName;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Meeting report and attached PDF ($pdfDisplayName) emailed to $toEmail!',
-              ),
-              backgroundColor: AppTheme.emerald,
-              duration: const Duration(seconds: 4),
-            ),
+          _showTopNotification(
+            'Meeting report and attached PDF ($pdfDisplayName) emailed to $toEmail!',
           );
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isSendingEmail = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Failed to send email: $e')));
+          _showTopNotification('Failed to send email: $e', isError: true);
         }
       }
     }
@@ -4334,25 +4351,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   void _copyTranscriptToClipboard(String text, {String label = 'Transcript'}) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text('$label copied to clipboard!'),
-          ],
-        ),
-        backgroundColor: AppTheme.emerald,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    _showTopNotification('$label copied to clipboard!');
   }
 
   Widget _buildTranscriptInner(ThemeData theme) {
