@@ -110,8 +110,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         ? (theme.isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C))
         : (theme.isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D));
 
-    final IconData icon =
-        isError ? Icons.error_outline_rounded : Icons.check_circle_rounded;
+    final IconData icon = isError
+        ? Icons.error_outline_rounded
+        : Icons.check_circle_rounded;
 
     _topToastOverlayEntry = OverlayEntry(
       builder: (ctx) => Positioned(
