@@ -198,23 +198,9 @@ class BackendManager {
             'backend',
             'deskmate_backend',
           ),
-          p.join(
-            appDir,
-            'assets',
-            'backend',
-            'deskmate_backend',
-          ),
-          p.join(
-            appDir,
-            'deskmate_backend',
-          ),
-          p.join(
-            appDir,
-            '..',
-            'terminal-ai-agent',
-            'dist',
-            'deskmate_backend',
-          ),
+          p.join(appDir, 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, 'deskmate_backend'),
+          p.join(appDir, '..', 'terminal-ai-agent', 'dist', 'deskmate_backend'),
         ];
 
         for (final candidate in candidatePaths) {
