@@ -51,6 +51,7 @@ class AppTheme {
   static const Color amberLight = Color(0xFFFBBF24);
   static const Color recordingRed = Color(0xFFDC2626);
   static const Color recordingRedLight = Color(0xFFF87171);
+  static const Color teal = Color(0xFF0D9488);
 
   // --- GITHUB PRIMER LIGHT DEFAULT TOKENS ---
   static const Color lightBgCanvas = Color(0xFFFFFFFF);

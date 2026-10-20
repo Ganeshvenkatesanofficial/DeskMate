@@ -56,6 +56,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   final List<AgentStepTelemetry> _meetingTelemetrySteps = [];
   final List<Map<String, dynamic>> _telemetryQueue = [];
   bool _isProcessingQueue = false;
+  bool _showTelemetryInspection = false;
 
   // Summary result state
   String? _executiveSummary;
@@ -285,6 +286,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             _actionItems = [];
             _currentSessionId = null;
             _pdfUrl = null;
+            _meetingTelemetrySteps.clear();
+            _telemetryQueue.clear();
+            _isProcessingQueue = false;
           });
         }
         await _loadSavedSessions(autoLoadLatest: false);
@@ -821,9 +825,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     final provider = Provider.of<ChatProvider>(context, listen: false);
     final theme = Theme.of(context);
 
-    // Compulsory Vision Model Verification (or Lightweight Laptop Mode / Gemini)
-    if (!provider.isVisionActive) {
-      _showVisionRequiredModal(context, theme, provider);
+    // Compulsory AI Engine & Model Verification (Reasoning LLM / Ollama / Vision / Gemini)
+    if (!provider.isMeetingAiReady) {
+      _showAiSetupRequiredModal(context, theme, provider);
       return;
     }
 
@@ -875,7 +879,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     }
   }
 
-  void _showVisionRequiredModal(
+  void _showAiSetupRequiredModal(
     BuildContext context,
     ThemeData theme,
     ChatProvider provider,
@@ -897,7 +901,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                Icons.visibility_off_rounded,
+                Icons.psychology_alt_rounded,
                 color: theme.attentionFg,
                 size: 24,
               ),
@@ -905,7 +909,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Visual Intelligence Setup Required',
+                'AI Engine & Model Required',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -916,14 +920,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           ],
         ),
         content: SizedBox(
-          width: 500,
+          width: 520,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'DeskMate Meeting Scribe analyzes slides, presentations, and screen interactions alongside spoken audio. Please choose an option below:',
+                  'DeskMate Meeting Scribe requires active AI capabilities to transcribe dialogue with Voxtral 4B, process on-screen milestones, and generate executive reports. Please resolve the status below:',
                   style: TextStyle(
                     fontSize: 13,
                     color: theme.fgDefault,
@@ -932,186 +936,55 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 ),
                 const SizedBox(height: 14),
 
-                // Option A: Lightweight Laptop Mode (Single-click unlock)
+                // 1. Ollama Service Status Card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D9488).withValues(alpha: 0.08),
+                    color: provider.isLocalLlmOnline
+                        ? theme.successFg.withValues(alpha: 0.08)
+                        : theme.attentionFg.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: const Color(0xFF0D9488).withValues(alpha: 0.4),
+                      color: provider.isLocalLlmOnline
+                          ? theme.successFg.withValues(alpha: 0.3)
+                          : theme.attentionFg.withValues(alpha: 0.3),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.laptop_chromebook_rounded,
-                            size: 18,
-                            color: const Color(0xFF0D9488),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Have a Small Laptop? (Recommended)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF0D9488,
-                              ).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'No Heavy Download',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0D9488),
-                              ),
-                            ),
-                          ),
-                        ],
+                      Icon(
+                        provider.isLocalLlmOnline
+                            ? Icons.check_circle_rounded
+                            : Icons.cancel_rounded,
+                        color: provider.isLocalLlmOnline
+                            ? theme.successFg
+                            : theme.attentionFg,
+                        size: 18,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Uses your active local reasoning model (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : 'installed chat model'}) with screen OCR and Voxtral speech diarization. Zero heavy downloads needed.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.fgMuted,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.bolt_rounded, size: 16),
-                          label: Text(
-                            '⚡ Use Lightweight Mode & Start Recording',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0D9488),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 9),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          onPressed: () async {
-                            await provider.setUseLightweightVision(true);
-                            if (ctx.mounted) {
-                              Navigator.of(ctx).pop();
-                              _startRecording();
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Option B: Full llama3.2-vision
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.bgCanvas,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: theme.borderDefault),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.visibility_rounded,
-                            size: 18,
-                            color: theme.accentFg,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Full Multimodal Vision (High-End Laptops)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Run this command in Terminal to download llama3.2-vision:',
-                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.bgSubtle,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: theme.borderDefault),
-                        ),
-                        child: Row(
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: SelectableText(
-                                'ollama run llama3.2-vision',
-                                style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.accentFg,
-                                ),
+                            Text(
+                              provider.isLocalLlmOnline
+                                  ? 'Local Ollama: Online & Ready'
+                                  : 'Local Ollama: Offline',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: theme.fgDefault,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.copy_rounded, size: 16),
-                              tooltip: 'Copy Command',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () {
-                                Clipboard.setData(
-                                  const ClipboardData(
-                                    text: 'ollama run llama3.2-vision',
-                                  ),
-                                );
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Command copied to clipboard!',
-                                    ),
-                                    duration: Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
+                            Text(
+                              provider.isLocalLlmOnline
+                                  ? 'Connected at 127.0.0.1:11434 with active socket'
+                                  : 'Ensure the Ollama application or `ollama serve` is running.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: theme.fgMuted,
+                              ),
                             ),
                           ],
                         ),
@@ -1121,18 +994,166 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 ),
                 const SizedBox(height: 10),
 
-                // Note on Gemini
+                // 2. Reasoning / Chat Model Status Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: provider.availableLocalModels.isNotEmpty
+                        ? theme.successFg.withValues(alpha: 0.08)
+                        : theme.attentionFg.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: provider.availableLocalModels.isNotEmpty
+                          ? theme.successFg.withValues(alpha: 0.3)
+                          : theme.attentionFg.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        provider.availableLocalModels.isNotEmpty
+                            ? Icons.check_circle_rounded
+                            : Icons.warning_amber_rounded,
+                        color: provider.availableLocalModels.isNotEmpty
+                            ? theme.successFg
+                            : theme.attentionFg,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              provider.availableLocalModels.isNotEmpty
+                                  ? 'Reasoning LLM: ${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : provider.availableLocalModels.first}'
+                                  : 'Reasoning LLM: Missing in Ollama',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: theme.fgDefault,
+                              ),
+                            ),
+                            Text(
+                              provider.availableLocalModels.isNotEmpty
+                                  ? '${provider.availableLocalModels.length} local text/chat models detected'
+                                  : 'Run `ollama run qwen2.5-coder:1.5b` in terminal to pull a fast 1.5B model.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // 3. Visual Intelligence Status Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: provider.isVisionActive
+                        ? theme.successFg.withValues(alpha: 0.08)
+                        : theme.attentionFg.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: provider.isVisionActive
+                          ? theme.successFg.withValues(alpha: 0.3)
+                          : theme.attentionFg.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        provider.isVisionActive
+                            ? Icons.check_circle_rounded
+                            : Icons.visibility_off_rounded,
+                        color: provider.isVisionActive
+                            ? theme.successFg
+                            : theme.attentionFg,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              provider.isVisionActive
+                                  ? (provider.useLightweightVision
+                                        ? 'Vision: Lightweight Laptop Mode'
+                                        : 'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}')
+                                  : 'Vision: Inactive',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: theme.fgDefault,
+                              ),
+                            ),
+                            Text(
+                              provider.isVisionActive
+                                  ? 'Screen OCR capture & keyframe grounding enabled'
+                                  : 'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Quick Action: Enable Lightweight Mode if vision inactive
+                if (!provider.isVisionActive &&
+                    provider.availableLocalModels.isNotEmpty) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.bolt_rounded, size: 16),
+                      label: const Text(
+                        '⚡ Enable Lightweight Laptop Mode & Start',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () async {
+                        await provider.setUseLightweightVision(true);
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop();
+                          _startRecording();
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // Alternative: Cloud Gemini Key
                 Row(
                   children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 14,
-                      color: theme.fgMuted,
-                    ),
+                    Icon(Icons.cloud_outlined, size: 14, color: theme.fgMuted),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Tip: Adding a Google Gemini API key in Settings also unlocks cloud vision natively.',
+                        'Note: Entering a Google Gemini API Key in Settings also enables high-speed cloud multimodal reasoning instantly.',
                         style: TextStyle(fontSize: 11.5, color: theme.fgMuted),
                       ),
                     ),
@@ -1147,16 +1168,28 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text('Cancel', style: TextStyle(color: theme.fgMuted)),
           ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              widget.onOpenSetupGuide?.call(AgentMode.deskMate);
+            },
+            child: const Text('Configure API Keys'),
+          ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(ctx).pop();
               await provider.retryConnecting();
+              if (ctx.mounted) {
+                Navigator.of(ctx).pop();
+                if (provider.isMeetingAiReady) {
+                  _startRecording();
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.accentFg,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Check Status Again'),
+            child: const Text('Recheck & Start'),
           ),
         ],
       ),
@@ -2128,48 +2161,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     const SizedBox(height: 20),
                   ],
 
-                  // --- REASONING FLOW / TELEMETRY ACCORDION (Inspectable like Personal Agent & File Copilot) ---
-                  if (!_isSummarizing && _meetingTelemetrySteps.isNotEmpty) ...[
-                    TelemetryAccordion(
-                      key: ValueKey(
-                        'meeting_telemetry_${_currentSessionId ?? "session"}',
-                      ),
-                      steps: _meetingTelemetrySteps,
-                      initiallyExpanded: false,
-                      activeTitle: 'Meeting Intelligence Reasoning & Telemetry',
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // --- EXECUTIVE SUMMARY SECTION ---
+                  // --- UNIFIED MEETING REPORT CONTAINER (Single cohesive container for all meeting content) ---
                   if (_executiveSummary != null) ...[
-                    _buildSummaryCard(theme),
+                    _buildUnifiedMeetingContainer(theme),
                     const SizedBox(height: 20),
-                  ],
-
-                  // --- ACTION ITEMS CHECKLIST ---
-                  if (_actionItems.isNotEmpty) ...[
-                    _buildActionItemsCard(theme),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // --- REQUESTED CUSTOM INQUIRIES & EVENT ANALYSIS ---
-                  if (_customFieldsAnalysis.isNotEmpty) ...[
-                    _buildCustomFieldsAnalysisCard(theme),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // --- KEY VISUAL MOMENTS ---
-                  if (_importantSteps.isNotEmpty ||
-                      _meetingSteps.isNotEmpty) ...[
-                    _buildVisualMomentsCard(theme),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // --- VOXTRAL 4B DIARIZED TRANSCRIPT ---
-                  if (_transcriptData != null ||
-                      (_executiveSummary != null &&
-                          _executiveSummary!.isNotEmpty)) ...[
+                  ] else if (_transcriptData != null) ...[
                     _buildTranscriptCard(theme),
                     const SizedBox(height: 20),
                   ],
@@ -2192,6 +2188,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   }
 
   Widget _buildHeaderBanner(ThemeData theme) {
+    final provider = Provider.of<ChatProvider>(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
@@ -2344,33 +2341,52 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   ),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  onPressed: _isStarting ? null : _startRecording,
-                  icon: _isStarting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.play_arrow_rounded, size: 20),
-                  label: Text(
-                    _isStarting ? 'Starting...' : 'Start Meeting Scribe',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.accentFg,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
+                if (!provider.isMeetingAiReady)
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        _showAiSetupRequiredModal(context, theme, provider),
+                    icon: const Icon(Icons.warning_amber_rounded, size: 18),
+                    label: const Text('AI Setup Required'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  )
+                else
+                  ElevatedButton.icon(
+                    onPressed: _isStarting ? null : _startRecording,
+                    icon: _isStarting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.play_arrow_rounded, size: 20),
+                    label: Text(
+                      _isStarting ? 'Starting...' : 'Start Meeting Scribe',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.accentFg,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
-                ),
               ],
             )
           else if (_isRecording)
@@ -2545,15 +2561,42 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildSummarizingIndicator(ThemeData theme) {
+  String get _activeEngineName {
     final provider = Provider.of<ChatProvider>(context, listen: false);
-    final String activeEngineName = provider.isUsingGemini
+    return provider.isUsingGemini
         ? 'Gemini 1.5 Flash (Cloud Multimodal)'
         : (provider.hasVisionModel
               ? 'Local Ollama (${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'llama3.2-vision'})'
               : (provider.effectiveModel.isNotEmpty
                     ? 'Local Ollama (${provider.effectiveModel})'
                     : 'Local Ollama LLM'));
+  }
+
+  List<Map<String, dynamic>> get _pipelineSteps => [
+    {
+      'title': 'Audio Prep',
+      'sub': '16kHz WAV normalize',
+      'icon': Icons.graphic_eq_rounded,
+    },
+    {
+      'title': 'Voxtral Diarization',
+      'sub': 'Speaker turns & transcript',
+      'icon': Icons.record_voice_over_rounded,
+    },
+    {
+      'title': 'Multimodal Vision',
+      'sub': 'Screen OCR & timeline fusion',
+      'icon': Icons.auto_awesome_rounded,
+    },
+    {
+      'title': 'PDF Compilation',
+      'sub': 'Executive report & tasks',
+      'icon': Icons.picture_as_pdf_rounded,
+    },
+  ];
+
+  Widget _buildSummarizingIndicator(ThemeData theme) {
+    final String activeEngineName = _activeEngineName;
 
     final minutes = (_postProcessingElapsedSeconds ~/ 60).toString().padLeft(
       2,
@@ -2564,28 +2607,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       '0',
     );
 
-    final steps = [
-      {
-        'title': 'Audio Prep',
-        'sub': '16kHz WAV normalize',
-        'icon': Icons.graphic_eq_rounded,
-      },
-      {
-        'title': 'Voxtral Diarization',
-        'sub': 'Speaker turns & transcript',
-        'icon': Icons.record_voice_over_rounded,
-      },
-      {
-        'title': 'Multimodal Vision',
-        'sub': 'Screen OCR & timeline fusion',
-        'icon': Icons.auto_awesome_rounded,
-      },
-      {
-        'title': 'PDF Compilation',
-        'sub': 'Executive report & tasks',
-        'icon': Icons.picture_as_pdf_rounded,
-      },
-    ];
+    final steps = _pipelineSteps;
 
     return Container(
       width: double.infinity,
@@ -2826,193 +2848,387 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildSummaryCard(ThemeData theme) {
+  Widget _buildSummaryHeaderRow(ThemeData theme) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.auto_awesome_rounded, color: theme.accentFg, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Executive Session Summary',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: theme.fgDefault,
+              ),
+            ),
+          ],
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () =>
+                  _showScreenshotModal(context, 0, _getDisplaySteps()),
+              icon: const Icon(Icons.photo_library_outlined, size: 16),
+              label: Text('Inspect Screenshots (${_getDisplaySteps().length})'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.accentFg,
+                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _showTranscriptModal(context, theme),
+              icon: const Icon(Icons.record_voice_over_rounded, size: 16),
+              label: const Text('View Transcript'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.accentFg,
+                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+            ),
+            if (_pdfUrl != null) ...[
+              OutlinedButton.icon(
+                onPressed: _openPdf,
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                label: const Text('Download PDF'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.accentFg,
+                  side: BorderSide(color: theme.accentFg),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _isExportingDrive ? null : _exportToGoogleDrive,
+                icon: _isExportingDrive
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.cloud_upload_outlined, size: 16),
+                label: const Text('Save to Drive'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.purplePrimary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _isSendingEmail ? null : _promptSendEmail,
+                icon: _isSendingEmail
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.mail_outline_rounded, size: 16),
+                label: const Text('Email PDF'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.darkBgSubtle,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompletedPipelineCard(ThemeData theme) {
+    final String activeEngineName = _activeEngineName;
+
+    final minutes = (_postProcessingElapsedSeconds ~/ 60).toString().padLeft(
+      2,
+      '0',
+    );
+    final seconds = (_postProcessingElapsedSeconds % 60).toString().padLeft(
+      2,
+      '0',
+    );
+    final displayTime = _postProcessingElapsedSeconds > 0
+        ? '$minutes:$seconds'
+        : '00:01';
+
+    final steps = _pipelineSteps;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: theme.bgSubtle,
+        color: theme.bgCanvas,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.borderDefault),
+        border: Border.all(color: theme.accentFg.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.accentFg.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Bar matching Image 1
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.auto_awesome_rounded,
-                    color: theme.accentFg,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Executive Session Summary',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: theme.fgDefault,
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        _showScreenshotModal(context, 0, _getDisplaySteps()),
-                    icon: const Icon(Icons.photo_library_outlined, size: 16),
-                    label: Text(
-                      'Inspect Screenshots (${_getDisplaySteps().length})',
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.accentFg,
-                      side: BorderSide(
-                        color: theme.accentFg.withValues(alpha: 0.5),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: theme.accentFg.withValues(alpha: 0.15),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _showTranscriptModal(context, theme),
-                    icon: const Icon(Icons.record_voice_over_rounded, size: 16),
-                    label: const Text('View Transcript'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.accentFg,
-                      side: BorderSide(
-                        color: theme.accentFg.withValues(alpha: 0.5),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
-                  if (_pdfUrl != null) ...[
-                    OutlinedButton.icon(
-                      onPressed: _openPdf,
-                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-                      label: const Text('Download PDF'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.accentFg,
-                        side: BorderSide(color: theme.accentFg),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                      child: Center(
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 18,
+                          color: theme.accentFg,
                         ),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _isExportingDrive
-                          ? null
-                          : _exportToGoogleDrive,
-                      icon: _isExportingDrive
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.cloud_upload_outlined, size: 16),
-                      label: const Text('Save to Drive'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.purplePrimary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _isSendingEmail ? null : _promptSendEmail,
-                      icon: _isSendingEmail
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.mail_outline_rounded, size: 16),
-                      label: const Text('Email PDF'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.darkBgSubtle,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Autonomous Post-Recording Agent',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: theme.fgDefault,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Fusing multi-stream telemetry with $activeEngineName',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: theme.fgMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Timer badge matching Image 1
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.bgSubtle,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: theme.borderDefault),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.timer_outlined,
+                          size: 14,
+                          color: theme.accentFg,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          displayTime,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.fgDefault,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // "Inspect" button as requested by user
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showTelemetryInspection = !_showTelemetryInspection;
+                      });
+                    },
+                    icon: Icon(
+                      _showTelemetryInspection
+                          ? Icons.expand_less_rounded
+                          : Icons.account_tree_outlined,
+                      size: 15,
+                    ),
+                    label: Text(
+                      _showTelemetryInspection
+                          ? 'Hide Workflow'
+                          : 'Inspect Workflow',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.accentFg,
+                      side: BorderSide(
+                        color: theme.accentFg.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          SelectionArea(
-            child: MarkdownBody(
-              data: _executiveSummary!,
-              selectable: false,
-              styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                p: TextStyle(fontSize: 14, height: 1.6, color: theme.fgDefault),
-                h1: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: theme.fgDefault,
-                  letterSpacing: -0.3,
-                ),
-                h2: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: theme.fgDefault,
-                  letterSpacing: -0.2,
-                ),
-                h3: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: theme.accentFg,
-                  letterSpacing: -0.1,
-                ),
-                strong: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: theme.fgDefault,
-                ),
-                listBullet: TextStyle(
-                  color: theme.accentFg,
-                  fontWeight: FontWeight.w700,
-                ),
-                code: TextStyle(
-                  backgroundColor: theme.bgInset,
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  color: theme.fgDefault,
-                ),
-                codeblockDecoration: BoxDecoration(
-                  color: theme.bgInset,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.borderDefault),
-                ),
-                blockquoteDecoration: BoxDecoration(
-                  color: theme.accentFg.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border(
-                    left: BorderSide(color: theme.accentFg, width: 3.5),
+          const SizedBox(height: 16),
+
+          // Completed Progress Bar (Full)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: 1.0,
+              minHeight: 5,
+              backgroundColor: theme.bgSubtle,
+              valueColor: AlwaysStoppedAnimation<Color>(theme.accentFg),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 4-Phase Stepper Cards (All complete with green checkmarks)
+          Row(
+            children: List.generate(steps.length, (idx) {
+              final stepData = steps[idx];
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(
+                    right: idx == steps.length - 1 ? 0 : 8,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.successFg.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: theme.successFg.withValues(alpha: 0.5),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(
+                            stepData['icon'] as IconData,
+                            size: 16,
+                            color: theme.successFg,
+                          ),
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 15,
+                            color: theme.successFg,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        stepData['title'] as String,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        stepData['sub'] as String,
+                        style: TextStyle(fontSize: 10.5, color: theme.fgMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+
+          // Micro status feed matching Image 1
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.bgSubtle,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 15,
+                  color: theme.accentFg,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _pdfUrl != null
+                        ? 'PDF Compilation: Rendering high-resolution vector PDF report with redacted host UI...'
+                        : 'Post-recording synthesis completed · Multi-stream telemetry fused.',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      color: theme.fgDefault,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -3020,13 +3236,13 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildActionItemsCard(ThemeData theme) {
+  Widget _buildActionItemsInner(ThemeData theme) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFFEF3C7).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.amber.withValues(alpha: 0.4)),
       ),
       child: Column(
@@ -3107,6 +3323,151 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnifiedMeetingContainer(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: theme.bgSubtle,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.borderDefault),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Unified Action Bar & Title
+          _buildSummaryHeaderRow(theme),
+          const SizedBox(height: 18),
+
+          // 2. Autonomous Post-Recording Agent Pipeline Status (Image 1)
+          _buildCompletedPipelineCard(theme),
+
+          // 3. Telemetry/Reasoning Workflow Inspection Accordion (if toggled)
+          if (_showTelemetryInspection &&
+              _meetingTelemetrySteps.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            TelemetryAccordion(
+              key: ValueKey(
+                'meeting_telemetry_${_currentSessionId ?? "session"}',
+              ),
+              steps: _meetingTelemetrySteps,
+              initiallyExpanded: true,
+              activeTitle: 'Meeting Intelligence Reasoning & Telemetry',
+            ),
+          ],
+          const SizedBox(height: 20),
+
+          // 4. Executive Summary Markdown Body
+          if (_executiveSummary != null && _executiveSummary!.isNotEmpty) ...[
+            SelectionArea(
+              child: MarkdownBody(
+                data: _executiveSummary!,
+                selectable: false,
+                styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                  p: TextStyle(
+                    fontSize: 14,
+                    height: 1.6,
+                    color: theme.fgDefault,
+                  ),
+                  h1: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: theme.fgDefault,
+                    letterSpacing: -0.3,
+                  ),
+                  h2: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                    letterSpacing: -0.2,
+                  ),
+                  h3: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: theme.accentFg,
+                    letterSpacing: -0.1,
+                  ),
+                  strong: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                  ),
+                  listBullet: TextStyle(
+                    color: theme.accentFg,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  code: TextStyle(
+                    backgroundColor: theme.bgInset,
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    color: theme.fgDefault,
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: theme.bgInset,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: theme.borderDefault),
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border(
+                      left: BorderSide(color: theme.accentFg, width: 3.5),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // 5. Extracted Action Items
+          if (_actionItems.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Divider(
+              color: theme.borderDefault.withValues(alpha: 0.7),
+              height: 1,
+            ),
+            const SizedBox(height: 20),
+            _buildActionItemsInner(theme),
+          ],
+
+          // 6. Requested Custom Inquiries & Focus Topics
+          if (_customFieldsAnalysis.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Divider(
+              color: theme.borderDefault.withValues(alpha: 0.7),
+              height: 1,
+            ),
+            const SizedBox(height: 20),
+            _buildCustomFieldsInner(theme),
+          ],
+
+          // 7. Key Visual Moments
+          if (_getDisplaySteps().isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Divider(
+              color: theme.borderDefault.withValues(alpha: 0.7),
+              height: 1,
+            ),
+            const SizedBox(height: 20),
+            _buildVisualMomentsInner(theme),
+          ],
+
+          // 8. Voxtral 4B Diarized Transcript Section
+          const SizedBox(height: 24),
+          Divider(color: theme.borderDefault.withValues(alpha: 0.7), height: 1),
+          const SizedBox(height: 20),
+          _buildTranscriptInner(theme),
         ],
       ),
     );
@@ -3216,238 +3577,224 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     return list;
   }
 
-  Widget _buildVisualMomentsCard(ThemeData theme) {
+  Widget _buildVisualMomentsInner(ThemeData theme) {
     final displaySteps = _getDisplaySteps();
     if (displaySteps.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: theme.bgSubtle,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.borderDefault),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.accentFg.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.photo_library_outlined,
-                      color: theme.accentFg,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Key Visual Moments (${displaySteps.length} Steps Identified)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: theme.fgDefault,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Click any screenshot thumbnail or step card to inspect high-resolution frames & LocateAnything detections.',
-                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showScreenshotModal(context, 0, displaySteps),
-                icon: const Icon(Icons.slideshow_rounded, size: 16),
-                label: const Text('View Gallery Mode'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.accentFg,
-                  side: BorderSide(
-                    color: theme.accentFg.withValues(alpha: 0.4),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Icon(
+                    Icons.photo_library_outlined,
+                    color: theme.accentFg,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Key Visual Moments (${displaySteps.length} Steps Identified)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: theme.fgDefault,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Click any screenshot thumbnail or step card to inspect high-resolution frames & LocateAnything detections.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _showScreenshotModal(context, 0, displaySteps),
+              icon: const Icon(Icons.slideshow_rounded, size: 16),
+              label: const Text('View Gallery Mode'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.accentFg,
+                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          for (int i = 0; i < displaySteps.length; i++) ...[
-            Builder(
-              builder: (context) {
-                final step = displaySteps[i];
-                final stepId = step['step_id']?.toString() ?? '${i + 1}';
-                final cleanId = stepId.replaceAll(RegExp(r'[^0-9]'), '');
-                final meta =
-                    _stepDescriptions[stepId] ??
-                    _stepDescriptions['step_$stepId'] ??
-                    _stepDescriptions['step_$cleanId'] ??
-                    _stepDescriptions[cleanId];
-                final summary = step['summary']?.toString() ?? 'Step $stepId';
-                final title = meta is Map
-                    ? (meta['title'] ?? summary)
-                    : summary;
-                final desc = meta is Map ? (meta['description'] ?? '') : '';
-                final timestamp = step['timestamp']?.toString() ?? '';
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        for (int i = 0; i < displaySteps.length; i++) ...[
+          Builder(
+            builder: (context) {
+              final step = displaySteps[i];
+              final stepId = step['step_id']?.toString() ?? '${i + 1}';
+              final cleanId = stepId.replaceAll(RegExp(r'[^0-9]'), '');
+              final meta =
+                  _stepDescriptions[stepId] ??
+                  _stepDescriptions['step_$stepId'] ??
+                  _stepDescriptions['step_$cleanId'] ??
+                  _stepDescriptions[cleanId];
+              final summary = step['summary']?.toString() ?? 'Step $stepId';
+              final title = meta is Map ? (meta['title'] ?? summary) : summary;
+              final desc = meta is Map ? (meta['description'] ?? '') : '';
+              final timestamp = step['timestamp']?.toString() ?? '';
 
-                String screenshotPath =
-                    step['screenshot_path']?.toString() ?? '';
-                if (screenshotPath.isEmpty) {
-                  final actions = (step['actions'] as List?) ?? [];
-                  for (final a in actions) {
-                    if (a is Map &&
-                        (a['asset_path']?.toString().isNotEmpty ?? false)) {
-                      screenshotPath = a['asset_path'].toString();
-                      break;
-                    }
+              String screenshotPath = step['screenshot_path']?.toString() ?? '';
+              if (screenshotPath.isEmpty) {
+                final actions = (step['actions'] as List?) ?? [];
+                for (final a in actions) {
+                  if (a is Map &&
+                      (a['asset_path']?.toString().isNotEmpty ?? false)) {
+                    screenshotPath = a['asset_path'].toString();
+                    break;
                   }
                 }
+              }
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: InkWell(
-                    onTap: () => _showScreenshotModal(context, i, displaySteps),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.bgCanvas,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: theme.borderDefault),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStepThumbnail(
-                            screenshotPath,
-                            theme,
-                            width: 120,
-                            height: 76,
-                            onTap: () =>
-                                _showScreenshotModal(context, i, displaySteps),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: InkWell(
+                  onTap: () => _showScreenshotModal(context, i, displaySteps),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.bgCanvas,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: theme.borderDefault),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStepThumbnail(
+                          screenshotPath,
+                          theme,
+                          width: 120,
+                          height: 76,
+                          onTap: () =>
+                              _showScreenshotModal(context, i, displaySteps),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.accentFg.withValues(
+                                        alpha: 0.12,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: theme.accentFg.withValues(
-                                          alpha: 0.12,
-                                        ),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'STEP $stepId',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: theme.accentFg,
-                                        ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'STEP $stepId',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: theme.accentFg,
                                       ),
                                     ),
-                                    if (timestamp.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.schedule_rounded,
-                                            size: 12,
-                                            color: theme.fgMuted,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            timestamp,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: theme.fgMuted,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    TextButton.icon(
-                                      onPressed: () => _showScreenshotModal(
-                                        context,
-                                        i,
-                                        displaySteps,
-                                      ),
-                                      icon: const Icon(
-                                        Icons.fullscreen_rounded,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Inspect'),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: theme.accentFg,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
+                                  ),
+                                  if (timestamp.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.schedule_rounded,
+                                          size: 12,
+                                          color: theme.fgMuted,
                                         ),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          timestamp,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: theme.fgMuted,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  title.toString(),
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.fgDefault,
-                                  ),
-                                ),
-                                if (desc.toString().isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    desc.toString(),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      height: 1.4,
-                                      color: theme.fgMuted,
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    onPressed: () => _showScreenshotModal(
+                                      context,
+                                      i,
+                                      displaySteps,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.fullscreen_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Inspect'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: theme.accentFg,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
                                     ),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                title.toString(),
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.fgDefault,
+                                ),
+                              ),
+                              if (desc.toString().isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  desc.toString(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.4,
+                                    color: theme.fgMuted,
+                                  ),
+                                ),
                               ],
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              },
-            ),
-          ],
+                ),
+              );
+            },
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -4008,7 +4355,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildTranscriptCard(ThemeData theme) {
+  Widget _buildTranscriptInner(ThemeData theme) {
     final segments = (_transcriptData?['segments'] as List?) ?? [];
     final fullTranscript =
         _transcriptData?['full_transcript']?.toString() ?? '';
@@ -4036,6 +4383,383 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       return true;
     }).toList();
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.accentFg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.record_voice_over_rounded,
+                    color: theme.accentFg,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Voxtral 4B Diarized Transcript',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: theme.fgDefault,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (allSpeakers.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.accentFg.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${allSpeakers.length} Speakers',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: theme.accentFg,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Mistral Voxtral 4B in-memory audio extraction with native speaker diarization.',
+                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (fullTranscript.isNotEmpty || segments.isNotEmpty) ...[
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final buffer = StringBuffer();
+                      if (segments.isNotEmpty) {
+                        for (final s in segments) {
+                          if (s is Map) {
+                            final spk = s['speaker'] ?? 'Speaker';
+                            final start = _formatSegmentTime(s['start']);
+                            final end = _formatSegmentTime(s['end']);
+                            final txt = s['text'] ?? '';
+                            buffer.writeln('[$start -> $end] $spk: $txt');
+                          }
+                        }
+                      } else {
+                        buffer.write(fullTranscript);
+                      }
+                      _copyTranscriptToClipboard(
+                        buffer.toString(),
+                        label: 'Full Transcript',
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 15),
+                    label: const Text('Copy All'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.accentFg,
+                      side: BorderSide(
+                        color: theme.accentFg.withValues(alpha: 0.4),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _showTranscriptModal(context, theme),
+                    icon: const Icon(Icons.fullscreen_rounded, size: 16),
+                    label: const Text('Expand Reader'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.accentFg,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+
+        if (segments.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _transcriptSearchController,
+                  onChanged: (val) {
+                    setState(() => _transcriptSearchQuery = val);
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search transcript dialogue turns...',
+                    hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: theme.fgMuted,
+                    ),
+                    suffixIcon: _transcriptSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 16),
+                            onPressed: () {
+                              _transcriptSearchController.clear();
+                              setState(() => _transcriptSearchQuery = '');
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: theme.borderDefault),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                FilterChip(
+                  label: const Text('All Speakers'),
+                  selected: _selectedSpeakerFilter == null,
+                  onSelected: (_) =>
+                      setState(() => _selectedSpeakerFilter = null),
+                  selectedColor: theme.accentFg.withValues(alpha: 0.2),
+                  checkmarkColor: theme.accentFg,
+                  labelStyle: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _selectedSpeakerFilter == null
+                        ? theme.accentFg
+                        : theme.fgDefault,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                for (final spk in allSpeakers) ...[
+                  FilterChip(
+                    avatar: CircleAvatar(
+                      radius: 5,
+                      backgroundColor: _getSpeakerColor(spk),
+                    ),
+                    label: Text(spk),
+                    selected: _selectedSpeakerFilter == spk,
+                    onSelected: (_) => setState(() {
+                      _selectedSpeakerFilter = (_selectedSpeakerFilter == spk)
+                          ? null
+                          : spk;
+                    }),
+                    selectedColor: _getSpeakerColor(spk).withValues(alpha: 0.2),
+                    checkmarkColor: _getSpeakerColor(spk),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _selectedSpeakerFilter == spk
+                          ? _getSpeakerColor(spk)
+                          : theme.fgDefault,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 14),
+
+        if (segments.isEmpty && fullTranscript.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.bgCanvas,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.mic_off_outlined, color: theme.fgMuted, size: 24),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No Speech Audio Captured',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.fgDefault,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'The meeting was recorded without a microphone audio track. Key interactions were tracked via NVIDIA LocateAnything-3B visual events.',
+                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (segments.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.bgCanvas,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault),
+            ),
+            child: SelectableText(
+              fullTranscript,
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.55,
+                color: theme.fgDefault,
+              ),
+            ),
+          )
+        else ...[
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 460),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: filteredSegments.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, idx) {
+                final seg = filteredSegments[idx] as Map;
+                final speaker = seg['speaker']?.toString() ?? 'Speaker 1';
+                final start = _formatSegmentTime(seg['start']);
+                final end = _formatSegmentTime(seg['end']);
+                final text = seg['text']?.toString() ?? '';
+                final color = _getSpeakerColor(speaker);
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.bgCanvas,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: theme.borderDefault),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircleAvatar(radius: 4, backgroundColor: color),
+                                const SizedBox(width: 6),
+                                Text(
+                                  speaker,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.bgSubtle,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '$start → $end',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            tooltip: 'Copy Turn',
+                            color: theme.fgMuted,
+                            onPressed: () {
+                              _copyTranscriptToClipboard(
+                                '[$start -> $end] $speaker: $text',
+                                label: '$speaker Dialogue',
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        text,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.5,
+                          color: theme.fgDefault,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTranscriptCard(ThemeData theme) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -4044,385 +4768,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.borderDefault),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.accentFg.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.record_voice_over_rounded,
-                      color: theme.accentFg,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Voxtral 4B Diarized Transcript',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: theme.fgDefault,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (allSpeakers.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.accentFg.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${allSpeakers.length} Speakers',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.accentFg,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Mistral Voxtral 4B in-memory audio extraction with native speaker diarization.',
-                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (fullTranscript.isNotEmpty || segments.isNotEmpty) ...[
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final buffer = StringBuffer();
-                        if (segments.isNotEmpty) {
-                          for (final s in segments) {
-                            if (s is Map) {
-                              final spk = s['speaker'] ?? 'Speaker';
-                              final start = _formatSegmentTime(s['start']);
-                              final end = _formatSegmentTime(s['end']);
-                              final txt = s['text'] ?? '';
-                              buffer.writeln('[$start -> $end] $spk: $txt');
-                            }
-                          }
-                        } else {
-                          buffer.write(fullTranscript);
-                        }
-                        _copyTranscriptToClipboard(
-                          buffer.toString(),
-                          label: 'Full Transcript',
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded, size: 15),
-                      label: const Text('Copy All'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.accentFg,
-                        side: BorderSide(
-                          color: theme.accentFg.withValues(alpha: 0.4),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _showTranscriptModal(context, theme),
-                      icon: const Icon(Icons.fullscreen_rounded, size: 16),
-                      label: const Text('Expand Reader'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.accentFg,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-
-          if (segments.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _transcriptSearchController,
-                    onChanged: (val) {
-                      setState(() => _transcriptSearchQuery = val);
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Search transcript dialogue turns...',
-                      hintStyle: TextStyle(fontSize: 12, color: theme.fgMuted),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        size: 18,
-                        color: theme.fgMuted,
-                      ),
-                      suffixIcon: _transcriptSearchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 16),
-                              onPressed: () {
-                                _transcriptSearchController.clear();
-                                setState(() => _transcriptSearchQuery = '');
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: theme.borderDefault),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FilterChip(
-                    label: const Text('All Speakers'),
-                    selected: _selectedSpeakerFilter == null,
-                    onSelected: (_) =>
-                        setState(() => _selectedSpeakerFilter = null),
-                    selectedColor: theme.accentFg.withValues(alpha: 0.2),
-                    checkmarkColor: theme.accentFg,
-                    labelStyle: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _selectedSpeakerFilter == null
-                          ? theme.accentFg
-                          : theme.fgDefault,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  for (final spk in allSpeakers) ...[
-                    FilterChip(
-                      avatar: CircleAvatar(
-                        radius: 5,
-                        backgroundColor: _getSpeakerColor(spk),
-                      ),
-                      label: Text(spk),
-                      selected: _selectedSpeakerFilter == spk,
-                      onSelected: (_) => setState(() {
-                        _selectedSpeakerFilter = (_selectedSpeakerFilter == spk)
-                            ? null
-                            : spk;
-                      }),
-                      selectedColor: _getSpeakerColor(
-                        spk,
-                      ).withValues(alpha: 0.2),
-                      checkmarkColor: _getSpeakerColor(spk),
-                      labelStyle: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _selectedSpeakerFilter == spk
-                            ? _getSpeakerColor(spk)
-                            : theme.fgDefault,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 14),
-
-          if (segments.isEmpty && fullTranscript.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.bgCanvas,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.borderDefault),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.mic_off_outlined, color: theme.fgMuted, size: 24),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'No Speech Audio Captured',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: theme.fgDefault,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'The meeting was recorded without a microphone audio track. Key interactions were tracked via NVIDIA LocateAnything-3B visual events.',
-                          style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (segments.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.bgCanvas,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.borderDefault),
-              ),
-              child: SelectableText(
-                fullTranscript,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  height: 1.55,
-                  color: theme.fgDefault,
-                ),
-              ),
-            )
-          else ...[
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 460),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: filteredSegments.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, idx) {
-                  final seg = filteredSegments[idx] as Map;
-                  final speaker = seg['speaker']?.toString() ?? 'Speaker 1';
-                  final start = _formatSegmentTime(seg['start']);
-                  final end = _formatSegmentTime(seg['end']);
-                  final text = seg['text']?.toString() ?? '';
-                  final color = _getSpeakerColor(speaker);
-
-                  return Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: theme.bgCanvas,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: theme.borderDefault),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: color.withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 4,
-                                    backgroundColor: color,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    speaker,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: color,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.bgSubtle,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '$start → $end',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.fgMuted,
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.copy_rounded, size: 14),
-                              tooltip: 'Copy Turn',
-                              color: theme.fgMuted,
-                              onPressed: () {
-                                _copyTranscriptToClipboard(
-                                  '[$start -> $end] $speaker: $text',
-                                  label: '$speaker Dialogue',
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SelectableText(
-                          text,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            color: theme.fgDefault,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
-      ),
+      child: _buildTranscriptInner(theme),
     );
   }
 
@@ -4766,6 +5112,89 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
     // ── 1. INITIAL / IDLE STATE (Theme Purple, NOT Vibrating, Clickable) ──
     if (!_isRecording && !_isStarting) {
+      final provider = Provider.of<ChatProvider>(context, listen: false);
+      if (!provider.isMeetingAiReady) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () =>
+                      _showAiSetupRequiredModal(context, theme, provider),
+                  child: Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                      border: Border.all(
+                        color: const Color(0xFFD97706).withValues(alpha: 0.50),
+                        width: 1.8,
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.warning_amber_rounded,
+                        size: 44,
+                        color: Color(0xFFD97706),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              Text(
+                'AI Engine Setup Required to Record',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: theme.fgDefault,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Text(
+                  provider.meetingAiNotReadyReason.isNotEmpty
+                      ? provider.meetingAiNotReadyReason
+                      : 'Ensure Ollama is running with reasoning and vision models, or configure a Gemini API key.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.fgMuted,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () =>
+                    _showAiSetupRequiredModal(context, theme, provider),
+                icon: const Icon(Icons.settings_outlined, size: 16),
+                label: const Text('Configure AI Engine'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
@@ -5461,121 +5890,112 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
-  Widget _buildCustomFieldsAnalysisCard(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: theme.bgSubtle,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.borderDefault),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.accentFg.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.analytics_rounded,
-                  size: 20,
-                  color: theme.accentFg,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Requested Custom Inquiries & Event Analysis',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: theme.fgDefault,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ..._customFieldsAnalysis.entries.map((entry) {
-            final topicName = entry.key;
-            final dynamic val = entry.value;
-            String content = '';
-            List<dynamic> relevantSteps = [];
-            if (val is Map) {
-              content = val['content']?.toString() ?? '';
-              relevantSteps = val['relevant_steps'] as List<dynamic>? ?? [];
-            } else if (val is String) {
-              content = val;
-            }
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 14),
-              padding: const EdgeInsets.all(16),
+  Widget _buildCustomFieldsInner(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: theme.bgCanvas,
+                color: theme.accentFg.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.borderDefault),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+              child: Icon(
+                Icons.analytics_rounded,
+                size: 20,
+                color: theme.accentFg,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Requested Custom Inquiries & Event Analysis',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: theme.fgDefault,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ..._customFieldsAnalysis.entries.map((entry) {
+          final topicName = entry.key;
+          final dynamic val = entry.value;
+          String content = '';
+          List<dynamic> relevantSteps = [];
+          if (val is Map) {
+            content = val['content']?.toString() ?? '';
+            relevantSteps = val['relevant_steps'] as List<dynamic>? ?? [];
+          } else if (val is String) {
+            content = val;
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.bgCanvas,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.borderDefault),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.accentFg.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        topicName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: theme.accentFg,
                         ),
-                        decoration: BoxDecoration(
-                          color: theme.accentFg.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          topicName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: theme.accentFg,
+                      ),
+                    ),
+                    if (relevantSteps.isNotEmpty) ...[
+                      const Spacer(),
+                      ...relevantSteps.map(
+                        (step) => Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Chip(
+                            label: Text(
+                              step.toString(),
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            padding: EdgeInsets.zero,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
                       ),
-                      if (relevantSteps.isNotEmpty) ...[
-                        const Spacer(),
-                        ...relevantSteps.map(
-                          (step) => Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Chip(
-                              label: Text(
-                                step.toString(),
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                              padding: EdgeInsets.zero,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SelectableText(
+                  content,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: theme.fgDefault,
                   ),
-                  const SizedBox(height: 10),
-                  SelectableText(
-                    content,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      color: theme.fgDefault,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 }

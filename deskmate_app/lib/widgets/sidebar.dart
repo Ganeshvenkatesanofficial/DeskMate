@@ -483,7 +483,7 @@ class _SidebarState extends State<Sidebar> {
 
                 final Color visionColor = isVisionActive
                     ? (isLightweight
-                          ? const Color(0xFF0D9488)
+                          ? AppTheme.teal
                           : (hasVision ? theme.successFg : theme.accentFg))
                     : theme.attentionFg;
                 final IconData visionIcon = isLightweight
@@ -606,7 +606,7 @@ class _SidebarState extends State<Sidebar> {
           final isReady = isLightweight || hasVision || isGemini;
 
           final Color badgeColor = isReady
-              ? (isLightweight ? const Color(0xFF0D9488) : theme.successFg)
+              ? (isLightweight ? AppTheme.teal : theme.successFg)
               : theme.attentionFg;
 
           return AlertDialog(
@@ -714,12 +714,12 @@ class _SidebarState extends State<Sidebar> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isLightweight
-                            ? const Color(0xFF0D9488).withValues(alpha: 0.08)
+                            ? AppTheme.teal.withValues(alpha: 0.08)
                             : theme.bgCanvas,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: isLightweight
-                              ? const Color(0xFF0D9488).withValues(alpha: 0.5)
+                              ? AppTheme.teal.withValues(alpha: 0.5)
                               : theme.borderDefault,
                           width: isLightweight ? 1.5 : 1.0,
                         ),
@@ -732,7 +732,7 @@ class _SidebarState extends State<Sidebar> {
                               Icon(
                                 Icons.laptop_chromebook_rounded,
                                 size: 18,
-                                color: const Color(0xFF0D9488),
+                                color: AppTheme.teal,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -810,7 +810,7 @@ class _SidebarState extends State<Sidebar> {
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0D9488),
+                                  backgroundColor: AppTheme.teal,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 8,

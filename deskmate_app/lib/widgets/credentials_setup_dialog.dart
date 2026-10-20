@@ -4761,15 +4761,6 @@ RAG_CHUNK_OVERLAP=200
           ),
           _buildMeetingEngineRow(
             theme,
-            icon: Icons.graphic_eq_rounded,
-            color: const Color(0xFF8957E5),
-            label: 'Mistral Voxtral 4B',
-            badge: 'Speech Extraction',
-            desc:
-                'Native speaker diarization — no Whisper dependency. Runs in-memory on MPS/CUDA.',
-          ),
-          _buildMeetingEngineRow(
-            theme,
             icon: Icons.grid_on_rounded,
             color: const Color(0xFF1F883D),
             label: 'NVIDIA LocateAnything-3B',

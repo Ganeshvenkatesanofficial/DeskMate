@@ -53,7 +53,7 @@ class ApiService {
   /// Helper to perform GET requests with status check and fallback on failure
   Future<Map<String, dynamic>> _getJson(
     String path, {
-    Duration timeout = const Duration(seconds: 5),
+    Duration timeout = AppTimeouts.restShort,
     required Map<String, dynamic> fallback,
   }) async {
     try {
@@ -76,7 +76,7 @@ class ApiService {
     String? geminiApiKey,
     String? model,
   }) async {
-    final url = Uri.parse('$baseUrl/api/personal');
+    final url = Uri.parse('$baseUrl${ApiPaths.personal}');
     final body = _buildChatPayload(
       message: message,
       conversationId: conversationId,
@@ -106,7 +106,7 @@ class ApiService {
     String? geminiApiKey,
     String? model,
   }) async {
-    final url = Uri.parse('$baseUrl/api/chat');
+    final url = Uri.parse('$baseUrl${ApiPaths.chat}');
     final body = _buildChatPayload(
       message: message,
       conversationId: conversationId,
@@ -122,9 +122,9 @@ class ApiService {
   }
 
   Future<void> resetChat(String conversationId) async {
-    final url = Uri.parse('$baseUrl/api/reset/$conversationId');
+    final url = Uri.parse('$baseUrl${ApiPaths.resetChat(conversationId)}');
     try {
-      await http.post(url).timeout(const Duration(seconds: 5));
+      await http.post(url).timeout(AppTimeouts.restShort);
     } catch (_) {
       // Ignore reset errors in production
     }
@@ -132,7 +132,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> checkHealth() async {
     return _getJson(
-      '/api/health',
+      ApiPaths.health,
       timeout: const Duration(seconds: 2),
       fallback: {'status': 'offline', 'local_llm': 'offline'},
     );
@@ -142,8 +142,8 @@ class ApiService {
   Future<List<String>> getAvailableModels() async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/api/models'))
-          .timeout(const Duration(seconds: 5));
+          .get(Uri.parse('$baseUrl${ApiPaths.models}'))
+          .timeout(AppTimeouts.restShort);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final rawModels = data['models'] as List<dynamic>? ?? [];
@@ -159,16 +159,16 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> checkFileHealth() async {
-    return _getJson('/api/file/health', fallback: {'status': 'offline'});
+    return _getJson(ApiPaths.fileHealth, fallback: {'status': 'offline'});
   }
 
   Future<Map<String, dynamic>> checkPersonalHealth() async {
-    return _getJson('/api/personal/health', fallback: {'status': 'offline'});
+    return _getJson(ApiPaths.personalHealth, fallback: {'status': 'offline'});
   }
 
   Future<Map<String, dynamic>> getGoogleCredentials() async {
     return _getJson(
-      '/api/personal/credentials',
+      ApiPaths.personalCredentials,
       timeout: const Duration(seconds: 6),
       fallback: {'status': 'offline', 'configured': false},
     );
@@ -180,7 +180,7 @@ class ApiService {
   }) async {
     try {
       final body = await _postJson(
-        Uri.parse('$baseUrl/api/personal/credentials'),
+        Uri.parse('$baseUrl${ApiPaths.personalCredentials}'),
         {'client_id': clientId.trim(), 'client_secret': clientSecret.trim()},
         timeout: const Duration(seconds: 10),
       );
@@ -203,7 +203,7 @@ class ApiService {
   /// Fetch SQLite database overview including file path, size, and table summaries
   Future<Map<String, dynamic>> getDatabaseOverview() async {
     return _getJson(
-      '/api/database/overview',
+      ApiPaths.dbOverview,
       timeout: const Duration(seconds: 6),
       fallback: {
         'status': 'offline',
@@ -222,7 +222,7 @@ class ApiService {
     int offset = 0,
   }) async {
     return _getJson(
-      '/api/database/table/$tableName?limit=$limit&offset=$offset',
+      '${ApiPaths.dbTable(tableName)}?limit=$limit&offset=$offset',
       timeout: const Duration(seconds: 8),
       fallback: {
         'status': 'error',
@@ -237,9 +237,9 @@ class ApiService {
   /// Execute a custom safe read-only SQL SELECT query
   Future<Map<String, dynamic>> executeDatabaseQuery(String query) async {
     try {
-      final body = await _postJson(Uri.parse('$baseUrl/api/database/query'), {
+      final body = await _postJson(Uri.parse('$baseUrl${ApiPaths.dbQuery}'), {
         'query': query.trim(),
-      }, timeout: const Duration(seconds: 15));
+      }, timeout: AppTimeouts.restMedium);
       return body;
     } catch (e) {
       final errStr = e.toString().replaceFirst('Exception: ', '');
@@ -260,7 +260,7 @@ class ApiService {
     double fps = 2.0,
     bool allowLightweightMode = false,
   }) async {
-    final url = Uri.parse('$baseUrl/api/meeting/start');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingStart}');
     return _postJson(url, {
       'monitor': monitor,
       'fps': fps,
@@ -269,19 +269,19 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> stopMeeting() async {
-    final url = Uri.parse('$baseUrl/api/meeting/stop');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingStop}');
     return _postJson(url, {});
   }
 
   Future<Map<String, dynamic>> setMeetingMicMuted(bool muted) async {
-    final url = Uri.parse('$baseUrl/api/meeting/mute');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingMute}');
     return _postJson(url, {'muted': muted});
   }
 
   Future<Map<String, dynamic>> getMeetingStatus() async {
     return _getJson(
-      '/api/meeting/status',
-      timeout: const Duration(seconds: 3),
+      ApiPaths.meetingStatus,
+      timeout: AppTimeouts.meetingPoll,
       fallback: {
         'state': 'idle',
         'session_id': null,
@@ -297,19 +297,19 @@ class ApiService {
     String? sessionId,
     List<Map<String, String>>? customFields,
   }) async {
-    final url = Uri.parse('$baseUrl/api/meeting/summarize');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingSummarize}');
     final payload = <String, dynamic>{'session_id': sessionId};
     if (customFields != null && customFields.isNotEmpty) {
       payload['custom_fields'] = customFields;
     }
-    return _postJson(url, payload, timeout: const Duration(minutes: 5));
+    return _postJson(url, payload, timeout: AppTimeouts.restLong);
   }
 
   Future<Map<String, dynamic>> syncMeetingTasks({
     required String sessionId,
     required List<String> actionItems,
   }) async {
-    final url = Uri.parse('$baseUrl/api/meeting/sync-tasks');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingSyncTasks}');
     return _postJson(url, {
       'session_id': sessionId,
       'action_items': actionItems,
@@ -317,18 +317,18 @@ class ApiService {
   }
 
   String getMeetingPdfUrl(String sessionId) {
-    return '$baseUrl/api/meeting/pdf/$sessionId';
+    return '$baseUrl${ApiPaths.meetingPdf(sessionId)}';
   }
 
   String getMeetingAssetUrl(String sessionId, String filename) {
-    return '$baseUrl/api/meeting/asset/$sessionId/$filename';
+    return '$baseUrl${ApiPaths.meetingAsset(sessionId, filename)}';
   }
 
   Future<Map<String, dynamic>> exportMeetingToDrive({
     required String sessionId,
     String folderName = 'DeskMate Meetings',
   }) async {
-    final url = Uri.parse('$baseUrl/api/meeting/export-drive');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingExportDrive}');
     return _postJson(url, {'session_id': sessionId, 'folder_name': folderName});
   }
 
@@ -342,7 +342,7 @@ class ApiService {
     String? senderEmail,
     String? pdfName,
   }) async {
-    final url = Uri.parse('$baseUrl/api/meeting/send-email');
+    final url = Uri.parse('$baseUrl${ApiPaths.meetingSendEmail}');
     return _postJson(url, {
       'session_id': sessionId,
       'to_email': toEmail,

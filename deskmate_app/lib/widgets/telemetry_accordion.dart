@@ -480,7 +480,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
     if (isTool) {
       if (toolKind == _ToolKind.vector) {
         icon = Icons.hub_rounded;
-        nodeColor = const Color(0xFF8250DF); // GitHub Purple
+        nodeColor = AppTheme.purplePrimary; // GitHub Purple
         stageBadge =
             (rawTool == 'save_to_memory' || rawTool == 'index_document')
             ? 'VECTOR EMBEDDING STORE'
@@ -523,7 +523,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
         primaryTitle = 'Path Adjustment';
       } else if (toolKind == _ToolKind.vector) {
         icon = Icons.grain_rounded;
-        nodeColor = const Color(0xFF8250DF);
+        nodeColor = AppTheme.purplePrimary;
         stageBadge = 'EMBEDDING RESULTS';
         primaryTitle =
             (rawTool == 'index_document' || rawTool == 'save_to_memory')
@@ -565,7 +565,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
       }
     } else {
       icon = Icons.psychology_rounded;
-      nodeColor = const Color(0xFF8250DF); // GitHub Purple
+      nodeColor = AppTheme.purplePrimary; // GitHub Purple
       stageBadge = 'AI REASONING';
       primaryTitle = 'LLM Deliberation';
       final firstThought = (step.summary ?? '')
@@ -1063,7 +1063,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
             Icon(
               Icons.psychology_rounded,
               size: 13,
-              color: const Color(0xFF8250DF),
+              color: AppTheme.purplePrimary,
             ),
             const SizedBox(width: 5),
             Text(
@@ -1087,9 +1087,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                     Icon(
                       isCopied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 11,
-                      color: isCopied
-                          ? theme.statusOk
-                          : const Color(0xFF8250DF),
+                      color: isCopied ? theme.statusOk : AppTheme.purplePrimary,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -1099,7 +1097,7 @@ class _TelemetryAccordionState extends State<TelemetryAccordion> {
                         fontWeight: FontWeight.w600,
                         color: isCopied
                             ? theme.statusOk
-                            : const Color(0xFF8250DF),
+                            : AppTheme.purplePrimary,
                       ),
                     ),
                   ],

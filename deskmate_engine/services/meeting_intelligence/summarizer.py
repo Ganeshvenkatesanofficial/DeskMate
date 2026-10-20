@@ -282,19 +282,32 @@ Relevant code commands, configuration flags, client requests, or operational par
 """
 
     def _resolve_available_ollama_model(self) -> str:
-        """Resolve an active Ollama model. If configured model is missing, fallback to any available installed model."""
+        """Resolve an active Ollama model. If configured model is missing or unsupported, fallback to any available installed model."""
         try:
             r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
             if r.status_code == 200:
-                available = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
-                # Exact or partial match
-                for m in available:
+                models_data = r.json().get("models", [])
+                available = [m.get("name") for m in models_data if m.get("name")]
+                # Filter out embedding models and models with known runner crash architectures like 'mllama'
+                compatible = []
+                for m in models_data:
+                    name = m.get("name", "")
+                    family = (m.get("details") or {}).get("family", "").lower()
+                    if "embed" not in name.lower() and family != "mllama":
+                        compatible.append(name)
+
+                # Prefer user model if compatible
+                for m in compatible:
                     if self.ollama_model and (self.ollama_model in m or m in self.ollama_model):
                         return m
-                # Fallback to any installed text generation model (ignore embedding models)
+
+                if compatible:
+                    logger.info(f"Using compatible Ollama model: {compatible[0]}")
+                    return compatible[0]
+
+                # Fallback to any non-embedding model
                 llm_candidates = [m for m in available if "embed" not in m.lower()]
                 if llm_candidates:
-                    logger.info(f"Ollama preferred model '{self.ollama_model}' not installed; dynamically using '{llm_candidates[0]}'")
                     return llm_candidates[0]
         except Exception as e:
             logger.debug(f"Failed to query Ollama tags: {e}")
@@ -323,24 +336,45 @@ Relevant code commands, configuration flags, client requests, or operational par
                 logger.warning(f"Gemini API request failed: {e}. Falling back to local Ollama.")
 
         # 2. Local Ollama fallback
+        candidates: list[str] = []
+        preferred = self._resolve_available_ollama_model()
+        if preferred:
+            candidates.append(preferred)
         try:
-            active_model = self._resolve_available_ollama_model()
-            res = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": active_model,
-                    "prompt": plain_prompt,
-                    "stream": False,
-                    "options": {"num_ctx": 16384},
-                },
-                timeout=180,
-            )
-            if res.status_code == 200:
-                return res.json().get("response", "")
-        except Exception as oe:
-            logger.error(f"Local Ollama generation error: {oe}")
+            r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+            if r.status_code == 200:
+                available = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
+                for m in available:
+                    if "embed" not in m.lower() and m not in candidates:
+                        candidates.append(m)
+        except Exception:
+            pass
 
-        logger.error("All summarization engines failed (Gemini and Ollama). Returning empty result.")
+        for active_model in candidates:
+            try:
+                res = requests.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json={
+                        "model": active_model,
+                        "prompt": plain_prompt,
+                        "stream": False,
+                        "options": {"num_ctx": 8192},
+                    },
+                    timeout=180,
+                )
+                if res.status_code == 200:
+                    text_resp = res.json().get("response", "")
+                    if text_resp and text_resp.strip():
+                        logger.info(f"Ollama successfully generated summary using model '{active_model}'")
+                        return text_resp
+                else:
+                    logger.warning(
+                        f"Ollama model '{active_model}' returned {res.status_code}: {res.text}. Trying next candidate model..."
+                    )
+            except Exception as oe:
+                logger.warning(f"Local Ollama generation error with model '{active_model}': {oe}. Trying next candidate...")
+
+        logger.error("All summarization engines failed (Gemini and all Ollama models). Returning empty result.")
         return "===SUMMARY===\n### Summarization Unavailable\nBoth Gemini and Ollama engines failed. Configure GEMINI_API_KEY or ensure Ollama is running locally.\n===IMPORTANT_STEPS===\n[]\n===STEP_DESCRIPTIONS===\n{}"
 
     @staticmethod

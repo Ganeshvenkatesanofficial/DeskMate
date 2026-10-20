@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../core/constants.dart';
 
 class GeminiService {
   final String apiKey;
@@ -43,7 +44,7 @@ class GeminiService {
           },
           body: requestBody,
         )
-        .timeout(const Duration(seconds: 30));
+        .timeout(AppTimeouts.geminiRequest);
     if (response.statusCode != 200) {
       throw Exception('Gemini API error: ${response.body}');
     }

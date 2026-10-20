@@ -83,6 +83,29 @@ class ChatProvider extends ChangeNotifier {
   bool get useLightweightVision => _useLightweightVision;
   bool get isVisionActive =>
       hasVisionModel || isUsingGemini || _useLightweightVision;
+
+  /// Check whether AI engines (Gemini or Local Ollama Reasoning + Vision) are ready for meeting transcription & summarization.
+  bool get isMeetingAiReady {
+    if (isUsingGemini) return true;
+    return isLocalLlmOnline &&
+        availableLocalModels.isNotEmpty &&
+        isVisionActive;
+  }
+
+  String get meetingAiNotReadyReason {
+    if (isUsingGemini) return '';
+    if (!isLocalLlmOnline) {
+      return 'Ollama is offline or unreachable. Please launch Ollama locally, or configure a Gemini API key.';
+    }
+    if (availableLocalModels.isEmpty) {
+      return 'No reasoning LLM model installed in Ollama. Run `ollama pull qwen2.5-coder:1.5b` or configure a Gemini API key.';
+    }
+    if (!isVisionActive) {
+      return 'No Vision capability active. Pull `llama3.2-vision`, enable Lightweight Laptop Mode in settings, or configure Gemini.';
+    }
+    return '';
+  }
+
   List<AgentStepTelemetry> get activeTelemetry => _activeTelemetry;
   String get activeStatusTitle => _activeStatusTitle;
   ApiService get apiService => _apiService;
@@ -391,7 +414,7 @@ class ChatProvider extends ChangeNotifier {
 
   void _startHealthPolling() {
     _healthTimer?.cancel();
-    _healthTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    _healthTimer = Timer.periodic(AppTimeouts.healthPoll, (timer) async {
       var health = await _apiService.checkHealth();
       if (health['status'] != 'ok') {
         for (final candidate in AppConstants.candidateUrls(
