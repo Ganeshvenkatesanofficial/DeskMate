@@ -3203,7 +3203,7 @@ GITHUB_TOKEN=ghp_your_github_token_here
           ),
           const SizedBox(height: 4),
           Text(
-            'If you prefer environment variables over a credentials.json file, you can place a .env file inside terminal-ai-agent/ or your DeskMate directory.',
+            'If you prefer environment variables over a credentials.json file, you can place a .env file inside deskmate_engine/ or your DeskMate directory.',
             style: TextStyle(fontSize: 11.5, height: 1.4, color: theme.fgMuted),
           ),
           const SizedBox(height: 12),
@@ -4102,7 +4102,7 @@ RAG_CHUNK_OVERLAP=200
           ),
           const SizedBox(height: 4),
           Text(
-            'You can configure custom Ollama host endpoints, local model names, and vector chunk parameters in terminal-ai-agent/.env:',
+            'You can configure custom Ollama host endpoints, local model names, and vector chunk parameters in deskmate_engine/.env:',
             style: TextStyle(fontSize: 11.5, height: 1.4, color: theme.fgMuted),
           ),
           const SizedBox(height: 12),

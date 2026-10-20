@@ -1,7 +1,7 @@
 # DeskMate Desktop – Flutter Frontend
 
 <p align="center">
-  <img src="../docs/images/deskmate_hero.png" width="92%" alt="DeskMate Flutter Desktop App" />
+  <img src="../.github/assets/deskmate_hero.png" width="92%" alt="DeskMate Flutter Desktop App" />
 </p>
 
 The official desktop client for **DeskMate**, built with **Flutter Desktop** (macOS and Windows) following the **GitHub Primer** design language.

@@ -940,10 +940,8 @@ class _SidebarState extends State<Sidebar> {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isOk
-                  ? theme.fgDefault
-                  : (theme.isDark ? const Color(0xFFFFA198) : theme.dangerFg),
-              fontWeight: isOk ? FontWeight.w600 : FontWeight.w500,
+              color: theme.fgDefault,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

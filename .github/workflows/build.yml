@@ -505,7 +505,7 @@ jobs:
           codesign --force --deep --sign - dmg/*.app || true
 
           # Add native double-click auto-installer inside DMG (zero-setup)
-          cp scripts/install_macos.command "dmg/Install DeskMate.command"
+          cp .github/scripts/install_macos.command "dmg/Install DeskMate.command"
           chmod +x "dmg/Install DeskMate.command"
 
           hdiutil create \

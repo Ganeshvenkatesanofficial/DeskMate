@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/deskmate_hero.png" width="95%" alt="DeskMate Desktop Application Preview" />
+  <img src=".github/assets/deskmate_hero.png" width="95%" alt="DeskMate Desktop Application Preview" />
 </p>
 
 **DeskMate** is a free, privacy-first open-source AI desktop copilot and personal assistant. Built with **Flutter Desktop** (GitHub Primer design system) and an embedded **FastAPI + SmolAgents** backend, DeskMate runs 100% offline and natively on your computer with zero cloud telemetry.
@@ -69,14 +69,14 @@
 ### 🍏 macOS
 Run this command in Terminal to install DeskMate into `/Applications`:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.sh | bash
 ```
 *Or download **`DeskMate-macOS.dmg`** directly from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).*
 
 ### 🪟 Windows
 Run this command in PowerShell (`Win + X` → **Terminal**):
 ```powershell
-irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.ps1 | iex
 ```
 *Or download **`DeskMate-Windows.zip`** directly from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).*
 
@@ -157,7 +157,7 @@ flutter run -d macos   # or: flutter run -d windows
 ---
 
 ## 🤝 Contributing
-Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+Contributions are welcome! Please check out [CONTRIBUTING.md](.github/CONTRIBUTING.md) to get started.
 
 ---
 
