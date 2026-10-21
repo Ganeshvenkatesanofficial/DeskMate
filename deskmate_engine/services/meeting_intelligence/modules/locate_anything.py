@@ -21,17 +21,19 @@ class LocateAnythingDetector:
     """NVIDIA LocateAnything-3B UI detector for selective ROI grounding."""
 
     def __init__(self, device=None, model_id=LOCATE_ANYTHING_MODEL_ID):
-        if device is None:
-            dev, _ = get_inference_device()
-            self.device = dev
-        else:
-            self.device = device
-
+        self._device = device
         self.model_id = model_id
         self._processor = None
         self._model = None
         self._is_ready = False
         self._load_attempted = False
+
+    @property
+    def device(self) -> str:
+        if self._device is None:
+            dev, _ = get_inference_device()
+            self._device = dev
+        return self._device
 
     def _ensure_model_loaded(self) -> bool:
         if self._load_attempted:
@@ -50,10 +52,15 @@ class LocateAnythingDetector:
                     from transformers import AutoModel as AutoVisionModel
 
             import torch
-            self._processor = AutoProcessor.from_pretrained(self.model_id, revision="main")  # nosec B615
+            self._processor = AutoProcessor.from_pretrained(
+                self.model_id,
+                revision="main",
+                trust_remote_code=True,
+            )  # nosec B615
             self._model = AutoVisionModel.from_pretrained(  # nosec B615
                 self.model_id,
                 revision="main",
+                trust_remote_code=True,
                 torch_dtype=torch.float16 if self.device in ("cuda", "mps") else torch.float32,
                 low_cpu_mem_usage=True,
             ).to(self.device)

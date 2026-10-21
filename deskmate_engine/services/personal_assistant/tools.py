@@ -31,8 +31,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaInMemoryUpload
 from smolagents import Tool
 
-import faiss
-from sentence_transformers import SentenceTransformer
+faiss: Any = None
+SentenceTransformer: Any = None
 
 _env_path = Path(sys.executable).parent / ".env" if getattr(sys, 'frozen', False) else Path(".env")
 load_dotenv(dotenv_path=_env_path, override=True)
@@ -173,10 +173,16 @@ _model_lock = threading.Lock()
 
 def _get_embedding_model() -> Any:
     """Thread-safe lazy initialization of the sentence transformer model."""
-    global _model_cache
+    global _model_cache, SentenceTransformer
     if _model_cache is None:
         with _model_lock:
             if _model_cache is None:
+                if SentenceTransformer is None:
+                    try:
+                        from sentence_transformers import SentenceTransformer as _ST
+                        SentenceTransformer = _ST
+                    except ImportError:
+                        pass
                 if SentenceTransformer is not None:
                     _model_cache = SentenceTransformer("all-MiniLM-L6-v2")
                 else:
@@ -194,9 +200,15 @@ def _embed(text: str) -> Any:
 
 
 def _faiss_index() -> Any:
-    global _MEM_INDEX, _MEM_TEXTS, _MEM_META
+    global _MEM_INDEX, _MEM_TEXTS, _MEM_META, faiss
     with _MEM_LOCK:
         if _MEM_INDEX is None:
+            if faiss is None:
+                try:
+                    import faiss as _faiss
+                    faiss = _faiss
+                except ImportError:
+                    pass
             if faiss is None:
                 raise RuntimeError("faiss is not installed.")
             _MEM_INDEX = faiss.IndexFlatL2(384)
