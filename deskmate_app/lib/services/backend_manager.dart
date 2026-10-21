@@ -52,12 +52,29 @@ class BackendManager {
         final data = jsonDecode(response.body);
         return data is Map &&
             data['status'] == 'ok' &&
-            data.containsKey('local_llm');
+            data.containsKey('local_llm') &&
+            data['meeting_ready'] == true;
       }
       return false;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Kill any orphaned or stale background backend instances from previous builds
+  static Future<void> killStaleBackendProcesses() async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('taskkill', [
+          '/F',
+          '/IM',
+          'deskmate_backend.exe',
+          '/T',
+        ]);
+      } else if (Platform.isMacOS) {
+        await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
+      }
+    } catch (_) {}
   }
 
   /// Returns true if running on macOS directly from a mounted DMG or AppTranslocation sandbox
@@ -103,16 +120,6 @@ class BackendManager {
         'Automated local background process spawning is only supported on Windows and macOS.',
       );
       return;
-    }
-
-    for (final port in AppConstants.legacyPorts) {
-      if (await isBackendRunning(port)) {
-        _assignedPort = port;
-        debugPrint(
-          'Backend is already running on port $port. Reusing existing instance.',
-        );
-        return;
-      }
     }
 
     try {
@@ -183,8 +190,49 @@ class BackendManager {
             break;
           }
         }
+      }
+
+      // Check if bundled binary is newer/different from installed local user binary
+      bool needsBinaryUpdate = false;
+      if (Platform.isMacOS && exePath.isNotEmpty) {
+        final home = Platform.environment['HOME'] ?? '';
+        if (home.isNotEmpty) {
+          final localExe = File(
+            p.join(
+              home,
+              'Library',
+              'Application Support',
+              'DeskMate',
+              'bin',
+              'deskmate_backend',
+            ),
+          );
+          final sourceFile = File(exePath);
+          if (!await localExe.exists() ||
+              (await localExe.length()) != (await sourceFile.length())) {
+            needsBinaryUpdate = true;
+          }
+        }
+      }
+
+      // If a new build binary was bundled, kill stale background processes so it replaces cleanly
+      if (needsBinaryUpdate) {
+        debugPrint(
+          'New bundled backend build detected. Terminating stale background processes...',
+        );
+        await killStaleBackendProcesses();
+        await Future.delayed(const Duration(milliseconds: 500));
       } else {
-        return;
+        // Otherwise reuse healthy existing instance if it supports meeting intelligence
+        for (final port in AppConstants.legacyPorts) {
+          if (await isBackendRunning(port)) {
+            _assignedPort = port;
+            debugPrint(
+              'Backend is already running on port $port with meeting readiness. Reusing existing instance.',
+            );
+            return;
+          }
+        }
       }
 
       if (exePath.isEmpty || !await File(exePath).exists()) {
@@ -230,6 +278,32 @@ class BackendManager {
               await sourceFile.copy(localExe.path);
             }
             exePath = localExe.path;
+
+            // Also copy macos_audio_capture helper if bundled in the same directory
+            final sourceDir = p.dirname(sourceFile.path);
+            final sourceHelper = File(p.join(sourceDir, 'macos_audio_capture'));
+            final localHelper = File(
+              p.join(binDir.path, 'macos_audio_capture'),
+            );
+            if (await sourceHelper.exists()) {
+              final hSourceLen = await sourceHelper.length();
+              final hTargetLen = await localHelper.exists()
+                  ? await localHelper.length()
+                  : -1;
+              if (!await localHelper.exists() || hSourceLen != hTargetLen) {
+                await sourceHelper.copy(localHelper.path);
+              }
+              try {
+                await Process.run('/usr/bin/xattr', [
+                  '-d',
+                  'com.apple.quarantine',
+                  localHelper.path,
+                ]);
+              } catch (_) {}
+              try {
+                await Process.run('/bin/chmod', ['+x', localHelper.path]);
+              } catch (_) {}
+            }
           } catch (_) {}
 
           try {

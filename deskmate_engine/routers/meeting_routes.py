@@ -20,7 +20,6 @@ from pydantic import BaseModel
 from core.database import db_add_task
 from .ws_meeting_agent import meeting_ws_manager
 from services.meeting_intelligence import (
-    ScreenCapture,
     LivePipeline,
     VoxtralSpeechEngine,
     AudioExtractor,
@@ -29,7 +28,8 @@ from services.meeting_intelligence import (
     MeetingPDFGenerator,
     MeetingExportService,
 )
-from services.meeting_intelligence.transcriber.live_audio_recorder import LiveAudioRecorder
+from services.meeting_intelligence.audio_service import LiveAudioRecorder
+from services.meeting_intelligence.screen_capture_service import ScreenCapture
 
 from settings import SESSIONS_OUTPUT_DIR, DEFAULT_SCREEN_FPS, MAX_RETAINED_SESSIONS
 
@@ -54,6 +54,7 @@ class StartMeetingRequest(BaseModel):
     monitor: int = 1
     fps: float = DEFAULT_SCREEN_FPS
     allow_lightweight_mode: bool = False
+    start_muted: bool = False
 
 
 class SummarizeMeetingRequest(BaseModel):
@@ -140,7 +141,7 @@ async def start_meeting(req: StartMeetingRequest):
 
         # Start automated background audio recording (captures earphones/system & mic)
         audio_rec = LiveAudioRecorder()
-        audio_rec.start_recording(session_dir, "audio.wav")
+        audio_rec.start_recording(session_dir, "audio.wav", start_muted=req.start_muted)
         _SESSION_STATE["audio_recorder"] = audio_rec
 
         _SESSION_STATE["capture"] = capture
@@ -153,7 +154,7 @@ async def start_meeting(req: StartMeetingRequest):
             "fps": req.fps,
             "monitor": req.monitor,
             "audio_recording": True,
-            "mic_muted": False,
+            "mic_muted": req.start_muted,
         }
     except Exception as e:
         logger.exception(f"Failed to start meeting session: {e}")

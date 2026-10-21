@@ -462,6 +462,11 @@ jobs:
       - name: Build backend
         working-directory: deskmate_engine
         run: |
+          swiftc -O helpers/macos_audio_capture.swift -o helpers/macos_audio_capture
+          chmod +x helpers/macos_audio_capture
+          mkdir -p services/meeting_intelligence/audio_service
+          cp helpers/macos_audio_capture services/meeting_intelligence/audio_service/
+          chmod +x services/meeting_intelligence/audio_service/macos_audio_capture
           .venv/bin/pyinstaller deskmate_backend.spec --clean
 
       - name: Copy backend binary
@@ -470,8 +475,12 @@ jobs:
           cp \
             deskmate_engine/dist/deskmate_backend \
             deskmate_app/assets/backend/deskmate_backend
+          cp \
+            deskmate_engine/helpers/macos_audio_capture \
+            deskmate_app/assets/backend/macos_audio_capture
 
           chmod +x deskmate_app/assets/backend/deskmate_backend
+          chmod +x deskmate_app/assets/backend/macos_audio_capture
 
       - name: Flutter dependencies
         working-directory: deskmate_app
@@ -502,6 +511,7 @@ jobs:
           chmod -R u+rwX,go+rX dmg/*.app
           chmod +x dmg/*.app/Contents/MacOS/* || true
           find dmg/*.app/Contents -type f -name "deskmate_backend" -exec chmod +x {} + || true
+          find dmg/*.app/Contents -type f -name "macos_audio_capture" -exec chmod +x {} + || true
 
           # Strip extended quarantine attributes before creating disk image
           xattr -cr dmg/*.app || true

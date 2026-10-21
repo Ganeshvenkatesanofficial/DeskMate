@@ -243,6 +243,13 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 You MUST derive every claim, name, deadline, decision, and action item SOLELY from the provided visual timeline, screenshot OCR text, and audio transcript above. If a piece of information is not present in any source, DO NOT infer, assume, or fabricate it. Write "Not discussed" or omit the item entirely rather than guessing.
 
 ---
+## MULTILINGUAL & TRANSLATION REQUIREMENT (MANDATORY):
+1. The spoken meeting dialogue, transcript, or on-screen text may be in Tamil, Tanglish (Tamil-English blend/code-switching), Hindi, or other regional languages.
+2. Regardless of the spoken language or mix of languages used in the meeting, you MUST synthesize, translate, and express the ENTIRE report in CLEAN, FLUENT, GRAMMATICALLY ACCURATE, PROFESSIONAL ENGLISH.
+3. Every section—Executive Overview, Detailed Actions Timeline, Decisions & Outcomes, Technical Parameters, Action Items, Step Titles, and Step Descriptions—MUST be written strictly in professional English.
+4. DO NOT output Tanglish, phonetic transliterations (e.g. "pannalam", "mudichitom"), or untranslated regional phrases. Accurately translate their core meaning into polished, professional business English.
+
+---
 ## STRICT EXCLUSION & FILTERING RULES:
 1. NEVER describe, mention, or include actions inside the DeskMate application itself (e.g. clicking 'Start Meeting Scribe', 'End Meeting', opening DeskMate, or viewing recording metrics). These are host tool operations, NOT meeting content.
 2. NEVER describe transient window switching, Alt-Tab/Cmd-Tab, Dock clicks, or minimizing/maximizing windows to switch into or out of the meeting.

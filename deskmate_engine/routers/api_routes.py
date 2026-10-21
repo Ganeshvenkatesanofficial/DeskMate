@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from core.config import get_user_data_dir, persist_env_variables, base_dir, generate_conversation_id
 from core.models import check_local_llm_status, get_installed_chat_models
+from settings import APP_VERSION
 from services.file_copilot.agent import run_file_copilot
 from services.personal_assistant.agent import (
     run_personal_assistant,
@@ -88,6 +89,8 @@ def health():
         "has_vision": llm_info.get("has_vision", False),
         "vision_models": llm_info.get("vision_models", []),
         "vision_model": llm_info.get("default_vision_model"),
+        "meeting_ready": True,
+        "app_version": APP_VERSION,
     }
 
 
@@ -188,6 +191,7 @@ def get_personal_credentials():
         "configured": configured,
         "client_id": client_id,
         "client_id_preview": client_id_preview,
+        "client_secret": client_secret if configured else "",
         "client_secret_masked": "••••••••••••••••" if client_secret_exists else "",
         "has_credentials_file": has_real_credentials_file,
         "credentials_path": str(creds_file),

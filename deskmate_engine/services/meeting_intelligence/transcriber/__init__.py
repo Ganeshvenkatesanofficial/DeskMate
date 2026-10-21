@@ -1,14 +1,24 @@
 """
-services.meeting_intelligence.transcriber — Voxtral 4B Transcription Subsystem
-==============================================================================
+services.meeting_intelligence.transcriber
+=========================================
+Backward compatibility alias package.
+The core audio components are now organized under `audio_service`.
 """
 
-from .voxtral_service import VoxtralSpeechEngine
-from .audio_extractor import AudioExtractor
-from .chunked_transcriber import ChunkedTranscriber
+from ..audio_service import (
+    LiveAudioRecorder,
+    VoxtralSpeechEngine,
+    AudioExtractor,
+    ChunkedTranscriber,
+    SAMPLE_RATE,
+    CHANNELS,
+)
 
 __all__ = [
+    "LiveAudioRecorder",
     "VoxtralSpeechEngine",
     "AudioExtractor",
     "ChunkedTranscriber",
+    "SAMPLE_RATE",
+    "CHANNELS",
 ]

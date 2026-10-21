@@ -921,6 +921,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         monitor: 1,
         fps: 2.0,
         allowLightweightMode: provider.useLightweightVision,
+        startMuted: _isMicMuted,
       );
       final delayFuture = Future.delayed(const Duration(milliseconds: 1200));
       final results = await Future.wait([startFuture, delayFuture]);
@@ -929,7 +930,6 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         setState(() {
           _isRecording = true;
           _isStarting = false;
-          _isMicMuted = false;
           _currentSessionId = res['session_id'];
           _uptimeSeconds = 0;
           _framesProcessed = 0;
@@ -1274,9 +1274,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   }
 
   Future<void> _toggleMicMute() async {
-    if (_isTogglingMic || !_isRecording) return;
-    setState(() => _isTogglingMic = true);
+    if (_isTogglingMic) return;
     final targetMuted = !_isMicMuted;
+    if (!_isRecording) {
+      setState(() {
+        _isMicMuted = targetMuted;
+      });
+      _showTopNotification(
+        targetMuted
+            ? 'Default Mode: Earphones Only (Mic Muted on Start)'
+            : 'Default Mode: Earphones + Mic (Active)',
+      );
+      return;
+    }
+    setState(() => _isTogglingMic = true);
     final provider = Provider.of<ChatProvider>(context, listen: false);
     try {
       await provider.apiService.setMeetingMicMuted(targetMuted);
@@ -2518,15 +2529,25 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: _buildMetricTile(
-            theme: theme,
-            title: 'Audio Capture Mode',
-            value: _isMicMuted ? 'Earphones Only' : 'Earphones + Mic',
-            icon: _isMicMuted
-                ? Icons.headset_rounded
-                : Icons.headset_mic_rounded,
-            valueColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
-            iconColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+          child: Tooltip(
+            message:
+                'Click to toggle between Earphones Only and Earphones + Mic',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: _toggleMicMute,
+                child: _buildMetricTile(
+                  theme: theme,
+                  title: 'Audio Capture Mode',
+                  value: _isMicMuted ? 'Earphones Only' : 'Earphones + Mic',
+                  icon: _isMicMuted
+                      ? Icons.headset_rounded
+                      : Icons.headset_mic_rounded,
+                  valueColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+                  iconColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+                ),
+              ),
+            ),
           ),
         ),
       ],

@@ -40,9 +40,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
       final provider = Provider.of<ChatProvider>(context, listen: false);
       provider.fetchPersonalCredentials().then((_) {
         final creds = provider.personalCredentials;
-        if (creds['configured'] == true && creds['client_id'] != null) {
-          if (mounted && _clientIdController.text.isEmpty) {
+        if (creds['configured'] == true) {
+          if (creds['client_id'] != null && _clientIdController.text.isEmpty) {
             _clientIdController.text = creds['client_id'].toString();
+          }
+          final secret = creds['client_secret']?.toString() ?? '';
+          if (secret.isNotEmpty && _clientSecretController.text.isEmpty) {
+            _clientSecretController.text = secret;
           }
         }
       });
@@ -2613,7 +2617,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           activeClientId.isNotEmpty) {
                         _clientIdController.text = activeClientId;
                       }
-                      _clientSecretController.clear();
+                      final secret =
+                          credsStatus['client_secret']?.toString() ?? '';
+                      if (secret.isNotEmpty) {
+                        _clientSecretController.text = secret;
+                      } else {
+                        _clientSecretController.clear();
+                      }
                     });
                   },
                   icon: const Icon(Icons.edit_note_rounded, size: 16),
@@ -2728,8 +2738,8 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 child: IconButton(
                   icon: Icon(
                     _isSecretObscured
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
                     size: 16,
                     color: theme.fgMuted,
                   ),

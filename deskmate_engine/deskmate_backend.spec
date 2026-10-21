@@ -32,6 +32,8 @@ hiddenimports = [
     'services.meeting_intelligence.config',
     'services.meeting_intelligence.live_pipeline',
     'services.meeting_intelligence.screen_capture',
+    'services.meeting_intelligence.screen_capture_service',
+    'services.meeting_intelligence.screen_capture_service.screen_capture',
     'services.meeting_intelligence.pdf_generator',
     'services.meeting_intelligence.summarizer',
     'services.meeting_intelligence.export_service',
@@ -53,6 +55,11 @@ hiddenimports = [
     'services.meeting_intelligence.transcriber.chunked_transcriber',
     'services.meeting_intelligence.transcriber.live_audio_recorder',
     'services.meeting_intelligence.transcriber.voxtral_service',
+    'services.meeting_intelligence.audio_service',
+    'services.meeting_intelligence.audio_service.audio_extractor',
+    'services.meeting_intelligence.audio_service.chunked_transcriber',
+    'services.meeting_intelligence.audio_service.live_audio_recorder',
+    'services.meeting_intelligence.audio_service.voxtral_service',
     'services.meeting_intelligence.utils',
     'services.meeting_intelligence.utils.hardware_check',
     'sqlite3',
@@ -103,6 +110,12 @@ for pkg in packages_to_collect:
         hiddenimports += tmp_ret[2]
     except Exception:
         pass
+
+import os
+if os.path.exists('helpers/macos_audio_capture'):
+    binaries.append(('helpers/macos_audio_capture', 'helpers'))
+if os.path.exists('services/meeting_intelligence/audio_service/macos_audio_capture'):
+    binaries.append(('services/meeting_intelligence/audio_service/macos_audio_capture', 'services/meeting_intelligence/audio_service'))
 
 a = Analysis(
     ['backend.py'],

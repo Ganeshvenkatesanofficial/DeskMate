@@ -147,7 +147,10 @@ class _ChatScreenState extends State<ChatScreen> {
         creds['client_id'] != null &&
         (creds['client_id'] as String).isNotEmpty) {
       _googleClientIdController.text = creds['client_id'] as String;
-      if (_googleClientSecretController.text.isEmpty) {
+      final realSecret = creds['client_secret'] as String? ?? '';
+      if (realSecret.isNotEmpty) {
+        _googleClientSecretController.text = realSecret;
+      } else if (_googleClientSecretController.text.isEmpty) {
         final maskedSecret =
             creds['client_secret_masked'] as String? ?? '••••••••••••••••';
         _googleClientSecretController.text = maskedSecret.isNotEmpty
@@ -1503,7 +1506,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       final credResult = await provider.saveGoogleCredentials(cid, sec);
       if (credResult['success'] == true) {
-        _googleClientSecretController.text = '••••••••••••••••';
+        _googleClientSecretController.text = sec;
         oauthMessage = 'Google OAuth credentials activated';
       } else {
         if (mounted) {

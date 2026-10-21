@@ -66,6 +66,7 @@ flutter:
   assets:
     - assets/backend/deskmate_backend.exe
     - assets/backend/deskmate_backend
+    - assets/backend/macos_audio_capture
     - assets/app_icon.png
     - assets/app_icon_light.png
 

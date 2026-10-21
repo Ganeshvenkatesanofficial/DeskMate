@@ -259,12 +259,14 @@ class ApiService {
     int monitor = 1,
     double fps = 2.0,
     bool allowLightweightMode = false,
+    bool startMuted = false,
   }) async {
     final url = Uri.parse('$baseUrl${ApiPaths.meetingStart}');
     return _postJson(url, {
       'monitor': monitor,
       'fps': fps,
       'allow_lightweight_mode': allowLightweightMode,
+      'start_muted': startMuted,
     });
   }
 

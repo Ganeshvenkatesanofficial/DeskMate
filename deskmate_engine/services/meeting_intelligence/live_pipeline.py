@@ -39,7 +39,7 @@ from .modules.tracker import TemporalTracker
 from .modules.action_inference import CursorInformedActionInference
 from .modules.step_builder import StepBuilder
 from .modules.locate_anything import LocateAnythingDetector
-from .screen_capture import ScreenCapture
+from .screen_capture_service import ScreenCapture
 
 
 logger = logging.getLogger("deskmate.live_pipeline")
