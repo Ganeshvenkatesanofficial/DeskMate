@@ -187,6 +187,15 @@ Meeting Scribe supports three flexible operational modes to accommodate any hard
 3. **Google Gemini Cloud Vision (Zero Local RAM)**:
    - Uses `gemini-1.5-flash` in Google Cloud for ultra-fast, zero-memory multimodal reasoning with your own API key.
 
+### 🔐 Google Workspace Setup (Personal Agent: Gmail, Calendar, Drive & Tasks)
+To connect your personal Google Workspace with DeskMate:
+1. **Enable APIs**: In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable `Gmail API`, `Google Calendar API`, `Google Drive API`, and `Google Tasks API`. *(Note: Google automatically enables all API methods by default—leave them as-is).*
+2. **Configure Branding**: In **Google Auth Platform** ➔ **Create branding**, enter App name (`DeskMate`), select your email from the dropdown, choose **External** for **Audience** *(allows standard `@gmail.com` accounts to log in)*, enter your contact email, and agree to the user data policy.
+3. **Add Test Users (Mandatory)**: Under **Audience** ➔ **Test users**, click **+ Add Users** and add your Google account. Because unverified apps are in "Testing" mode, Google blocks any login attempt with `Error 403: access_denied` unless your account is listed as a Test User.
+4. **Create OAuth Client ID**: Under **Clients** (or Credentials), click **Create Credentials** ➔ **OAuth client ID**, select **Desktop app**, name it `DeskMate Desktop Client`, and click **Create**.
+5. **Connect to DeskMate**: Either copy your **Client ID** and **Client Secret** directly into DeskMate's **Credentials Setup** dialog, or click **Download JSON**, rename it to `credentials.json`, and place it in the application directory.
+6. For full step-by-step instructions with troubleshooting, see the [Distribution User Guide](deskmate_app/README_DISTRIBUTION.md#step-1-open-google-cloud-console--create-project).
+
 ---
 
 ## 🤝 Contributing

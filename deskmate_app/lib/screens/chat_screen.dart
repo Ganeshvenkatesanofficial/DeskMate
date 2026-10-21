@@ -142,13 +142,21 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _syncGoogleClientId(Map<String, dynamic> creds) {
+  void _syncGoogleCredentials(Map<String, dynamic> creds) {
     if (creds['configured'] == true &&
         creds['client_id'] != null &&
         (creds['client_id'] as String).isNotEmpty) {
       _googleClientIdController.text = creds['client_id'] as String;
-    } else {
+      if (_googleClientSecretController.text.isEmpty) {
+        final maskedSecret =
+            creds['client_secret_masked'] as String? ?? '••••••••••••••••';
+        _googleClientSecretController.text = maskedSecret.isNotEmpty
+            ? maskedSecret
+            : '••••••••••••••••';
+      }
+    } else if (creds['configured'] != true) {
       _googleClientIdController.clear();
+      _googleClientSecretController.clear();
     }
   }
 
@@ -179,7 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController = TextEditingController(text: provider.backendUrl);
     _geminiKeyController.text = provider.geminiApiKey;
-    _syncGoogleClientId(provider.personalCredentials);
+    _syncGoogleCredentials(provider.personalCredentials);
   }
 
   @override
@@ -227,9 +235,15 @@ class _ChatScreenState extends State<ChatScreen> {
     _settingsSelectedModel = provider.effectiveModel.isNotEmpty
         ? provider.effectiveModel
         : null;
-    _syncGoogleClientId(provider.personalCredentials);
+    _syncGoogleCredentials(provider.personalCredentials);
     _googleCredsError = null;
-    provider.fetchPersonalCredentials();
+    provider.fetchPersonalCredentials().then((_) {
+      if (mounted) {
+        setState(() {
+          _syncGoogleCredentials(provider.personalCredentials);
+        });
+      }
+    });
     setState(() {
       _isSettingsModelDropdownOpen = false;
       _isSettingsOpen = true;
@@ -1461,12 +1475,12 @@ class _ChatScreenState extends State<ChatScreen> {
       provider.setBackendUrl(backendUrl);
     }
 
-    // 3. Save Google OAuth Credentials if provided
+    // 3. Save Google OAuth Credentials if provided and changed
     final cid = _googleClientIdController.text.trim();
     final sec = _googleClientSecretController.text.trim();
 
     String? oauthMessage;
-    if (cid.isNotEmpty && sec.isNotEmpty) {
+    if (cid.isNotEmpty && sec.isNotEmpty && !sec.contains('•')) {
       if (!cid.endsWith('.apps.googleusercontent.com') || cid.length < 25) {
         if (mounted) {
           setState(() {
@@ -1489,7 +1503,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       final credResult = await provider.saveGoogleCredentials(cid, sec);
       if (credResult['success'] == true) {
-        _googleClientSecretController.clear();
+        _googleClientSecretController.text = '••••••••••••••••';
         oauthMessage = 'Google OAuth credentials activated';
       } else {
         if (mounted) {

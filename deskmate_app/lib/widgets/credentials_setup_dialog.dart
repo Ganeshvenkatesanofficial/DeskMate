@@ -1432,6 +1432,42 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     'Tasks API',
                     'Manage to-do items and checklists',
                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.accentFg.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: theme.accentFg.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 13,
+                          color: theme.accentFg,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Note: When enabled, Google redirects to the API details page showing "Methods: 17 options selected". All API methods are enabled automatically by default—leave them as-is.',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: theme.fgDefault,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1441,9 +1477,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           _buildStepCard(
             theme: theme,
             stepNumber: '3',
-            title: 'Configure OAuth Consent Screen',
+            title: 'Configure Google Auth Platform / Branding',
             description:
-                'Go to "APIs & Services" > "OAuth consent screen" to configure permissions for your user account:',
+                'Go to "Google Auth Platform" > "Create branding" (or "APIs & Services" > "OAuth consent screen") and complete the 4-step wizard:',
             actionButton: _buildStepActionButton(
               theme: theme,
               url: 'https://console.cloud.google.com/apis/credentials/consent',
@@ -1463,20 +1499,32 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                 children: [
                   _buildBulletPoint(
                     theme,
-                    'User Type:',
-                    'Select "External" (free for personal use, no Google Workspace domain required).',
+                    '1. App Information:',
+                    'Enter App Name "DeskMate" (required; cannot be empty). Select your email in User support email dropdown. Click "Next".',
                   ),
                   const SizedBox(height: 5),
                   _buildBulletPoint(
                     theme,
-                    'App Information:',
-                    'Set App Name to "DeskMate" and enter your email for Developer Contact.',
+                    '2. Audience (Crucial):',
+                    'What is Audience? It controls who can log in. Select "External" so your personal @gmail.com account can authenticate ("Internal" is only for Workspace organizations). Click "Next".',
                   ),
                   const SizedBox(height: 5),
                   _buildBulletPoint(
                     theme,
-                    'Test Users (Crucial):',
-                    'Under "Test users", click "+ Add Users" and enter your Google account email. DeskMate needs this permission while in development mode.',
+                    '3. Contact Information:',
+                    'Enter your personal email for Developer contact information. Click "Next".',
+                  ),
+                  const SizedBox(height: 5),
+                  _buildBulletPoint(
+                    theme,
+                    '4. Finish:',
+                    'Check "I agree to the Google API services user data policy", click "Continue", and click "Create".',
+                  ),
+                  const SizedBox(height: 5),
+                  _buildBulletPoint(
+                    theme,
+                    '5. Test Users (MANDATORY):',
+                    'Under "Audience" > "Test users" (or OAuth consent screen), click "+ ADD USERS" and add your Gmail. Because unverified apps are in "Testing" mode, Google strictly blocks login with 403 access_denied unless your email is added here!',
                   ),
                 ],
               ),
@@ -1489,7 +1537,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
             stepNumber: '4',
             title: 'Create Desktop OAuth 2.0 Credentials',
             description:
-                'Go to "APIs & Services" > "Credentials" > "+ Create Credentials" > "OAuth client ID".',
+                'Go to "Clients" (or "APIs & Services" > "Credentials" > "+ Create Credentials" > "OAuth client ID"):',
             actionButton: _buildStepActionButton(
               theme: theme,
               url: 'https://console.cloud.google.com/apis/credentials',
@@ -1513,19 +1561,25 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       _buildBulletPoint(
                         theme,
                         'Application Type:',
-                        'Select "Desktop App" (NOT Web Application or iOS/Android).',
+                        'Select "Desktop App" (CRITICAL: NOT Web Application, Android, or iOS).',
                       ),
                       const SizedBox(height: 5),
                       _buildBulletPoint(
                         theme,
                         'Name:',
-                        'Enter "DeskMate Client" and click "Create".',
+                        'Enter "DeskMate Desktop Client" and click "Create".',
                       ),
                       const SizedBox(height: 5),
                       _buildBulletPoint(
                         theme,
-                        'Generated Keys:',
-                        'Google Cloud will display your Client ID and Client Secret.',
+                        'OAuth Client Created Modal:',
+                        'Google displays your Client ID and Client Secret with copy buttons, and a "Download JSON" button.',
+                      ),
+                      const SizedBox(height: 5),
+                      _buildBulletPoint(
+                        theme,
+                        'Quick Setup:',
+                        'Copy your Client ID & Secret directly into the Quick Setup tab below, or download the JSON and rename to credentials.json.',
                       ),
                     ],
                   ),
@@ -1541,9 +1595,19 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         cursor: SystemMouseCursors.click,
                         child: ElevatedButton.icon(
                           onPressed: () {
+                            final provider = Provider.of<ChatProvider>(
+                              context,
+                              listen: false,
+                            );
+                            final credsStatus = provider.personalCredentials;
+                            final hasCreds =
+                                (credsStatus['configured'] == true) ||
+                                (provider
+                                        .personalAgentHealth['checks']?['google_credentials_file'] ??
+                                    false);
                             setState(() {
                               _selectedTabIndex = 0;
-                              _isEditing = true;
+                              _isEditing = hasCreds;
                             });
                           },
                           icon: const Icon(Icons.input_rounded, size: 14),
@@ -1597,13 +1661,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                           size: 13,
                           color: theme.accentFg,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 5),
                         Text(
-                          'OR configure in Settings Drawer (⚙️ ➔ Google Workspace OAuth)',
+                          'OR configure in Settings Drawer ➔ Google Workspace OAuth',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: theme.accentFg,
+                            color: theme.fgDefault,
                           ),
                         ),
                       ],
@@ -2570,13 +2634,15 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     }
 
     // ─── EDITING OR FIRST-TIME SETUP VIEW ─────────────────────────────────
+    final isReplacing = hasCreds && _isEditing;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.isDark ? const Color(0xFF0D1117) : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: _isEditing
+          color: isReplacing
               ? const Color(0xFFD29922).withValues(alpha: 0.5)
               : theme.accentFg.withValues(alpha: 0.4),
           width: 1.2,
@@ -2586,7 +2652,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Banner
-          if (_isEditing)
+          if (isReplacing)
             _buildNoticeBanner(
               theme: theme,
               margin: const EdgeInsets.only(bottom: 12),
@@ -2601,7 +2667,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               text:
-                  'Configure Google OAuth 2.0 Credentials: Enter your Client ID and Secret below. DeskMate will validate and permanently activate them in .env and credentials.json.',
+                  'Configure Google OAuth 2.0 Credentials: Enter your Client ID and Secret below. DeskMate will validate and activate them in .env and credentials.json.',
               icon: Icons.vpn_key_rounded,
               color: theme.accentFg,
               textColor: theme.fgDefault,
@@ -2712,7 +2778,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (_isEditing) ...[
+              if (isReplacing) ...[
                 MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: OutlinedButton(
@@ -2745,7 +2811,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                         : () => _handleSave(
                             provider,
                             theme,
-                            isReplace: _isEditing,
+                            isReplace: isReplacing,
                           ),
                     icon: _isSaving
                         ? const SizedBox(
@@ -2757,7 +2823,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                             ),
                           )
                         : Icon(
-                            _isEditing
+                            isReplacing
                                 ? Icons.published_with_changes_rounded
                                 : Icons.check_circle_outline_rounded,
                             size: 15,
@@ -2765,7 +2831,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                     label: Text(
                       _isSaving
                           ? 'Validating...'
-                          : _isEditing
+                          : isReplacing
                           ? 'Validate & Replace Old Credentials'
                           : 'Validate & Activate Credentials',
                     ),
@@ -2785,7 +2851,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       backgroundColor: WidgetStateProperty.resolveWith((
                         states,
                       ) {
-                        if (_isEditing) {
+                        if (isReplacing) {
                           if (states.contains(WidgetState.hovered)) {
                             return const Color(0xFFE3A638);
                           }
