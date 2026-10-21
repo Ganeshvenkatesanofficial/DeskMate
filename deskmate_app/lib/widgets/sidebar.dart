@@ -1691,7 +1691,10 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildMeetingHealthCard(ChatProvider provider, ThemeData theme) {
     final health = provider.personalAgentHealth;
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
-    final status = health['status'] as String? ?? 'loading';
+    final isOnline = provider.isBackendOnline;
+    final status = isOnline
+        ? (health['status'] as String? ?? 'online')
+        : 'offline';
 
     return _buildHealthCard(
       theme: theme,
@@ -1702,24 +1705,24 @@ class _SidebarState extends State<Sidebar> {
         _buildHealthRow(
           theme,
           'Google OAuth',
-          checks['google_credentials_file'] ?? false,
+          isOnline && (checks['google_credentials_file'] ?? false),
         ),
         const SizedBox(height: 4),
         _buildHealthRow(
           theme,
           'Drive Cloud Sync',
-          checks['drive_token'] ?? false,
+          isOnline && (checks['drive_token'] ?? false),
         ),
         const SizedBox(height: 4),
         _buildHealthRow(
           theme,
           'Gmail Dispatch',
-          checks['gmail_token'] ?? false,
+          isOnline && (checks['gmail_token'] ?? false),
         ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Voxtral 4B Audio', true),
+        _buildHealthRow(theme, 'Voxtral 4B Audio', isOnline),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'LocateAnything-3B', true),
+        _buildHealthRow(theme, 'LocateAnything-3B', isOnline),
       ],
     );
   }

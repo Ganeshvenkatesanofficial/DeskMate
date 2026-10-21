@@ -475,6 +475,9 @@ class ChatProvider extends ChangeNotifier {
           }
           checkFileAgentStatus();
           checkPersonalAgentStatus();
+        } else {
+          _fileAgentHealth = {'status': 'offline'};
+          _personalAgentHealth = {'status': 'offline'};
         }
         notifyListeners();
       } else if (_isBackendOnline && _fileAgentHealth['status'] == 'offline') {

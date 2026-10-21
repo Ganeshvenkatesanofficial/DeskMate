@@ -6,7 +6,6 @@ specifically tuned for GUI and software screen grounding.
 """
 
 import cv2
-import torch
 import logging
 from PIL import Image
 
@@ -50,6 +49,7 @@ class LocateAnythingDetector:
                 except ImportError:
                     from transformers import AutoModel as AutoVisionModel
 
+            import torch
             self._processor = AutoProcessor.from_pretrained(self.model_id, revision="main")  # nosec B615
             self._model = AutoVisionModel.from_pretrained(  # nosec B615
                 self.model_id,
@@ -75,6 +75,7 @@ class LocateAnythingDetector:
             try:
                 rgb = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2RGB)
                 image = Image.fromarray(rgb)
+                import torch
                 inputs = self._processor(images=image, text=prompt, return_tensors="pt").to(self.device)
                 with torch.no_grad():
                     outputs = self._model.generate(**inputs, max_new_tokens=128)

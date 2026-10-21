@@ -10,6 +10,7 @@ import '../core/constants.dart';
 
 class BackendManager {
   static Process? _process;
+  static bool _isStarting = false;
   static int _assignedPort = AppConstants.defaultPort;
 
   static const int defaultPort = AppConstants.defaultPort;
@@ -52,10 +53,7 @@ class BackendManager {
           .timeout(const Duration(milliseconds: 1500));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data is Map &&
-            data['status'] == 'ok' &&
-            data.containsKey('local_llm') &&
-            data['meeting_ready'] == true;
+        return data is Map && data['status'] == 'ok';
       }
       return false;
     } catch (_) {
@@ -124,7 +122,26 @@ class BackendManager {
       return;
     }
 
+    if (_isStarting) {
+      debugPrint(
+        'BackendManager.start() is already in progress. Ignoring duplicate invocation.',
+      );
+      return;
+    }
+    _isStarting = true;
+
     try {
+      // First check if an existing backend instance is already healthy
+      for (final port in AppConstants.legacyPorts) {
+        if (await isBackendRunning(port)) {
+          _assignedPort = port;
+          debugPrint(
+            'Backend is already running on port $port. Reusing existing instance.',
+          );
+          return;
+        }
+      }
+
       final appDir = p.dirname(Platform.resolvedExecutable);
       String exePath = '';
 
@@ -354,6 +371,8 @@ class BackendManager {
       });
     } catch (e) {
       debugPrint('Failed to launch backend subprocess: $e');
+    } finally {
+      _isStarting = false;
     }
   }
 
