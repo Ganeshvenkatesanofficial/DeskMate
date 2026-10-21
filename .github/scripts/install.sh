@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # DeskMate macOS 1-Line Installer (Open-Source Edition)
-# Bypasses macOS Gatekeeper quarantine without requiring sudo or root access.
+# Installs directly into /Applications with macOS Gatekeeper bypass.
 # ==============================================================================
 
 set -e
@@ -36,32 +36,12 @@ fi
 ARCH="$(uname -m)"
 echo -e "Detected Architecture: ${BOLD}${ARCH}${NC}"
 
-# 2. Determine Installation Target Directory
-if [ -w "/Applications" ]; then
-  APP_DIR="/Applications"
-  TARGET_APP="$APP_DIR/DeskMate.app"
-else
-  # On macOS Sequoia, ~/Applications can inherit com.apple.provenance which blocks dyld.
-  # If provenance exists on ~/Applications, install directly to $HOME/DeskMate.app.
-  if xattr -l "$HOME/Applications" 2>/dev/null | grep -q "com.apple.provenance"; then
-    APP_DIR="$HOME"
-    TARGET_APP="$HOME/DeskMate.app"
-  else
-    APP_DIR="$HOME/Applications"
-    mkdir -p "$APP_DIR"
-    TARGET_APP="$APP_DIR/DeskMate.app"
-  fi
-fi
-
-echo -e "Installation Destination: ${BOLD}${TARGET_APP}${NC}"
-
-# 3. Terminate any currently running DeskMate instances
+# 2. Terminate any currently running DeskMate instances
+echo "Checking for running instances..."
 killall -9 DeskMate 2>/dev/null || true
 
-# 4. Check for existing local build or download from GitHub
+# 3. Check for existing local build or download from GitHub
 REPO="Ganeshvenkatesanofficial/DeskMate"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/DeskMate-macOS.zip"
-
 TMP_DIR="$(mktemp -d /tmp/deskmate_install_XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -81,11 +61,11 @@ for CANDIDATE in \
   fi
 done
 
+SOURCE_APP=""
+
 if [ -n "$LOCAL_APP_CANDIDATE" ]; then
   echo -e "${YELLOW}Found local build in repository: ${LOCAL_APP_CANDIDATE}${NC}"
-  echo "Installing from local build..."
-  rm -rf "$TARGET_APP"
-  cp -R "$LOCAL_APP_CANDIDATE" "$APP_DIR/"
+  SOURCE_APP="$LOCAL_APP_CANDIDATE"
 else
   echo -e "Checking for latest release package from GitHub..."
   DOWNLOADED_FILE=""
@@ -129,15 +109,14 @@ else
     fi
   fi
 
-  # Install from downloaded file
+  # Extract / Mount source app
   if [ -n "$DOWNLOADED_FILE" ] && [ -f "$DOWNLOADED_FILE" ]; then
     if [[ "$DOWNLOADED_FILE" == *.dmg ]]; then
       echo "Mounting disk image: $DOWNLOADED_FILE ..."
       MOUNT_DIR=$(hdiutil attach "$DOWNLOADED_FILE" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
       if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
-        echo "Copying DeskMate.app to $APP_DIR..."
-        rm -rf "$TARGET_APP"
-        cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
+        cp -R "$MOUNT_DIR/DeskMate.app" "$TMP_DIR/DeskMate.app"
+        SOURCE_APP="$TMP_DIR/DeskMate.app"
       fi
       hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
     elif [[ "$DOWNLOADED_FILE" == *.zip ]]; then
@@ -148,25 +127,67 @@ else
       NESTED_DMG="$(find "$TMP_DIR" -maxdepth 3 -name "DeskMate*.dmg" -type f 2>/dev/null | head -n 1)"
 
       if [ -n "$NESTED_APP" ] && [ -d "$NESTED_APP" ]; then
-        echo "Copying DeskMate.app to $TARGET_APP..."
-        rm -rf "$TARGET_APP"
-        cp -R "$NESTED_APP" "$TARGET_APP"
+        SOURCE_APP="$NESTED_APP"
       elif [ -n "$NESTED_DMG" ] && [ -f "$NESTED_DMG" ]; then
         MOUNT_DIR=$(hdiutil attach "$NESTED_DMG" -nobrowse -readonly | grep "/Volumes" | awk -F'\t' '{print $NF}' | head -n 1)
         if [ -d "$MOUNT_DIR/DeskMate.app" ]; then
-          rm -rf "$TARGET_APP"
-          cp -R "$MOUNT_DIR/DeskMate.app" "$APP_DIR/"
+          cp -R "$MOUNT_DIR/DeskMate.app" "$TMP_DIR/DeskMate.app"
+          SOURCE_APP="$TMP_DIR/DeskMate.app"
         fi
         hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true
       fi
     fi
   fi
+fi
 
-  if [ ! -d "$TARGET_APP" ]; then
-    echo -e "${RED}Error: Could not install DeskMate.${NC}"
-    echo "Please ensure the GitHub Actions build on 'main' has completed or download DeskMate-macOS.dmg into ~/Downloads."
-    exit 1
+if [ -z "$SOURCE_APP" ] || [ ! -d "$SOURCE_APP" ]; then
+  echo -e "${RED}Error: Could not locate DeskMate.app to install.${NC}"
+  echo "Please ensure the GitHub Actions build has completed or download DeskMate-macOS.dmg into ~/Downloads."
+  exit 1
+fi
+
+# 4. Copy to /Applications
+TARGET_APP="/Applications/DeskMate.app"
+echo "Installing DeskMate directly to ${BOLD}${TARGET_APP}${NC}..."
+
+INSTALLED=0
+
+# Step A: Check if directly writable
+if touch /Applications/.test_dm_write 2>/dev/null; then
+  rm -f /Applications/.test_dm_write
+  rm -rf "$TARGET_APP"
+  cp -R "$SOURCE_APP" /Applications/
+  INSTALLED=1
+fi
+
+# Step B: Check if member of admin group
+if [ "$INSTALLED" -ne 1 ] && id -Gn 2>/dev/null | grep -qw "admin"; then
+  newgrp admin << EOF 2>/dev/null
+rm -rf /Applications/DeskMate.app
+cp -R "$SOURCE_APP" /Applications/
+EOF
+  if [ -d "$TARGET_APP" ]; then
+    INSTALLED=1
   fi
+fi
+
+# Step C: Elevate with standard macOS authorization dialog if needed
+if [ "$INSTALLED" -ne 1 ]; then
+  echo -e "${YELLOW}Administrator authorization requested to place DeskMate in /Applications...${NC}"
+  if command -v osascript >/dev/null 2>&1; then
+    if osascript -e "do shell script \"rm -rf /Applications/DeskMate.app && cp -R '$SOURCE_APP' /Applications/ && chmod -R u+rwX,go+rX /Applications/DeskMate.app\" with prompt \"DeskMate Installer needs administrator privileges to copy DeskMate to your Applications folder:\" with administrator privileges" 2>/dev/null; then
+      INSTALLED=1
+    fi
+  fi
+fi
+
+# Fallback to ~/Applications if all above failed
+if [ "$INSTALLED" -ne 1 ] || [ ! -d "$TARGET_APP" ]; then
+  echo -e "${YELLOW}Could not write to /Applications. Installing to ~/Applications instead...${NC}"
+  mkdir -p "$HOME/Applications"
+  TARGET_APP="$HOME/Applications/DeskMate.app"
+  rm -rf "$TARGET_APP"
+  cp -R "$SOURCE_APP" "$HOME/Applications/"
 fi
 
 # 5. Strip Gatekeeper Quarantine Attributes
@@ -175,14 +196,19 @@ xattr -cr "$TARGET_APP" 2>/dev/null || true
 
 # 6. Ensure proper binary permissions
 echo "Setting executable permissions..."
+chmod -R u+rwX,go+rX "$TARGET_APP" 2>/dev/null || true
 chmod +x "$TARGET_APP/Contents/MacOS/DeskMate" 2>/dev/null || true
 find "$TARGET_APP/Contents" -type f -name "deskmate_backend" -exec chmod +x {} + 2>/dev/null || true
+find "$TARGET_APP/Contents" -type f -name "macos_audio_capture" -exec chmod +x {} + 2>/dev/null || true
 
 # 7. Apply local ad-hoc signature to satisfy macOS Sequoia dyld
 echo "Signing application bundle locally..."
 codesign --force --deep --sign - "$TARGET_APP" 2>/dev/null || true
 
-# 8. Launch DeskMate
+# 8. Refresh Finder view
+killall Finder 2>/dev/null || true
+
+# 9. Launch DeskMate
 echo -e "${GREEN}${BOLD}✔ DeskMate installed successfully to ${TARGET_APP}!${NC}"
 echo "Launching DeskMate..."
 open "$TARGET_APP"
