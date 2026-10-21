@@ -327,6 +327,9 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _buildStatusCard(ChatProvider provider, ThemeData theme) {
     final isOnline = provider.isBackendOnline;
+    final backendColor = isOnline
+        ? theme.successFg
+        : (provider.isConnecting ? theme.attentionFg : theme.dangerFg);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -357,41 +360,14 @@ class _SidebarState extends State<Sidebar> {
                   height: 22,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color:
-                        (isOnline
-                                ? theme.successFg
-                                : (provider.isConnecting
-                                      ? theme.accentFg
-                                      : theme.dangerFg))
-                            .withValues(alpha: 0.12),
+                    color: backendColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color:
-                          (isOnline
-                                  ? theme.successFg
-                                  : (provider.isConnecting
-                                        ? theme.accentFg
-                                        : theme.dangerFg))
-                              .withValues(alpha: 0.35),
+                      color: backendColor.withValues(alpha: 0.35),
                       width: 0.8,
                     ),
                   ),
-                  child: provider.isConnecting
-                      ? SizedBox(
-                          width: 11,
-                          height: 11,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.6,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              theme.accentFg,
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.dns_rounded,
-                          size: 13,
-                          color: isOnline ? theme.successFg : theme.dangerFg,
-                        ),
+                  child: Icon(Icons.dns_rounded, size: 13, color: backendColor),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

@@ -4866,12 +4866,12 @@ RAG_CHUNK_OVERLAP=200
           ),
           _buildMeetingEngineRow(
             theme,
-            icon: Icons.headphones_rounded,
+            icon: Icons.volume_up_rounded,
             color: const Color(0xFF0969DA),
             label: 'macOS Loopback + Mic',
             badge: 'Audio Routing',
             desc:
-                'Simultaneous earphone loopback + microphone capture at native 16,000 Hz Mono PCM.',
+                'Simultaneous speaker loopback + microphone capture at native 16,000 Hz Mono PCM.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -4926,7 +4926,7 @@ RAG_CHUNK_OVERLAP=200
             stepNumber: '3',
             title: 'Control Room Noise with Mic Toggle',
             description:
-                'Use the Mic Active / Mic Muted button in the header:\n• Mic Active (green): User voice is mixed with earphone audio.\n• Mic Muted (orange): Surrounding room chatter and background noise are mathematically zeroed. Attendee audio from earphones continues recording cleanly.',
+                'Use the Mic Active / Mic Muted button in the header:\n• Mic Active (green): User voice is mixed with speaker audio.\n• Mic Muted (orange): Surrounding room chatter and background noise are mathematically zeroed. Attendee audio from speaker continues recording cleanly.',
           ),
           _buildStepCard(
             theme: theme,
@@ -5383,7 +5383,7 @@ RAG_CHUNK_OVERLAP=200
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Captures earphone audio from remote attendees while mathematically blocking ambient room noise when muted.',
+                        'Captures speaker audio from remote attendees while mathematically blocking ambient room noise when muted.',
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.4,
@@ -5404,7 +5404,7 @@ RAG_CHUNK_OVERLAP=200
             theme,
             '1',
             Icons.router_rounded,
-            'Automated System Audio (Earphone Loopback)',
+            'Automated System Audio (Speaker Loopback)',
             const Color(0xFF0969DA),
           ),
           const SizedBox(height: 8),
@@ -5413,7 +5413,7 @@ RAG_CHUNK_OVERLAP=200
             icon: Icons.settings_input_composite_rounded,
             title: 'Virtual Loopback Devices',
             desc:
-                'DeskMate scans for BlackHole 2ch, Loopback (Rogue Amoeba), or custom Aggregate Devices to capture system/earphone audio.',
+                'DeskMate scans for BlackHole 2ch, Loopback (Rogue Amoeba), or custom Aggregate Devices to capture system/speaker audio.',
           ),
           _buildMeetingInfoCard(
             theme,
@@ -5455,7 +5455,7 @@ RAG_CHUNK_OVERLAP=200
                   theme,
                   isActive: true,
                   label: 'Mic Active',
-                  badge: 'Earphones + Microphone',
+                  badge: 'Speaker + Microphone',
                   desc:
                       'User speech is recorded and diarized alongside remote attendee audio.',
                 ),
@@ -5464,7 +5464,7 @@ RAG_CHUNK_OVERLAP=200
                   theme,
                   isActive: false,
                   label: 'Mic Muted',
-                  badge: 'Earphone Audio Only',
+                  badge: 'Speaker Audio Only',
                   desc:
                       'Microphone buffer frames are zeroed at hardware level. Room chatter, background music, and echo CANNOT enter the recording.',
                 ),

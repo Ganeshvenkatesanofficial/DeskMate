@@ -4,6 +4,8 @@ abstract final class AppConstants {
   static const int defaultPort = 2026;
   static const List<int> legacyPorts = [8080, 2026, 8000];
   static const String defaultHost = '127.0.0.1';
+  static const String ollamaHost = '$defaultHost:11434';
+  static const String ollamaUrl = 'http://$ollamaHost';
 
   static String urlFor(int port) => 'http://$defaultHost:$port';
   static String get defaultUrl => urlFor(defaultPort);

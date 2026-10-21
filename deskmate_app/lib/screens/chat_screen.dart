@@ -2553,66 +2553,127 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           if (provider.isConnecting)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-              decoration: BoxDecoration(
-                color: theme.accentFg.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: theme.accentFg.withValues(alpha: 0.22),
-                  width: 1,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 11,
                 ),
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.8,
-                      valueColor: AlwaysStoppedAnimation<Color>(theme.accentFg),
-                    ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: theme.isDark
+                        ? const [Color(0xFF0F172A), Color(0xFF1E1B4B)]
+                        : const [Color(0xFFEEF2FF), Color(0xFFFAF5FF)],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      provider.engineStatusMessage,
-                      style: TextStyle(
-                        color: theme.fgDefault,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12.5,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: const Color(
+                      0xFF818CF8,
+                    ).withValues(alpha: theme.isDark ? 0.9 : 0.6),
+                    width: 1.4,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.indigo.withValues(
+                        alpha: theme.isDark ? 0.45 : 0.2,
+                      ),
+                      blurRadius: 20,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.indigo.withValues(alpha: 0.15),
+                      ),
+                      child: const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppTheme.indigo,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.accentFg.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
+                    const SizedBox(width: 13),
+                    Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.schedule_rounded,
-                          size: 11,
-                          color: theme.accentFg,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'STARTING LOCAL AI ENGINE',
+                              style: TextStyle(
+                                color: theme.isDark
+                                    ? Colors.white
+                                    : const Color(0xFF4F46E5),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11.5,
+                                letterSpacing: 0.9,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppTheme.indigo, Color(0xFF8B5CF6)],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.indigo.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                '${provider.initElapsedSeconds}s',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(height: 2),
                         Text(
-                          '${provider.initElapsedSeconds}s',
+                          provider.engineStatusMessage,
                           style: TextStyle(
-                            color: theme.accentFg,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
+                            color: theme.isDark
+                                ? const Color(0xFFCBD5E1)
+                                : theme.fgMuted,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 11.5,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             )
           else if (!provider.isBackendOnline)

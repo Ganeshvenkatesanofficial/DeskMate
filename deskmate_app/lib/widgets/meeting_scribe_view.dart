@@ -963,314 +963,290 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     ThemeData theme,
     ChatProvider provider,
   ) {
+    bool isRechecking = false;
+    String? inDialogStatus;
+
     showBlurredDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: theme.bgSubtle,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: theme.attentionFg.withValues(alpha: 0.4)),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.attentionFg.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: theme.bgSubtle,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: theme.attentionFg.withValues(alpha: 0.4)),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.attentionFg.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.psychology_alt_rounded,
+                  color: theme.attentionFg,
+                  size: 24,
+                ),
               ),
-              child: Icon(
-                Icons.psychology_alt_rounded,
-                color: theme.attentionFg,
-                size: 24,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'AI Engine & Model Required',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DeskMate Meeting Scribe requires active AI capabilities to transcribe dialogue with Voxtral 4B, process on-screen milestones, and generate executive reports. Please resolve the status below:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.fgDefault,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 1. Backend & Ollama Service Status Card
+                  if (!provider.isBackendOnline)
+                    _buildAiStatusCard(
+                      theme: theme,
+                      color: theme.dangerFg,
+                      icon: provider.isConnecting
+                          ? Icons.hourglass_top_rounded
+                          : Icons.cancel_rounded,
+                      title: provider.isConnecting
+                          ? 'Backend AI Engine: Starting...'
+                          : 'Backend AI Engine: Offline',
+                      subtitle: provider.isConnecting
+                          ? 'Starting local engine runtime on port ${provider.backendPort}'
+                          : 'DeskMate local Python service is unreachable on port ${provider.backendPort}.',
+                    )
+                  else if (!provider.isLocalLlmOnline)
+                    _buildAiStatusCard(
+                      theme: theme,
+                      color: theme.attentionFg,
+                      icon: Icons.cancel_rounded,
+                      title: 'Local Ollama: Offline',
+                      subtitle:
+                          'Ensure the Ollama application or `ollama serve` is running.',
+                    )
+                  else
+                    _buildAiStatusCard(
+                      theme: theme,
+                      color: theme.successFg,
+                      icon: Icons.check_circle_rounded,
+                      title: 'Local Ollama: Online & Ready',
+                      subtitle:
+                          'Connected at ${AppConstants.ollamaHost} with active socket',
+                    ),
+                  const SizedBox(height: 10),
+
+                  // 2. Reasoning / Chat Model Status Card
+                  _buildAiStatusCard(
+                    theme: theme,
+                    color: provider.availableLocalModels.isNotEmpty
+                        ? theme.successFg
+                        : theme.attentionFg,
+                    icon: provider.availableLocalModels.isNotEmpty
+                        ? Icons.check_circle_rounded
+                        : Icons.warning_amber_rounded,
+                    title: provider.availableLocalModels.isNotEmpty
+                        ? 'Reasoning LLM: ${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : provider.availableLocalModels.first}'
+                        : 'Reasoning LLM: Missing in Ollama',
+                    subtitle: provider.availableLocalModels.isNotEmpty
+                        ? '${provider.availableLocalModels.length} local text/chat models detected'
+                        : 'Run `ollama run qwen2.5-coder:1.5b` in terminal to pull a fast 1.5B model.',
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 3. Visual Intelligence Status Card
+                  _buildAiStatusCard(
+                    theme: theme,
+                    color: provider.isVisionActive
+                        ? theme.successFg
+                        : theme.attentionFg,
+                    icon: provider.isVisionActive
+                        ? Icons.check_circle_rounded
+                        : Icons.visibility_off_rounded,
+                    title: provider.isVisionActive
+                        ? (provider.useLightweightVision
+                              ? 'Vision: Lightweight Laptop Mode'
+                              : 'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}')
+                        : 'Vision: Inactive',
+                    subtitle: provider.isVisionActive
+                        ? 'Screen OCR capture & keyframe grounding enabled'
+                        : 'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Quick Action: Enable Lightweight Mode if vision inactive
+                  if (!provider.isVisionActive &&
+                      provider.availableLocalModels.isNotEmpty) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.bolt_rounded, size: 16),
+                        label: const Text(
+                          '⚡ Enable Lightweight Laptop Mode & Start',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.teal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () async {
+                          await provider.setUseLightweightVision(true);
+                          if (ctx.mounted) {
+                            Navigator.of(ctx).pop();
+                            _startRecording();
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  // Alternative: Cloud Gemini Key
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_outlined,
+                        size: 14,
+                        color: theme.fgMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Note: Entering a Google Gemini API Key in Settings also enables high-speed cloud multimodal reasoning instantly.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: theme.fgMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (inDialogStatus != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.attentionFg.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.attentionFg.withValues(alpha: 0.35),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: theme.attentionFg,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              inDialogStatus!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: theme.fgDefault,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'AI Engine & Model Required',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: theme.fgDefault,
-                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Cancel', style: TextStyle(color: theme.fgMuted)),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                widget.onOpenSetupGuide?.call(AgentMode.deskMate);
+              },
+              child: const Text('Configure API Keys'),
+            ),
+            ElevatedButton.icon(
+              onPressed: isRechecking
+                  ? null
+                  : () async {
+                      setDialogState(() => isRechecking = true);
+                      await provider.refreshHealthStatus();
+                      if (!ctx.mounted) return;
+
+                      if (provider.isMeetingAiReady) {
+                        Navigator.of(ctx).pop();
+                        _showTopNotification(
+                          'AI Engine & models verified! Starting Meeting Scribe...',
+                        );
+                        _startRecording();
+                      } else {
+                        final String msg = !provider.isBackendOnline
+                            ? (provider.isConnecting
+                                  ? 'Refreshed: Backend engine is still starting...'
+                                  : 'Refreshed: Backend engine is unreachable on port ${provider.backendPort}.')
+                            : (!provider.isLocalLlmOnline
+                                  ? 'Refreshed: Local Ollama is offline at ${AppConstants.ollamaHost}.'
+                                  : 'Refreshed: Reasoning LLM or Gemini key required.');
+                        setDialogState(() {
+                          isRechecking = false;
+                          inDialogStatus = msg;
+                        });
+                        _showTopNotification(msg);
+                      }
+                    },
+              icon: isRechecking
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 16),
+              label: Text(isRechecking ? 'Checking...' : 'Recheck & Start'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.accentFg,
+                foregroundColor: Colors.white,
               ),
             ),
           ],
         ),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'DeskMate Meeting Scribe requires active AI capabilities to transcribe dialogue with Voxtral 4B, process on-screen milestones, and generate executive reports. Please resolve the status below:',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.fgDefault,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // 1. Ollama Service Status Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: provider.isLocalLlmOnline
-                        ? theme.successFg.withValues(alpha: 0.08)
-                        : theme.attentionFg.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: provider.isLocalLlmOnline
-                          ? theme.successFg.withValues(alpha: 0.3)
-                          : theme.attentionFg.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        provider.isLocalLlmOnline
-                            ? Icons.check_circle_rounded
-                            : Icons.cancel_rounded,
-                        color: provider.isLocalLlmOnline
-                            ? theme.successFg
-                            : theme.attentionFg,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              provider.isLocalLlmOnline
-                                  ? 'Local Ollama: Online & Ready'
-                                  : 'Local Ollama: Offline',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                            Text(
-                              provider.isLocalLlmOnline
-                                  ? 'Connected at 127.0.0.1:11434 with active socket'
-                                  : 'Ensure the Ollama application or `ollama serve` is running.',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: theme.fgMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // 2. Reasoning / Chat Model Status Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: provider.availableLocalModels.isNotEmpty
-                        ? theme.successFg.withValues(alpha: 0.08)
-                        : theme.attentionFg.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: provider.availableLocalModels.isNotEmpty
-                          ? theme.successFg.withValues(alpha: 0.3)
-                          : theme.attentionFg.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        provider.availableLocalModels.isNotEmpty
-                            ? Icons.check_circle_rounded
-                            : Icons.warning_amber_rounded,
-                        color: provider.availableLocalModels.isNotEmpty
-                            ? theme.successFg
-                            : theme.attentionFg,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              provider.availableLocalModels.isNotEmpty
-                                  ? 'Reasoning LLM: ${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : provider.availableLocalModels.first}'
-                                  : 'Reasoning LLM: Missing in Ollama',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                            Text(
-                              provider.availableLocalModels.isNotEmpty
-                                  ? '${provider.availableLocalModels.length} local text/chat models detected'
-                                  : 'Run `ollama run qwen2.5-coder:1.5b` in terminal to pull a fast 1.5B model.',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: theme.fgMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // 3. Visual Intelligence Status Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: provider.isVisionActive
-                        ? theme.successFg.withValues(alpha: 0.08)
-                        : theme.attentionFg.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: provider.isVisionActive
-                          ? theme.successFg.withValues(alpha: 0.3)
-                          : theme.attentionFg.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        provider.isVisionActive
-                            ? Icons.check_circle_rounded
-                            : Icons.visibility_off_rounded,
-                        color: provider.isVisionActive
-                            ? theme.successFg
-                            : theme.attentionFg,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              provider.isVisionActive
-                                  ? (provider.useLightweightVision
-                                        ? 'Vision: Lightweight Laptop Mode'
-                                        : 'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}')
-                                  : 'Vision: Inactive',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                            Text(
-                              provider.isVisionActive
-                                  ? 'Screen OCR capture & keyframe grounding enabled'
-                                  : 'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: theme.fgMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Quick Action: Enable Lightweight Mode if vision inactive
-                if (!provider.isVisionActive &&
-                    provider.availableLocalModels.isNotEmpty) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.bolt_rounded, size: 16),
-                      label: const Text(
-                        '⚡ Enable Lightweight Laptop Mode & Start',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () async {
-                        await provider.setUseLightweightVision(true);
-                        if (ctx.mounted) {
-                          Navigator.of(ctx).pop();
-                          _startRecording();
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-
-                // Alternative: Cloud Gemini Key
-                Row(
-                  children: [
-                    Icon(Icons.cloud_outlined, size: 14, color: theme.fgMuted),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Note: Entering a Google Gemini API Key in Settings also enables high-speed cloud multimodal reasoning instantly.',
-                        style: TextStyle(fontSize: 11.5, color: theme.fgMuted),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('Cancel', style: TextStyle(color: theme.fgMuted)),
-          ),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              widget.onOpenSetupGuide?.call(AgentMode.deskMate);
-            },
-            child: const Text('Configure API Keys'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await provider.retryConnecting();
-              if (ctx.mounted) {
-                Navigator.of(ctx).pop();
-                if (provider.isMeetingAiReady) {
-                  _startRecording();
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.accentFg,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Recheck & Start'),
-          ),
-        ],
       ),
     );
   }
@@ -1284,8 +1260,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       });
       _showTopNotification(
         targetMuted
-            ? 'Default Mode: Earphones Only (Mic Muted on Start)'
-            : 'Default Mode: Earphones + Mic (Active)',
+            ? 'Default Mode: Speaker Only (Mic Muted on Start)'
+            : 'Default Mode: Speaker + Mic (Active)',
       );
       return;
     }
@@ -1301,7 +1277,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         _showTopNotification(
           targetMuted
               ? 'Mic Muted — Ambient room noise blocked'
-              : 'Mic Active — Mixed Earphones & Speech',
+              : 'Mic Active — Mixed Speaker & Speech',
         );
       }
     } catch (e) {
@@ -2220,6 +2196,36 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   Widget _buildHeaderBanner(ThemeData theme) {
     final provider = Provider.of<ChatProvider>(context);
+    final isOnline = provider.isBackendOnline;
+    final isConnecting = provider.isConnecting;
+    final hasAi = provider.isLocalLlmOnline || provider.isUsingGemini;
+
+    final String statusLabel;
+    final Color statusColor;
+    final bool showSpinner;
+
+    if (_isRecording) {
+      statusLabel = 'LIVE RECORDING';
+      statusColor = AppTheme.recordingRed;
+      showSpinner = false;
+    } else if (_isStarting || isConnecting) {
+      statusLabel = 'STARTING...';
+      statusColor = theme.attentionFg;
+      showSpinner = true;
+    } else if (!isOnline) {
+      statusLabel = 'OFFLINE';
+      statusColor = theme.dangerFg;
+      showSpinner = false;
+    } else if (!hasAi) {
+      statusLabel = 'SETUP REQUIRED';
+      statusColor = theme.attentionFg;
+      showSpinner = false;
+    } else {
+      statusLabel = 'READY';
+      statusColor = AppTheme.lightSuccessFg;
+      showSpinner = false;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
@@ -2258,37 +2264,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: _isRecording
-                            ? AppTheme.recordingRed.withValues(alpha: 0.12)
-                            : AppTheme.lightSuccessFg.withValues(alpha: 0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _isRecording
-                              ? AppTheme.recordingRed
-                              : AppTheme.lightSuccessFg,
-                          width: 0.8,
-                        ),
+                        border: Border.all(color: statusColor, width: 0.8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_isRecording) ...[
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.recordingRed,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                          ] else if (_isStarting) ...[
-                            const SizedBox(
+                          if (showSpinner) ...[
+                            SizedBox(
                               width: 8,
                               height: 8,
                               child: CircularProgressIndicator(
                                 strokeWidth: 1.5,
-                                color: AppTheme.lightSuccessFg,
+                                color: statusColor,
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -2296,24 +2285,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             Container(
                               width: 6,
                               height: 6,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.lightSuccessFg,
+                              decoration: BoxDecoration(
+                                color: statusColor,
                                 shape: BoxShape.circle,
                               ),
                             ),
                             const SizedBox(width: 5),
                           ],
                           Text(
-                            _isRecording
-                                ? 'LIVE RECORDING'
-                                : (_isStarting ? 'STARTING...' : 'READY'),
+                            statusLabel,
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.4,
-                              color: _isRecording
-                                  ? AppTheme.recordingRed
-                                  : AppTheme.lightSuccessFg,
+                              color: statusColor,
                             ),
                           ),
                         ],
@@ -2532,8 +2517,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         const SizedBox(width: 14),
         Expanded(
           child: Tooltip(
-            message:
-                'Click to toggle between Earphones Only and Earphones + Mic',
+            message: 'Click to toggle between Speaker Only and Speaker + Mic',
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
@@ -2541,18 +2525,65 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 child: _buildMetricTile(
                   theme: theme,
                   title: 'Audio Capture Mode',
-                  value: _isMicMuted ? 'Earphones Only' : 'Earphones + Mic',
-                  icon: _isMicMuted
-                      ? Icons.headset_rounded
-                      : Icons.headset_mic_rounded,
+                  value: _isMicMuted ? 'Speaker Only' : 'Speaker + Mic',
+                  icon: Icons.volume_up_rounded,
                   valueColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
                   iconColor: _isMicMuted ? AppTheme.amber : AppTheme.emerald,
+                  trailing: Icon(
+                    Icons.swap_horiz_rounded,
+                    size: 18,
+                    color: (_isMicMuted ? AppTheme.amber : AppTheme.emerald)
+                        .withValues(alpha: 0.75),
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAiStatusCard({
+    required ThemeData theme,
+    required Color color,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: theme.fgDefault,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11.5, color: theme.fgMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2563,6 +2594,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     required IconData icon,
     Color? valueColor,
     Color? iconColor,
+    Widget? trailing,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2578,21 +2610,35 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
                   style: TextStyle(fontSize: 11, color: theme.fgMuted),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor ?? theme.fgDefault,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: valueColor ?? theme.fgDefault,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (trailing != null) ...[
+                      const SizedBox(width: 8),
+                      trailing,
+                    ],
+                  ],
                 ),
               ],
             ),

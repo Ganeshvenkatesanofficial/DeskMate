@@ -28,7 +28,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isLocalLlmOnline = false;
   EngineStatus _engineStatus = EngineStatus.starting;
   int _initElapsedSeconds = 0;
-  String _engineStatusMessage = 'Starting DeskMate local engine...';
+  String _engineStatusMessage = 'Starting DeskMate local engine';
   Timer? _startupTimer;
   ThemeMode _themeMode = ThemeMode.light;
   AgentMode _mode = AgentMode.deskMate;
@@ -66,6 +66,8 @@ class ChatProvider extends ChangeNotifier {
   }
 
   String get backendUrl => _backendUrl;
+  int get backendPort =>
+      Uri.tryParse(_backendUrl)?.port ?? AppConstants.defaultPort;
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
   bool get isConnecting => _isConnecting;
@@ -376,19 +378,19 @@ class ChatProvider extends ChangeNotifier {
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
     _initElapsedSeconds = 0;
-    _engineStatusMessage = 'Starting DeskMate AI engine...';
+    _engineStatusMessage = 'Starting DeskMate AI engine';
 
     _startupTimer?.cancel();
     final stopwatch = Stopwatch()..start();
     _startupTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _initElapsedSeconds = stopwatch.elapsed.inSeconds;
       if (_initElapsedSeconds < 15) {
-        _engineStatusMessage = 'Starting DeskMate AI engine...';
+        _engineStatusMessage = 'Starting DeskMate AI engine';
       } else if (_initElapsedSeconds < 45) {
-        _engineStatusMessage = 'Binding local port & verifying runtime...';
+        _engineStatusMessage = 'Binding local port & verifying runtime';
       } else {
         _engineStatusMessage =
-            'Loading dependencies & local models (first launch may take 1-2 min)...';
+            'Loading dependencies & local models (first launch may take 1-2 min)';
       }
       notifyListeners();
     });
@@ -458,77 +460,88 @@ class ChatProvider extends ChangeNotifier {
 
   void _startHealthPolling() {
     _healthTimer?.cancel();
-    _healthTimer = Timer.periodic(AppTimeouts.healthPoll, (timer) async {
-      var health = await _apiService.checkHealth();
-      if (health['status'] != 'ok') {
-        for (final candidate in AppConstants.candidateUrls(
-          BackendManager.backendUrl,
-        )) {
-          if (candidate != _backendUrl) {
-            try {
-              final fbService = ApiService(baseUrl: candidate);
-              final fbHealth = await fbService.checkHealth();
-              if (fbHealth['status'] == 'ok') {
-                _backendUrl = candidate;
-                _apiService = fbService;
-                _wsClient = AgentWebSocketClient(baseUrl: candidate);
-                health = fbHealth;
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
-                break;
-              }
-            } catch (_) {}
-          }
+    _healthTimer = Timer.periodic(AppTimeouts.healthPoll, (_) => _pollHealth());
+  }
+
+  Future<void> _pollHealth() async {
+    var health = await _apiService.checkHealth();
+    if (health['status'] != 'ok') {
+      for (final candidate in AppConstants.candidateUrls(
+        BackendManager.backendUrl,
+      )) {
+        if (candidate != _backendUrl) {
+          try {
+            final fbService = ApiService(baseUrl: candidate);
+            final fbHealth = await fbService.checkHealth();
+            if (fbHealth['status'] == 'ok') {
+              _backendUrl = candidate;
+              _apiService = fbService;
+              _wsClient = AgentWebSocketClient(baseUrl: candidate);
+              health = fbHealth;
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
+              break;
+            }
+          } catch (_) {}
         }
       }
+    }
 
-      final bool newBackendOnline = health['status'] == 'ok';
-      bool newLocalLlmOnline = health['local_llm'] == 'online';
+    final bool newBackendOnline = health['status'] == 'ok';
+    bool newLocalLlmOnline = health['local_llm'] == 'online';
 
-      // If backend is offline, check if Ollama runtime itself is online directly
-      if (!newBackendOnline) {
-        try {
-          final ollamaCheck = await http
-              .get(Uri.parse('http://127.0.0.1:11434/api/tags'))
-              .timeout(const Duration(milliseconds: 600));
-          if (ollamaCheck.statusCode == 200) {
-            newLocalLlmOnline = true;
-          }
-        } catch (_) {}
-      }
-
-      final bool oldHasVision = _hasVisionModel;
-      final String oldVisionName = _visionModelName;
-      _updateVisionState(health);
-
-      if (_isBackendOnline != newBackendOnline ||
-          _isLocalLlmOnline != newLocalLlmOnline ||
-          _hasVisionModel != oldHasVision ||
-          _visionModelName != oldVisionName ||
-          _isConnecting) {
-        _isBackendOnline = newBackendOnline;
-        _isLocalLlmOnline = newLocalLlmOnline;
-        _isConnecting = false;
-        if (_isBackendOnline) {
-          _engineStatus = _isLocalLlmOnline
-              ? EngineStatus.ready
-              : EngineStatus.degraded;
-          _errorMessage = '';
-          if (_availableLocalModels.isEmpty) {
-            fetchAvailableModels();
-          }
-          checkFileAgentStatus();
-          checkPersonalAgentStatus();
-        } else {
-          _engineStatus = EngineStatus.failed;
-          _fileAgentHealth = {'status': 'offline'};
-          _personalAgentHealth = {'status': 'offline'};
+    // If backend is offline, check if Ollama runtime itself is online directly
+    if (!newBackendOnline) {
+      try {
+        final ollamaCheck = await http
+            .get(Uri.parse('${AppConstants.ollamaUrl}/api/tags'))
+            .timeout(const Duration(milliseconds: 600));
+        if (ollamaCheck.statusCode == 200) {
+          newLocalLlmOnline = true;
         }
-        notifyListeners();
-      } else if (_isBackendOnline && _fileAgentHealth['status'] == 'offline') {
+      } catch (_) {}
+    }
+
+    final bool oldHasVision = _hasVisionModel;
+    final String oldVisionName = _visionModelName;
+    _updateVisionState(health);
+
+    if (_isBackendOnline != newBackendOnline ||
+        _isLocalLlmOnline != newLocalLlmOnline ||
+        _hasVisionModel != oldHasVision ||
+        _visionModelName != oldVisionName ||
+        _isConnecting) {
+      _isBackendOnline = newBackendOnline;
+      _isLocalLlmOnline = newLocalLlmOnline;
+      _isConnecting = false;
+      if (_isBackendOnline) {
+        _engineStatus = _isLocalLlmOnline
+            ? EngineStatus.ready
+            : EngineStatus.degraded;
+        _errorMessage = '';
+        if (_availableLocalModels.isEmpty) {
+          fetchAvailableModels();
+        }
         checkFileAgentStatus();
+        checkPersonalAgentStatus();
+      } else {
+        _engineStatus = EngineStatus.failed;
+        _fileAgentHealth = {'status': 'offline'};
+        _personalAgentHealth = {'status': 'offline'};
       }
-    });
+      notifyListeners();
+    } else if (_isBackendOnline && _fileAgentHealth['status'] == 'offline') {
+      checkFileAgentStatus();
+    }
+  }
+
+  /// One-shot status check that does not restart the backend.
+  Future<void> refreshHealthStatus() async {
+    await _pollHealth();
+    if (_isBackendOnline) {
+      await fetchAvailableModels();
+    }
+    notifyListeners();
   }
 
   Future<void> retryConnecting() async {
