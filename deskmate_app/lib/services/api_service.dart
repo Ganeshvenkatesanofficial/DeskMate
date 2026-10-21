@@ -94,8 +94,15 @@ class ApiService {
         try {
           final gemini = GeminiService(apiKey: geminiApiKey);
           final reply = await gemini.generateContent(message);
-          return {'reply': reply, 'conversation_id': conversationId ?? ''};
-        } catch (_) {}
+          return {
+            'reply':
+                '_DeskMate\'s local engine is offline, so this answer comes from Gemini directly, '
+                'without access to your Gmail, Calendar, Drive or Tasks._\n\n$reply',
+            'conversation_id': conversationId ?? '',
+          };
+        } catch (_) {
+          // Fall through to the backend error below, which says what is actually wrong.
+        }
       }
       throw Exception('Failed to connect to backend: $e');
     }
@@ -202,6 +209,15 @@ class ApiService {
     }
   }
 
+  /// Opens one Google consent screen (in the browser) for all Google features.
+  Future<Map<String, dynamic>> connectGoogleAccount() {
+    return _postJson(
+      Uri.parse('$baseUrl${ApiPaths.googleConnect}'),
+      {},
+      timeout: AppTimeouts.googleSignIn,
+    );
+  }
+
   /// Fetch SQLite database overview including file path, size, and table summaries
   Future<Map<String, dynamic>> getDatabaseOverview() async {
     return _getJson(
@@ -262,6 +278,7 @@ class ApiService {
     double fps = 2.0,
     bool allowLightweightMode = false,
     bool startMuted = false,
+    String? geminiApiKey,
   }) async {
     final url = Uri.parse('$baseUrl${ApiPaths.meetingStart}');
     return _postJson(url, {
@@ -269,6 +286,8 @@ class ApiService {
       'fps': fps,
       'allow_lightweight_mode': allowLightweightMode,
       'start_muted': startMuted,
+      if (geminiApiKey != null && geminiApiKey.isNotEmpty)
+        'gemini_api_key': geminiApiKey,
     });
   }
 
@@ -282,31 +301,30 @@ class ApiService {
     return _postJson(url, {'muted': muted});
   }
 
+  /// Returns `state: 'unreachable'` when the backend doesn't answer, so a slow
+  /// poll is never mistaken for the meeting having stopped.
   Future<Map<String, dynamic>> getMeetingStatus() async {
     return _getJson(
       ApiPaths.meetingStatus,
-      timeout: AppTimeouts.meetingPoll,
-      fallback: {
-        'state': 'idle',
-        'session_id': null,
-        'uptime_seconds': 0.0,
-        'frames_processed': 0,
-        'events_detected': 0,
-        'steps_count': 0,
-      },
+      timeout: AppTimeouts.restShort,
+      fallback: {'state': 'unreachable'},
     );
   }
 
   Future<Map<String, dynamic>> summarizeMeeting({
     String? sessionId,
     List<Map<String, String>>? customFields,
+    String? geminiApiKey,
   }) async {
     final url = Uri.parse('$baseUrl${ApiPaths.meetingSummarize}');
-    final payload = <String, dynamic>{'session_id': sessionId};
-    if (customFields != null && customFields.isNotEmpty) {
-      payload['custom_fields'] = customFields;
-    }
-    return _postJson(url, payload, timeout: AppTimeouts.restLong);
+    final payload = <String, dynamic>{
+      'session_id': sessionId,
+      if (customFields != null && customFields.isNotEmpty)
+        'custom_fields': customFields,
+      if (geminiApiKey != null && geminiApiKey.isNotEmpty)
+        'gemini_api_key': geminiApiKey,
+    };
+    return _postJson(url, payload, timeout: AppTimeouts.meetingSummarize);
   }
 
   Future<Map<String, dynamic>> syncMeetingTasks({

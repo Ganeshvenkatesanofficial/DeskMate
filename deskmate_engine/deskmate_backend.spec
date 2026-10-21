@@ -100,6 +100,7 @@ packages_to_collect = [
     'soundfile',
     'requests',
     'dotenv',
+    'mistral_common',
 ]
 
 for pkg in packages_to_collect:

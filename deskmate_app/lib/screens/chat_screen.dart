@@ -14,6 +14,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/telemetry_accordion.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/credentials_setup_dialog.dart';
+import '../widgets/google_connect_button.dart';
 import '../widgets/database_explorer_dialog.dart';
 import '../widgets/meeting_scribe_view.dart';
 import '../widgets/circular_close_button.dart';
@@ -49,6 +50,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSavingAllSettings = false;
   String? _googleCredsError;
   final TextEditingController _tempGeminiCtrl = TextEditingController();
+  bool _modelPopupSeeded = false;
+  String _popupSelectedModel = '';
+  bool _popupObscureGemini = true;
   late TextEditingController _backendUrlController;
   late FocusNode _backendUrlFocusNode;
 
@@ -166,17 +170,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _formatAiConfigSummary({
-    required String model,
-    required bool hasGeminiKey,
+    required ChatProvider provider,
     String? oauthMessage,
   }) {
+    final engine = provider.isUsingGemini
+        ? AppConstants.geminiModelLabel
+        : '${provider.effectiveModel} (100% local)';
     if (oauthMessage != null) {
-      return 'Configuration updated: AI Model ($model) + $oauthMessage';
+      return 'Configuration updated: $engine + $oauthMessage';
     }
-    if (hasGeminiKey) {
-      return 'Configuration updated: Gemini Cloud + Model ($model)';
-    }
-    return 'Configuration updated: 100% Offline with Model ($model)';
+    return 'Configuration updated: $engine';
   }
 
   @override
@@ -184,6 +187,10 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _backendUrlFocusNode = FocusNode();
     _backendUrlFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    // Rebuild so the Gemini option appears in the picker while a key is typed.
+    _geminiKeyController.addListener(() {
       if (mounted) setState(() {});
     });
     _geminiKeyFocusNode.addListener(() {
@@ -237,8 +244,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _backendUrlController.text = provider.backendUrl;
     _geminiKeyController.text = provider.geminiApiKey;
-    _settingsSelectedModel = provider.effectiveModel.isNotEmpty
-        ? provider.effectiveModel
+    _settingsSelectedModel = provider.selectedModel.isNotEmpty
+        ? provider.selectedModel
         : null;
     _syncGoogleCredentials(provider.personalCredentials);
     _googleCredsError = null;
@@ -300,6 +307,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final provider = Provider.of<ChatProvider>(context);
     final isDesktop = MediaQuery.of(context).size.width > 900;
     final theme = Theme.of(context);
+    if (!provider.showModelSelectionDialog) _modelPopupSeeded = false;
 
     // Auto-scroll on new messages
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -863,19 +871,26 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  static bool _isGeminiOption(String? m) => m == AppConstants.geminiModelId;
+  static String _modelLabel(String m) =>
+      _isGeminiOption(m) ? AppConstants.geminiModelLabel : m;
+
   Widget _buildAiEngineCard(ChatProvider provider, ThemeData theme) {
     final allModels = List<String>.from(provider.availableLocalModels);
     if (provider.selectedLocalModel.isNotEmpty &&
         !allModels.contains(provider.selectedLocalModel)) {
       allModels.add(provider.selectedLocalModel);
     }
+    if (provider.hasGeminiKey || _geminiKeyController.text.trim().isNotEmpty) {
+      allModels.insert(0, AppConstants.geminiModelId);
+    }
 
     final effectiveModel =
         (_settingsSelectedModel != null &&
             allModels.contains(_settingsSelectedModel))
         ? _settingsSelectedModel
-        : (allModels.contains(provider.selectedLocalModel)
-              ? provider.selectedLocalModel
+        : (allModels.contains(provider.selectedModel)
+              ? provider.selectedModel
               : (allModels.isNotEmpty ? allModels.first : null));
 
     return Container(
@@ -902,22 +917,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     provider.isLocalLlmOnline &&
                     provider.selectedLocalModel.isNotEmpty;
                 final isGemini = provider.isUsingGemini;
-                final activeIcon = isUsingLocal
-                    ? Icons.memory_rounded
-                    : (isGemini
-                          ? Icons.cloud_done_rounded
-                          : Icons.memory_rounded);
-                final activeColor = isUsingLocal
-                    ? theme.statusOk
-                    : (isGemini
-                          ? theme.accentFg
-                          : (provider.isLocalLlmOnline
-                                ? theme.statusOk
-                                : theme.dangerFg));
-                final activeLabel = isUsingLocal
-                    ? 'Active: ${provider.selectedLocalModel} (Offline)'
-                    : (isGemini
-                          ? 'Active: Gemini 1.5 Flash Cloud'
+                final activeIcon = isGemini
+                    ? Icons.cloud_done_rounded
+                    : Icons.memory_rounded;
+                final activeColor = isGemini
+                    ? theme.accentFg
+                    : (provider.isLocalLlmOnline
+                          ? theme.statusOk
+                          : theme.dangerFg);
+                final activeLabel = isGemini
+                    ? 'Active: ${AppConstants.geminiModelLabel}'
+                    : (isUsingLocal
+                          ? 'Active: ${provider.selectedLocalModel} (Local)'
                           : (provider.isLocalLlmOnline
                                 ? 'Active: Local Ollama Model'
                                 : 'Local Ollama: Offline'));
@@ -944,9 +955,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 11),
 
-          // Local Model label
           Text(
-            'Local Model (Ollama)',
+            'AI Model',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -992,16 +1002,20 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Row(
                           children: [
                             Icon(
-                              Icons.memory_rounded,
+                              _isGeminiOption(effectiveModel)
+                                  ? Icons.cloud_outlined
+                                  : Icons.memory_rounded,
                               size: 15,
                               color: effectiveModel != null
-                                  ? const Color(0xFF8250DF)
+                                  ? AppTheme.purplePrimary
                                   : theme.fgMuted,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                effectiveModel ??
+                                (effectiveModel != null
+                                        ? _modelLabel(effectiveModel)
+                                        : null) ??
                                     (provider.isLocalLlmOnline
                                         ? 'No models detected'
                                         : (provider
@@ -1049,13 +1063,13 @@ class _ChatScreenState extends State<ChatScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: allModels.map((m) {
-                              final isOfflineModel = !provider
-                                  .availableLocalModels
-                                  .contains(m);
+                              final isGeminiItem = _isGeminiOption(m);
+                              final isOfflineModel =
+                                  !isGeminiItem &&
+                                  !provider.availableLocalModels.contains(m);
                               final isSel =
                                   (m ==
-                                  (effectiveModel ??
-                                      provider.selectedLocalModel));
+                                  (effectiveModel ?? provider.selectedModel));
                               return Material(
                                 color: isSel
                                     ? theme.accentFg.withValues(alpha: 0.1)
@@ -1079,7 +1093,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                     child: Row(
                                       children: [
                                         Icon(
-                                          Icons.memory_rounded,
+                                          isGeminiItem
+                                              ? Icons.cloud_outlined
+                                              : Icons.memory_rounded,
                                           size: 13,
                                           color: isSel
                                               ? theme.accentFg
@@ -1090,7 +1106,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                           child: Text(
                                             isOfflineModel
                                                 ? '$m (Saved / Offline)'
-                                                : m,
+                                                : _modelLabel(m),
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontFamily: 'monospace',
@@ -1387,6 +1403,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            GoogleConnectButton(
+              onResult: (message, {isError = false}) =>
+                  _showTopNotification(message),
+            ),
           ],
         ],
       ),
@@ -1466,7 +1487,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _isSavingAllSettings = true;
     });
 
-    final modelToSave = _settingsSelectedModel ?? provider.effectiveModel;
+    final modelToSave = _settingsSelectedModel ?? provider.selectedModel;
 
     // 1. Save AI Configuration (Model & Gemini Key)
     await provider.saveAiConfiguration(
@@ -1529,8 +1550,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       FocusScope.of(context).unfocus();
       final summary = _formatAiConfigSummary(
-        model: modelToSave,
-        hasGeminiKey: _geminiKeyController.text.isNotEmpty,
+        provider: provider,
         oauthMessage: oauthMessage,
       );
       _showTopNotification(summary);
@@ -1683,13 +1703,24 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatProvider provider,
     ThemeData theme,
   ) {
-    String tempSelected = provider.effectiveModel;
-    _tempGeminiCtrl.text = provider.geminiApiKey;
-    bool obscureGemini = true;
+    // Seed once per opening; health polling rebuilds this every few seconds.
+    if (!_modelPopupSeeded) {
+      _modelPopupSeeded = true;
+      _popupSelectedModel = provider.selectedModel.isNotEmpty
+          ? provider.selectedModel
+          : provider.effectiveModel;
+      _tempGeminiCtrl.text = provider.geminiApiKey;
+      _popupObscureGemini = true;
+    }
 
     return StatefulBuilder(
       builder: (context, setPopupState) {
-        final hasModels = provider.availableLocalModels.isNotEmpty;
+        final popupOptions = [
+          if (_tempGeminiCtrl.text.trim().isNotEmpty)
+            AppConstants.geminiModelId,
+          ...provider.availableLocalModels,
+        ];
+        final hasModels = popupOptions.isNotEmpty;
         final screenWidth = MediaQuery.of(context).size.width;
 
         return Dialog(
@@ -1818,10 +1849,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       constraints: const BoxConstraints(maxHeight: 180),
                       child: SingleChildScrollView(
                         child: Column(
-                          children: provider.availableLocalModels.map((
-                            modelName,
-                          ) {
-                            final isSelected = tempSelected == modelName;
+                          children: popupOptions.map((modelName) {
+                            final isSelected = _popupSelectedModel == modelName;
                             return MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: Container(
@@ -1848,14 +1877,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                     mouseCursor: SystemMouseCursors.click,
                                     value: modelName,
                                     // ignore: deprecated_member_use
-                                    groupValue: tempSelected,
+                                    groupValue: _popupSelectedModel,
                                     dense: true,
                                     activeColor: theme.accentFg,
                                     title: Row(
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            modelName,
+                                            _modelLabel(modelName),
                                             style: TextStyle(
                                               fontFamily: 'monospace',
                                               fontSize: 12,
@@ -1897,7 +1926,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ],
                                     ),
                                     subtitle: Text(
-                                      _getDynamicModelCapability(modelName),
+                                      _isGeminiOption(modelName)
+                                          ? 'Cloud: fast multimodal, needs internet. Chats and files are sent to Google.'
+                                          : _getDynamicModelCapability(
+                                              modelName,
+                                            ),
                                       style: TextStyle(
                                         fontSize: 10.5,
                                         color: isSelected
@@ -1909,7 +1942,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     onChanged: (val) {
                                       if (val != null) {
                                         setPopupState(() {
-                                          tempSelected = val;
+                                          _popupSelectedModel = val;
                                         });
                                       }
                                     },
@@ -2048,7 +2081,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     height: 38,
                     child: TextField(
                       controller: _tempGeminiCtrl,
-                      obscureText: obscureGemini,
+                      onChanged: (_) => setPopupState(() {}),
+                      obscureText: _popupObscureGemini,
                       style: TextStyle(fontSize: 12.5, color: theme.fgDefault),
                       decoration: InputDecoration(
                         prefixIcon: Icon(
@@ -2059,7 +2093,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         suffixIcon: IconButton(
                           mouseCursor: SystemMouseCursors.click,
                           icon: Icon(
-                            obscureGemini
+                            _popupObscureGemini
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                             size: 15,
@@ -2067,7 +2101,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           onPressed: () {
                             setPopupState(() {
-                              obscureGemini = !obscureGemini;
+                              _popupObscureGemini = !_popupObscureGemini;
                             });
                           },
                         ),
@@ -2116,18 +2150,15 @@ class _ChatScreenState extends State<ChatScreen> {
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
                         onPressed: () async {
-                          final modelToSave = tempSelected.isNotEmpty
-                              ? tempSelected
+                          final modelToSave = _popupSelectedModel.isNotEmpty
+                              ? _popupSelectedModel
                               : provider.effectiveModel;
                           await provider.saveAiConfiguration(
                             model: modelToSave,
                             geminiApiKey: _tempGeminiCtrl.text,
                           );
                           _showTopNotification(
-                            _formatAiConfigSummary(
-                              model: modelToSave,
-                              hasGeminiKey: _tempGeminiCtrl.text.isNotEmpty,
-                            ),
+                            _formatAiConfigSummary(provider: provider),
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -2804,7 +2835,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? 'Edit your message...'
                           : (!provider.isLocalLlmOnline &&
                                 !provider.isUsingGemini)
-                          ? 'Start Ollama locally or configure Gemini API Key in Settings to continue...'
+                          ? (provider.isOllamaWithoutModels
+                                ? 'Ollama has no models yet. Run `ollama pull qwen2.5-coder:1.5b`, or add a Gemini API Key in Settings...'
+                                : 'Start Ollama locally or configure Gemini API Key in Settings to continue...')
                           : provider.mode == AgentMode.personal
                           ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
                           : 'Ask about your files...',
@@ -2826,20 +2859,20 @@ class _ChatScreenState extends State<ChatScreen> {
                         (!provider.isLocalLlmOnline && !provider.isUsingGemini)
                         ? 'Start Ollama locally or configure Gemini in Settings to send messages'
                         : (provider.isSending
-                              ? 'Sending...'
+                              ? 'Stop waiting for this reply'
                               : 'Send message (Enter)'),
                     child: MouseRegion(
                       cursor:
-                          (provider.isSending ||
-                              (!provider.isLocalLlmOnline &&
-                                  !provider.isUsingGemini))
+                          (!provider.isSending &&
+                              !provider.isLocalLlmOnline &&
+                              !provider.isUsingGemini)
                           ? SystemMouseCursors.basic
                           : SystemMouseCursors.click,
                       child: ElevatedButton(
-                        onPressed:
-                            provider.isSending ||
-                                (!provider.isLocalLlmOnline &&
-                                    !provider.isUsingGemini)
+                        onPressed: provider.isSending
+                            ? provider.cancelSending
+                            : (!provider.isLocalLlmOnline &&
+                                  !provider.isUsingGemini)
                             ? null
                             : () => _handleSendMessage(provider),
                         style: ButtonStyle(
@@ -2879,13 +2912,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                         child: provider.isSending
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
+                            ? const Icon(
+                                Icons.stop_rounded,
+                                color: Colors.white,
+                                size: 20,
                               )
                             : const Icon(
                                 Icons.send_rounded,

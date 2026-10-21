@@ -53,13 +53,20 @@ class BackendManager {
           .timeout(const Duration(milliseconds: 1500));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data is Map && data['status'] == 'ok';
+        return data is Map && isDeskMateHealth(data);
       }
       return false;
     } catch (_) {
       return false;
     }
   }
+
+  /// True only for DeskMate's own engine, so another local service that
+  /// happens to answer `/api/health` on 8080 is never adopted.
+  static bool isDeskMateHealth(Map health) =>
+      health['status'] == 'ok' &&
+      health.containsKey('local_llm') &&
+      health.containsKey('app_version');
 
   /// Kill any orphaned or stale background backend instances from previous builds
   static Future<void> killStaleBackendProcesses() async {
@@ -131,17 +138,6 @@ class BackendManager {
     _isStarting = true;
 
     try {
-      // First check if an existing backend instance is already healthy
-      for (final port in AppConstants.legacyPorts) {
-        if (await isBackendRunning(port)) {
-          _assignedPort = port;
-          debugPrint(
-            'Backend is already running on port $port. Reusing existing instance.',
-          );
-          return;
-        }
-      }
-
       final appDir = p.dirname(Platform.resolvedExecutable);
       String exePath = '';
 

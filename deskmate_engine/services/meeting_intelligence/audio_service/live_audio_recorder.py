@@ -26,6 +26,17 @@ logger = logging.getLogger("deskmate.audio_recorder")
 
 SAMPLE_RATE = 16000  # Voxtral native target rate
 CHANNELS = 1         # Mono
+# The helper can block on the macOS Screen Recording permission prompt.
+HELPER_READY_TIMEOUT_SECONDS = 8.0
+
+
+def _read_line_with_timeout(stream: Any, timeout: float) -> Optional[str]:
+    """Read one line from a pipe, giving up after `timeout` seconds."""
+    result: list[str] = []
+    reader = threading.Thread(target=lambda: result.append(stream.readline()), daemon=True)
+    reader.start()
+    reader.join(timeout)
+    return result[0].strip() if result else None
 
 
 def _find_macos_helper() -> Optional[str]:
@@ -66,6 +77,9 @@ class LiveAudioRecorder:
         self.sample_rate = sample_rate
         self.is_recording = False
         self.is_muted = False
+        self.system_audio_active = False
+        self.mic_audio_active = False
+        self.warning: str | None = None
 
         # Output paths
         self._output_path: str | None = None
@@ -151,19 +165,22 @@ class LiveAudioRecorder:
                             stderr=subprocess.PIPE,
                             text=True,
                         )
-                        # Wait briefly for helper to confirm READY
-                        ready_line = ""
+                        ready_line = None
                         if self._macos_proc.stdout:
-                            ready_line = self._macos_proc.stdout.readline().strip()
-                        if "READY" in ready_line:
+                            ready_line = _read_line_with_timeout(
+                                self._macos_proc.stdout, HELPER_READY_TIMEOUT_SECONDS
+                            )
+                        if ready_line and "READY" in ready_line:
                             logger.info("macOS native system audio capture started successfully.")
                             system_started = True
                         else:
-                            logger.warning(f"macOS audio helper output: {ready_line}")
-                            system_started = True  # process is running
+                            logger.warning(f"macOS audio helper did not confirm READY (output: {ready_line!r}).")
+                            self._stop_macos_helper()
                     except Exception as e:
                         logger.warning(f"Could not launch macOS audio capture helper: {e}")
                         self._macos_proc = None
+                else:
+                    logger.warning("macOS audio capture helper not found; recording microphone only.")
 
             elif "windows" in current_os:
                 wasapi_dev = self._find_wasapi_loopback_device()
@@ -241,16 +258,50 @@ class LiveAudioRecorder:
                     callback=mic_callback,
                 )
                 self._mic_stream.start()
+                self.mic_audio_active = True
                 self.is_recording = True
                 logger.info(
                     f"LiveAudioRecorder active. System capture: {system_started}, "
                     f"Mic device: {mic_dev}, Mic muted: {self.is_muted}"
                 )
-                return self._output_path
             except Exception as e:
                 logger.error(f"Failed to start microphone stream: {e}")
                 self.is_recording = system_started
-                return self._output_path if system_started else ""
+            finally:
+                self.system_audio_active = system_started
+                self.warning = self._build_warning()
+            return self._output_path if self.is_recording else ""
+
+    def _build_warning(self) -> str | None:
+        is_mac = "darwin" in platform.system().lower()
+        speaker_fix = (
+            "allow Screen Recording for DeskMate in System Settings > Privacy & Security"
+            if is_mac
+            else "check that a speaker or headset output device is active"
+        )
+        if not self.system_audio_active and not self.mic_audio_active:
+            return f"No audio is being recorded. Allow Microphone access and {speaker_fix}."
+        if not self.system_audio_active:
+            if self.is_muted:
+                return f"Speaker audio could not start and the mic is muted, so this recording will be silent. Unmute the mic, or {speaker_fix}."
+            return f"Speaker audio could not start, so only your microphone is recorded. To capture other attendees, {speaker_fix}."
+        if not self.mic_audio_active:
+            return "Microphone could not start, so only speaker audio is recorded. Allow Microphone access for DeskMate."
+        return None
+
+    def _stop_macos_helper(self) -> None:
+        proc = self._macos_proc
+        self._macos_proc = None
+        if not proc:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=2.0)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
     def set_muted(self, muted: bool) -> bool:
         """Toggle microphone mute state in real time."""

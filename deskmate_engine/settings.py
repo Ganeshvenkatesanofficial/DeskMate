@@ -61,8 +61,8 @@ PORT: int = int(os.getenv("PORT", "2026"))
 HOST: str = os.getenv("HOST", "127.0.0.1")
 
 # ─── LLM & AI Model Settings ────────────────────────────────────────────────
-DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-1.5-flash")
-GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-1.5-flash")
+DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-2.5-flash")
+GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
 VOXTRAL_MODEL: str = os.getenv("VOXTRAL_MODEL", "voxtral-mini-latest")
@@ -83,11 +83,31 @@ MAX_RETAINED_SESSIONS: int = int(os.getenv("MAX_RETAINED_SESSIONS", "10"))
 
 # ─── Google Workspace Credentials & Tokens ──────────────────────────────────
 GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-GMAIL_TOKEN_PATH: str = os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json")
-GCAL_TOKEN_PATH: str = os.getenv("GCAL_TOKEN_PATH", "token_gcal.json")
-DRIVE_TOKEN_PATH: str = os.getenv("DRIVE_TOKEN_PATH", "token_drive.json")
-GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+# One token, one consent screen, covering every Google feature DeskMate uses.
+GOOGLE_TOKEN_PATH: str = os.getenv("GOOGLE_TOKEN_PATH", "token_google.json")
+GOOGLE_SCOPES: list[str] = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/tasks",
+]
+# Per-service tokens from older builds; still honoured so nobody signs in again.
+LEGACY_GOOGLE_TOKENS: dict[str, list[str]] = {
+    "gmail": ["token_gmail.json"],
+    "calendar": ["token_gcal.json", "token_calendar.json"],
+    "drive": ["token_drive.json"],
+    "tasks": ["token_tasks.json"],
+}
+
+
+def google_client_credentials() -> tuple[str, str]:
+    """Live client ID/secret: Settings updates os.environ at runtime without a restart."""
+    return (
+        os.environ.get("GOOGLE_CLIENT_ID", "").strip(),
+        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip(),
+    )
 
 
 # ─── Helper Functions ───────────────────────────────────────────────────────

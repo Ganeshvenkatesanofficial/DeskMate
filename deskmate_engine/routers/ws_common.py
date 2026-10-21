@@ -12,9 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 from typing import Any, Callable, Dict, Generator, Optional
-import uuid
 from fastapi import WebSocket, WebSocketDisconnect
 from core.config import generate_conversation_id
+from core.telemetry import friendly_agent_error
 
 logger = logging.getLogger("deskmate.ws")
 
@@ -51,7 +51,7 @@ def _run_generator_in_thread(
         logger.error(f"Error in {agent_name} execution thread: {exc}", exc_info=True)
         loop.call_soon_threadsafe(
             queue.put_nowait,
-            {"type": "error", "error": str(exc)},
+            {"type": "error", "error": friendly_agent_error(exc)},
         )
     finally:
         loop.call_soon_threadsafe(queue.put_nowait, None)  # Sentinel to mark completion

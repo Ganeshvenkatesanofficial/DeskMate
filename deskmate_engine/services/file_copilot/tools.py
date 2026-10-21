@@ -83,6 +83,21 @@ def resolve_target_path(path_str: str | None = None, must_be_dir: bool = False) 
     return p.resolve()
 
 
+_SECRET_FILE_NAMES = {".env", "credentials.json", "id_rsa", "id_ed25519", "id_ecdsa", ".netrc", ".pgpass"}
+_SECRET_DIR_NAMES = {".ssh", ".gnupg", "keychains"}
+
+
+def is_secret_path(path: Path) -> bool:
+    """True for files that hold API keys, OAuth secrets/tokens or SSH keys; their content is never sent to an LLM."""
+    name = path.name.lower()
+    if name in _SECRET_FILE_NAMES or name.startswith(".env.") or (name.startswith("token_") and name.endswith(".json")):
+        return True
+    return any(part.lower() in _SECRET_DIR_NAMES for part in path.parts)
+
+
+SECRET_FILE_REFUSAL = "Refused: '{name}' holds secrets (API keys, tokens or passwords), so DeskMate will not read it."
+
+
 def extract_file_content(path: Path, max_chars: int = 20000) -> str:
     """
     Intelligently extracts readable content based on file type:
@@ -90,6 +105,8 @@ def extract_file_content(path: Path, max_chars: int = 20000) -> str:
     - Images (.png, .jpg, .jpeg, .webp, .bmp, .gif): Analyzes format, dimensions, mode, and metadata using PIL.
     - Text & Code (.txt, .md, .py, .dart, .json, .csv, etc.): Reads text with safe truncation.
     """
+    if is_secret_path(path):
+        return SECRET_FILE_REFUSAL.format(name=path.name)
     ext = path.suffix.lower()
 
     # 1. PDF Documents

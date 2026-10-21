@@ -199,7 +199,7 @@ def db_run_sql_query(query: str, db_url: Optional[str] = "") -> List[Dict[str, A
     normalized = re.sub(r"/\*.*?\*/", " ", clean_query, flags=re.DOTALL)
     normalized = re.sub(r"--[^\n]*", " ", normalized)
     upper = normalized.upper()
-    if not upper.strip().startswith("SELECT"):
+    if not upper.strip().startswith(("SELECT", "WITH")):
         raise ValueError("Error: only SELECT queries are permitted for safety.")
     dangerous = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "REPLACE", "TRUNCATE", "ATTACH", "DETACH"}
     tokens = set(upper.split())
@@ -226,12 +226,15 @@ def db_run_sql_query(query: str, db_url: Optional[str] = "") -> List[Dict[str, A
     else:
         target_path = Path(get_db_path())
 
-    conn = sqlite3.connect(str(target_path))
+    # mode=ro makes SQLite itself reject writes, whatever the keyword filter misses.
+    conn = sqlite3.connect(f"{target_path.resolve().as_uri()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.execute(clean_query)
-        rows = [dict(r) for r in cursor.fetchall()]
-        return rows
+        return [
+            {k: (f"<{len(v)} bytes>" if isinstance(v, (bytes, bytearray)) else v) for k, v in dict(r).items()}
+            for r in cursor.fetchall()
+        ]
     finally:
         conn.close()
 

@@ -13,7 +13,7 @@ deskmate_engine/
 ├── core/                        # Shared infrastructure layer
 │   ├── config.py                # Cross-platform user data paths, logging & parent watchdog
 │   ├── database.py              # SQLite tasks, memories, notes, and session models
-│   ├── models.py                # Multi-LLM client (Gemini 1.5 Flash & Ollama — Zero Groq)
+│   ├── models.py                # Multi-LLM client (Gemini 2.5 Flash & Ollama — Zero Groq)
 │   └── telemetry.py             # SmolAgents live step streaming & prompt builders
 │
 ├── services/                    # Specialized agent subsystems
@@ -30,7 +30,7 @@ deskmate_engine/
 │       ├── screen_capture.py    # Non-blocking MSS screen frame grabber (2.0 FPS)
 │       ├── live_pipeline.py     # 8-stage real-time computer vision detection pipeline
 │       ├── locate_anything.py   # NVIDIA LocateAnything-3B visual UI grounding (PBD)
-│       ├── summarizer.py        # Multimodal Gemini 1.5 Flash & Ollama reasoning engine
+│       ├── summarizer.py        # Multimodal Gemini 2.5 Flash & Ollama reasoning engine
 │       ├── pdf_generator.py     # Production DeskMate-branded executive FPDF2 layout engine
 │       ├── export_service.py    # Google Drive folder upload & Gmail PDF dispatch
 │       ├── config.py            # Computer vision detection thresholds & margins
@@ -48,11 +48,14 @@ deskmate_engine/
 │       │   ├── step_builder.py          # Chronological numbered step aggregator
 │       │   └── locate_anything.py       # Parallel Box Decoding contour analyzer
 │       │
-│       ├── transcriber/         # Voxtral 4B speech processing subsystem
-│       │   ├── voxtral_service.py       # Voxtral 4B with native speaker diarization (Zero Whisper)
+│       ├── audio_service/       # Audio capture & Voxtral 4B speech processing
+│       │   ├── live_audio_recorder.py   # Speaker (system) + mic capture, mute, audio warnings
+│       │   ├── macos_audio_capture.swift# ScreenCaptureKit system-audio helper (macOS 13+)
+│       │   ├── voxtral_service.py       # Voxtral 4B (local, cache-only) or Mistral API
 │       │   ├── audio_extractor.py       # 16 kHz mono WAV conversion & loudness normalization
-│       │   ├── chunked_transcriber.py   # Multi-chunk segmenter for long audio sessions
-│       │   └── vad.py                   # Voice activity detection & silence filtering
+│       │   └── chunked_transcriber.py   # Multi-chunk segmenter for long audio sessions
+│       ├── screen_capture_service/  # MSS screen grabber
+│       ├── transcriber/         # Backward-compatible aliases → audio_service
 │       │
 │       └── utils/               # Hardware detection & telemetry
 │           ├── hardware_check.py        # Apple Silicon MPS / NVIDIA CUDA / CPU detection
@@ -94,7 +97,7 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
 | Feature / Dimension | 📁 File Explorer Copilot | 👤 Personal Workspace Assistant | 🎙️ Meeting Scribe & Intelligence |
 | :--- | :--- | :--- | :--- |
 | **Primary Domain** | Local filesystem, codebases & repositories | Personal life, emails, calendar, tasks, notes | Real-time meetings, screen events, voice & PDF reports |
-| **LLM Inference** | **Local LLM via Ollama** (`127.0.0.1:11434`) | Cloud LLM (Gemini BYOK) / Built-in | Multimodal Gemini 1.5 Flash / Local Ollama Vision |
+| **LLM Inference** | **Local LLM via Ollama** (`127.0.0.1:11434`) | Cloud LLM (Gemini BYOK) / Built-in | Multimodal Gemini 2.5 Flash / Local Ollama Vision |
 | **Visual Engine** | None | None | **NVIDIA LocateAnything-3B** (Parallel Box Decoding) |
 | **Audio Engine** | None | None | **Voxtral 4B** (Native Speaker Diarization — Zero Whisper) |
 | **Privacy & Air-Gap** | **100% Offline / Air-Gapped** (Zero cloud data) | Authorized Google APIs & DuckDuckGo | Local frame differencing & optional Gemini cloud OCR |
@@ -135,7 +138,7 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
 - **Multimodal Reasoner: 3 Flexible Options**:
   - *Lightweight Laptop Mode (Small Laptops / 8GB–16GB RAM)*: Zero heavy 8GB+ downloads. Uses the active local reasoning model (`qwen2.5-coder:1.5b`, `gpt-oss:20b`) combined with screen OCR + Voxtral diarization to synthesize meeting minutes and action items.
   - *Full Local Offline Mode*: Requires `llama3.2-vision` active in Ollama (`ollama run llama3.2-vision`) for pixel-by-pixel multimodal image reasoning.
-  - *Cloud Mode (Gemini API Key)*: If a Google Gemini API Key is configured in Settings, cloud multimodal reasoning is used natively—`llama3.2-vision` is **NOT required**.
+  - *Cloud Mode (Gemini)*: When **Gemini 2.5 Flash (Cloud)** is selected in Settings, the app sends the key with the request and cloud multimodal reasoning is used—`llama3.2-vision` is **NOT required**. With a local model selected, the key is never sent.
   - Merges visual action chronology, Base64 screenshot OCR details, and diarized Voxtral transcripts.
   - Structured output with strict delimiters (`===SUMMARY===`, `===IMPORTANT_STEPS===`, `===STEP_DESCRIPTIONS===`).
   - Action item extraction with `**[ACTION ITEM]**` and `**[HIGH PRIORITY]**` tags.
@@ -153,7 +156,8 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
 - **Google Workspace Cloud Export & Auto-Retention**:
   - Direct 1-click upload to a `"DeskMate Meetings"` folder in Google Drive.
   - Direct 1-click email dispatch via Gmail API with executive summary in the body and PDF attached.
-  - Automatic post-summarization cleanup of raw JPG frames and session retention management (keeps latest 15 sessions).
+  - Automatic post-summarization cleanup of raw JPG frames and session retention management (keeps latest 10 sessions).
+  - **Single Google sign-in**: one shared token (`token_google.json`, scopes in `settings.GOOGLE_SCOPES`) covers Gmail, Calendar, Drive and Tasks. `POST /api/personal/google/connect` opens the one consent screen; older per-service tokens are still accepted when they cover the service's scopes.
 
 ### Multi-Turn Contextualization & Dynamic Query Rewriting
 All agents utilize DeskMate's **Dynamic Query Rewriter** (`core.telemetry.resolve_contextual_query`):
@@ -163,7 +167,7 @@ All agents utilize DeskMate's **Dynamic Query Rewriter** (`core.telemetry.resolv
 - **Adaptive Fallback Engine**:
   1. Priority 1: Fast local Ollama models (`qwen2.5-coder:1.5b`, `llama3.2:1b/3b`, `phi3:mini`) in <80ms with $0 cost.
   2. Priority 2: Configured / default local Ollama model.
-  3. Priority 3: Gemini Flash (`gemini-1.5-flash`) if an API key is provided.
+  3. Priority 3: Gemini Flash (`gemini-2.5-flash`) when Gemini is the selected engine (the app only sends the key then).
   4. Priority 4: Safe, zero-crash fallback to raw user input if completely offline.
 
 ---
@@ -712,7 +716,7 @@ curl -X POST "http://127.0.0.1:8080/api/meeting/audio/20261019_213000" \
 * **What**: Executes the complete reasoning pipeline:
   1. Resamples and normalizes audio via `AudioExtractor` (-23 LUFS).
   2. Transcribes with speaker diarization via `VoxtralSpeechEngine` & `ChunkedTranscriber`.
-  3. Fuses timeline and Base64 screenshot OCR with Gemini 1.5 Flash / Ollama.
+  3. Fuses timeline and Base64 screenshot OCR with Gemini 2.5 Flash / Ollama.
   4. Generates DeskMate-branded executive PDF (`deskmate_report_{session_id}.pdf`).
   5. Purges heavy raw JPG frames and prunes sessions older than 15.
 

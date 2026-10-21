@@ -35,6 +35,28 @@ _RE_BR_BULLET = re.compile(r"\s*<br\s*/?>\s*•?\s*", re.IGNORECASE)
 _RE_BR_NEWLINE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
 
 
+def friendly_agent_error(exc: BaseException) -> str:
+    """Map raw LLM/tool exceptions to a message the user can act on (details stay in the log)."""
+    text = str(exc)
+    lowered = text.lower()
+    # Messages DeskMate raises itself are already written for users.
+    if isinstance(exc, RuntimeError) and type(exc) is RuntimeError and text:
+        return text
+    if isinstance(exc, FileNotFoundError) or "credentials.json" in lowered:
+        return "Google account is not connected. Open Settings > Google Workspace OAuth and add your Client ID and Secret."
+    if "api key not valid" in lowered or "api_key_invalid" in lowered or "authenticationerror" in lowered:
+        return "The Gemini API key was rejected. Check the key in Settings."
+    if "429" in lowered or "ratelimit" in lowered or "quota" in lowered:
+        return "The AI provider's rate limit or quota was reached. Wait a minute and try again."
+    if "11434" in lowered or ("connection refused" in lowered and "ollama" in lowered):
+        return "Ollama is not running. Start the Ollama app, or add a Gemini API key in Settings."
+    if "not found" in lowered and "model" in lowered:
+        return "The selected model is not installed in Ollama. Pick another model, or pull it with `ollama pull <model>`."
+    if "access_denied" in lowered or "403" in lowered:
+        return "Google blocked the request. Add your Gmail address as a Test user in Google Cloud Console > Google Auth Platform > Audience."
+    return "The assistant hit an unexpected error. Try again; if it keeps happening, check the DeskMate log."
+
+
 def clean_final_answer(raw_answer: str) -> str:
     """Strip prompt remnants, markers, and tool code delimiters from agent output."""
     res_str = str(raw_answer).strip()
@@ -715,7 +737,7 @@ def stream_agent_steps(
         logger.error(f"Error during agent streaming execution: {exc}", exc_info=True)
         err_evt = {
             "type": "error",
-            "error": str(exc),
+            "error": friendly_agent_error(exc),
             "telemetry": collected_steps,
             "timestamp": time.time(),
         }

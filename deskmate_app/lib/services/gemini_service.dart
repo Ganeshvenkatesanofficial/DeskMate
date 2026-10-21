@@ -9,11 +9,11 @@ class GeminiService {
 
   GeminiService({required this.apiKey});
 
-  /// Generates content using Gemini 1.5 Flash model.
+  /// Generates content using Gemini 2.5 Flash model.
   /// Returns the text response from the model.
   Future<String> generateContent(String prompt) async {
     final uri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     );
     final requestBody = jsonEncode({
       'systemInstruction': {

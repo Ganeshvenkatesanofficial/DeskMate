@@ -5,16 +5,16 @@ Fuses screen interaction logs, key screenshot OCR data, and Voxtral 4B
 diarized audio transcripts into an executive report.
 
 Supported Engines:
-  - Google Gemini 1.5 Flash (Default Multimodal Vision Cloud)
+  - Google Gemini 2.5 Flash (Default Multimodal Vision Cloud)
   - Local Ollama (100% Offline Fallback)
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,20 @@ import cv2
 from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
+
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+# Tried in order when the configured model has been retired (HTTP 404).
+GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
+MAX_OLLAMA_CANDIDATES = 2
+GEMINI_AUDIO_CHUNK_SECONDS = 240
+
+
+class NothingToSummarizeError(RuntimeError):
+    """Raised when a session has neither screen steps nor usable speech."""
+
+
+class SummarizationUnavailableError(RuntimeError):
+    """Raised when no AI engine (Gemini or Ollama) could produce a summary."""
 
 
 class MeetingSummarizer:
@@ -85,6 +99,7 @@ class MeetingSummarizer:
         steps: list[dict[str, Any]],
         transcript_data: dict[str, Any] | None = None,
         custom_fields: list[dict[str, str]] | None = None,
+        gemini_api_key: str | None = None,
     ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
         """
         Synthesize session into an executive summary report.
@@ -96,8 +111,15 @@ class MeetingSummarizer:
               - Dict of step descriptions mapping step_id -> {title, description}
               - Dict of custom fields analysis
         """
-        if not steps:
-            return "No visual steps recorded in this meeting to summarize.", [], {}, {}
+        has_audio = bool(
+            transcript_data
+            and (transcript_data.get("segments") or transcript_data.get("full_transcript"))
+        )
+        if not steps and not has_audio:
+            raise NothingToSummarizeError(
+                "Nothing was captured in this meeting: no screen changes and no speech. "
+                "Check Screen Recording and Microphone permission in System Settings > Privacy & Security."
+            )
 
         # 0. Filter out internal DeskMate tool interactions & transient window switches
         clean_steps = [s for s in steps if not self._is_noise_step(s)]
@@ -123,16 +145,16 @@ class MeetingSummarizer:
             if summary_clean.startswith(prefix):
                 summary_clean = summary_clean[len(prefix):]
             timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}\n{action_text}")
-        visual_timeline = "\n\n".join(timeline_blocks)
+        visual_timeline = (
+            "\n\n".join(timeline_blocks)
+            if timeline_blocks
+            else "No screen changes were captured. Build the report from the audio transcript only, and leave ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS=== empty."
+        )
 
         # 2. Format Voxtral transcript with speaker diarization
         audio_section = self._format_transcript(transcript_data)
 
         # 3. Build structured prompt
-        has_audio = bool(
-            transcript_data
-            and (transcript_data.get("segments") or transcript_data.get("full_transcript"))
-        )
         prompt = self._build_prompt(visual_timeline, audio_section, len(effective_steps), custom_fields, has_audio=has_audio)
 
         # 4. Prepare multimodal parts with Base64 screenshot images
@@ -167,8 +189,8 @@ class MeetingSummarizer:
                 except Exception as e:
                     logger.debug(f"Failed to attach screenshot for {s_id}: {e}")
 
-        # 5. Query Gemini 1.5 Flash (or fallback to local Ollama)
-        raw_response = self._query_llm(parts, prompt)
+        # 5. Query Gemini (or fall back to local Ollama)
+        raw_response = self._query_llm(parts, prompt, gemini_api_key or self.gemini_api_key)
 
         # 6. Parse structured blocks
         return self._parse_structured_response(raw_response)
@@ -320,27 +342,127 @@ Relevant code commands, configuration flags, client requests, or operational par
             logger.debug(f"Failed to query Ollama tags: {e}")
         return self.ollama_model
 
-    def _query_llm(self, parts: list[dict[str, Any]], plain_prompt: str) -> str:
-        """Query Gemini 1.5 Flash via REST or fallback to local Ollama."""
-        # 1. Gemini REST
-        if self.gemini_api_key:
+    def _gemini_generate(
+        self, parts: list[dict[str, Any]], api_key: str, timeout: int = 120, temperature: float = 0.2
+    ) -> str | None:
+        """Call Gemini generateContent, moving to newer models when the configured one is retired."""
+        models: list[str] = []
+        for m in (self.gemini_model, *GEMINI_FALLBACK_MODELS):
+            if m and m not in models:
+                models.append(m)
+
+        headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+        body = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": 16384},
+        }
+        for model in models:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent"
-                headers = {"x-goog-api-key": self.gemini_api_key, "Content-Type": "application/json"}
-                req_data = {
-                    "contents": [{"parts": parts}],
-                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 16384},
-                }
-                resp = requests.post(url, json=req_data, headers=headers, timeout=90)
+                resp = requests.post(
+                    f"{GEMINI_API_BASE}/{model}:generateContent",
+                    json=body,
+                    headers=headers,
+                    timeout=timeout,
+                )
+                if resp.status_code == 404:
+                    logger.warning(f"Gemini model '{model}' is unavailable (404). Trying next model.")
+                    continue
                 resp.raise_for_status()
-                res_json = resp.json()
-                candidates = res_json.get("candidates", [])
+                candidates = resp.json().get("candidates", [])
                 if candidates:
                     content_parts = candidates[0].get("content", {}).get("parts", [])
-                    if content_parts:
-                        return "".join(p.get("text", "") for p in content_parts)
+                    text = "".join(p.get("text", "") for p in content_parts)
+                    if text.strip():
+                        if model != self.gemini_model:
+                            self.gemini_model = model
+                        return text
+                return None
             except Exception as e:
-                logger.warning(f"Gemini API request failed: {e}. Falling back to local Ollama.")
+                logger.warning(f"Gemini request with model '{model}' failed: {e}")
+                return None
+        return None
+
+    def transcribe_audio_with_gemini(self, audio_path: str, api_key: str) -> dict[str, Any] | None:
+        """Transcribe a 16 kHz WAV with Gemini, in short chunks to stay under the inline request limit."""
+        try:
+            import soundfile as sf
+
+            data, sr = sf.read(audio_path, dtype="int16")
+            if data.ndim > 1:
+                data = data.mean(axis=1).astype("int16")
+            if len(data) == 0 or not sr:
+                return None
+
+            chunk_len = GEMINI_AUDIO_CHUNK_SECONDS * sr
+            segments: list[dict[str, Any]] = []
+            failed_chunks = 0
+            for offset in range(0, len(data), chunk_len):
+                chunk = data[offset : offset + chunk_len]
+                if not chunk.any():
+                    continue
+                buf = io.BytesIO()
+                sf.write(buf, chunk, sr, format="WAV", subtype="PCM_16")
+                offset_s = offset / float(sr)
+                parts = [
+                    {
+                        "text": (
+                            "Transcribe this meeting audio. Identify different speakers as "
+                            '"Speaker 1", "Speaker 2", etc. Return ONLY a JSON array: '
+                            '[{"start": seconds, "end": seconds, "speaker": "Speaker 1", "text": "..."}]. '
+                            "Times are seconds from the start of this clip. Return [] if there is no speech."
+                        )
+                    },
+                    {"inlineData": {"mimeType": "audio/wav", "data": base64.b64encode(buf.getvalue()).decode("utf-8")}},
+                ]
+                raw = self._gemini_generate(parts, api_key, timeout=180, temperature=0.0)
+                if not raw:
+                    # Keep the chunks that already worked; one bad chunk must not lose them.
+                    failed_chunks += 1
+                    logger.warning(f"Gemini returned nothing for audio chunk at {offset_s:.0f}s; skipping it.")
+                    continue
+                try:
+                    items = json.loads(self._strip_code_fences(raw))
+                except Exception:
+                    items = [{"start": 0.0, "end": len(chunk) / float(sr), "speaker": "Speaker 1", "text": raw.strip()}]
+                for it in items if isinstance(items, list) else []:
+                    if not isinstance(it, dict):
+                        continue
+                    text = str(it.get("text", "")).strip()
+                    if not text:
+                        continue
+                    try:
+                        start = float(it.get("start", 0.0) or 0.0)
+                        end = float(it.get("end", 0.0) or 0.0)
+                    except (TypeError, ValueError):
+                        start, end = 0.0, len(chunk) / float(sr)
+                    segments.append({
+                        "start": round(offset_s + start, 2),
+                        "end": round(offset_s + end, 2),
+                        "speaker": str(it.get("speaker") or "Speaker 1"),
+                        "text": text,
+                    })
+
+            if not segments and failed_chunks:
+                return None
+            return {
+                "full_transcript": " ".join(s["text"] for s in segments),
+                "segments": segments,
+                "duration_seconds": round(len(data) / float(sr), 2),
+                "language": "en",
+                "engine": f"gemini:{self.gemini_model}",
+            }
+        except Exception as e:
+            logger.warning(f"Gemini audio transcription failed: {e}")
+            return None
+
+    def _query_llm(self, parts: list[dict[str, Any]], plain_prompt: str, api_key: str | None = None) -> str:
+        """Query Gemini via REST, falling back to local Ollama."""
+        # 1. Gemini REST
+        if api_key:
+            text = self._gemini_generate(parts, api_key)
+            if text:
+                return text
+            logger.warning("Gemini did not return a summary. Falling back to local Ollama.")
 
         # 2. Local Ollama fallback
         candidates: list[str] = []
@@ -357,7 +479,7 @@ Relevant code commands, configuration flags, client requests, or operational par
         except Exception:
             pass
 
-        for active_model in candidates:
+        for active_model in candidates[:MAX_OLLAMA_CANDIDATES]:
             try:
                 res = requests.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
@@ -381,8 +503,11 @@ Relevant code commands, configuration flags, client requests, or operational par
             except Exception as oe:
                 logger.warning(f"Local Ollama generation error with model '{active_model}': {oe}. Trying next candidate...")
 
-        logger.error("All summarization engines failed (Gemini and all Ollama models). Returning empty result.")
-        return "===SUMMARY===\n### Summarization Unavailable\nBoth Gemini and Ollama engines failed. Configure GEMINI_API_KEY or ensure Ollama is running locally.\n===IMPORTANT_STEPS===\n[]\n===STEP_DESCRIPTIONS===\n{}"
+        logger.error("All summarization engines failed (Gemini and Ollama).")
+        raise SummarizationUnavailableError(
+            "No AI engine could write the report. Start Ollama with a chat model, or add a valid Gemini API key "
+            "in Settings, then press Retry summary. Your recording is saved."
+        )
 
     @staticmethod
     def _strip_code_fences(text: str) -> str:

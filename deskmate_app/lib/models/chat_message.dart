@@ -40,16 +40,19 @@ class AgentStepTelemetry {
 
   factory AgentStepTelemetry.fromJson(Map<String, dynamic> json) =>
       AgentStepTelemetry(
-        step: json['step'] as int? ?? 1,
-        phase: json['phase'] as String? ?? 'status',
-        tool: json['tool'] as String?,
-        arguments: json['arguments'] != null
-            ? Map<String, dynamic>.from(json['arguments'] as Map)
-            : null,
-        summary: json['summary'] as String?,
-        rawOutput: json['raw_output'] as String?,
-        title: json['title'] as String?,
-        durationMs: json['duration_ms'] as int?,
+        step: (json['step'] as num?)?.toInt() ?? 1,
+        phase: json['phase']?.toString() ?? 'status',
+        tool: json['tool']?.toString(),
+        arguments: switch (json['arguments']) {
+          final Map m => Map<String, dynamic>.from(m),
+          null => null,
+          // Agents sometimes emit raw (unparsed) tool arguments as a string.
+          final other => {'raw': other.toString()},
+        },
+        summary: json['summary']?.toString(),
+        rawOutput: json['raw_output']?.toString(),
+        title: json['title']?.toString(),
+        durationMs: (json['duration_ms'] as num?)?.toInt(),
         timestamp: json['timestamp'] != null
             ? DateTime.tryParse(json['timestamp'].toString())
             : null,

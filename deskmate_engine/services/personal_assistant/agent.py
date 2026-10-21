@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import textwrap
 import time
@@ -22,7 +21,8 @@ from core.config import base_dir, generate_conversation_id, get_user_data_dir
 from core.database import check_database_health
 from core.models import get_model
 from core.telemetry import build_chat_prompt, clean_final_answer, stream_agent_steps
-from services.personal_assistant.tools import ALL_PERSONAL_TOOLS
+from services.personal_assistant.tools import ALL_PERSONAL_TOOLS, google_connection_status
+from settings import google_client_credentials
 
 PERSONAL_AGENT_SYSTEM_PROMPT = textwrap.dedent("""\
 You are DeskMate Personal Assistant — an AI copilot for the user's digital productivity.
@@ -193,7 +193,8 @@ def is_genuine_credential(val: Optional[str]) -> bool:
 def check_personal_health() -> dict[str, Any]:
     """Check availability of Google OAuth tokens, credentials file, and database services."""
     user_data_dir = get_user_data_dir()
-    has_env_creds = is_genuine_credential(os.getenv("GOOGLE_CLIENT_ID")) and is_genuine_credential(os.getenv("GOOGLE_CLIENT_SECRET"))
+    env_id, env_secret = google_client_credentials()
+    has_env_creds = is_genuine_credential(env_id) and is_genuine_credential(env_secret)
     has_creds_file = False
     for p in [user_data_dir / "credentials.json", base_dir.parent / "credentials.json", base_dir / "credentials.json"]:
         if p.exists():
@@ -207,28 +208,20 @@ def check_personal_health() -> dict[str, Any]:
                 logger.debug(f"Failed to parse credentials file {p}: {e}")
 
     has_creds = has_env_creds or has_creds_file
-    has_gmail = (user_data_dir / "token_gmail.json").exists()
-    has_cal = (user_data_dir / "token_gcal.json").exists() or (user_data_dir / "token_calendar.json").exists()
-    has_drive = (user_data_dir / "token_drive.json").exists()
-    has_tasks = (user_data_dir / "token_tasks.json").exists()
+    connected = google_connection_status()
 
     checks = {
         "google_credentials_file": has_creds,
-        "gmail_token": has_gmail,
-        "calendar_token": has_cal,
-        "drive_token": has_drive,
-        "tasks_token": has_tasks,
+        "gmail_token": connected["gmail"],
+        "calendar_token": connected["calendar"],
+        "drive_token": connected["drive"],
+        "tasks_token": connected["tasks"],
     }
 
     return {
         "status": "online",
         "checks": checks,
-        "google_workspace": {
-            "gmail": has_gmail,
-            "calendar": has_cal,
-            "drive": has_drive,
-            "tasks": has_tasks,
-        },
+        "google_workspace": connected,
         "database": {
             "sqlite": check_database_health(),
         },

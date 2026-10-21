@@ -167,7 +167,7 @@ graph TD
         MS --> Screen[ScreenCapture - MSS 2.0 FPS]
         MS --> CV8[8-Stage CV Detection & LocateAnything-3B]
         MS --> Vox[Voxtral 4B Diarized Speech - Zero Whisper]
-        MS --> Sum[Multimodal Gemini 1.5 Flash / Ollama]
+        MS --> Sum[Multimodal Gemini 2.5 Flash / Ollama]
         MS --> PDF[DeskMate Executive PDF Engine]
         MS --> CloudSync[Google Drive Upload & Gmail Dispatch]
 
@@ -248,7 +248,13 @@ Meeting Scribe supports three flexible operational modes to accommodate any hard
 2. **Full Local Vision Mode (High-spec machines with 16GB+ RAM / Dedicated GPU)**:
    - Uses local `llama3.2-vision` in Ollama (`ollama run llama3.2-vision`) for end-to-end pixel and chart understanding.
 3. **Google Gemini Cloud Vision (Zero Local RAM)**:
-   - Uses `gemini-1.5-flash` in Google Cloud for ultra-fast, zero-memory multimodal reasoning with your own API key.
+   - Uses `gemini-2.5-flash` in Google Cloud for ultra-fast, zero-memory multimodal reasoning with your own API key.
+   - Active only when **Gemini 2.5 Flash (Cloud)** is picked in **Settings → AI Model**. Picking a local Ollama model keeps chats, files and meetings 100% on your machine, even if a Gemini key is saved.
+
+### 🎙️ Speech Transcription
+- **Gemini selected**: speech is transcribed by Gemini (no download).
+- **Local Voxtral 4B**: fully offline after a one-time ~9 GB model download; used automatically with a local model.
+- **Neither**: the report uses screen activity only, and DeskMate says so.
 
 ### 🔐 Google Workspace Setup (Personal Agent: Gmail, Calendar, Drive & Tasks)
 To connect your personal Google Workspace with DeskMate:
@@ -257,7 +263,8 @@ To connect your personal Google Workspace with DeskMate:
 3. **Add Test Users (Mandatory)**: Under **Audience** ➔ **Test users**, click **+ Add Users** and add your Google account. Because unverified apps are in "Testing" mode, Google blocks any login attempt with `Error 403: access_denied` unless your account is listed as a Test User.
 4. **Create OAuth Client ID**: Under **Clients** (or Credentials), click **Create Credentials** ➔ **OAuth client ID**, select **Desktop app**, name it `DeskMate Desktop Client`, and click **Create**.
 5. **Connect to DeskMate**: Either copy your **Client ID** and **Client Secret** directly into DeskMate's **Credentials Setup** dialog, or click **Download JSON**, rename it to `credentials.json`, and place it in the application directory.
-6. For full step-by-step instructions with troubleshooting, see the [Distribution User Guide](deskmate_app/README_DISTRIBUTION.md#step-1-open-google-cloud-console--create-project).
+6. **Sign in once**: click **Connect Google Account** in Settings. Google shows **one** screen for Gmail, Calendar, Drive and Tasks; keep every permission ticked and click **Allow**.
+7. For full step-by-step instructions with troubleshooting, see the [Distribution User Guide](deskmate_app/README_DISTRIBUTION.md#step-1-open-google-cloud-console--create-project).
 
 ---
 

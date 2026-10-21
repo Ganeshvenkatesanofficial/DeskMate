@@ -71,6 +71,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   Map<String, dynamic>? _transcriptData;
   List<dynamic> _meetingSteps = [];
 
+  // Set when the last summary attempt failed; the retry card reads it.
+  String? _summaryError;
+  // Set when the backend reports that speaker or mic audio did not start.
+  String? _audioWarning;
+
   // Transcript filter and search state
   String _transcriptSearchQuery = '';
   String? _selectedSpeakerFilter;
@@ -89,6 +94,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   OverlayEntry? _topToastOverlayEntry;
   Timer? _topToastTimer;
+
+  static String _errorText(Object e) => e.toString().replaceFirst(
+    RegExp(r'^(Exception|TimeoutException): ?'),
+    '',
+  );
 
   void _showTopNotification(String message, {bool isError = false}) {
     if (!mounted) return;
@@ -260,40 +270,64 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       final sessionData = await provider.apiService.getMeetingSessionReport(
         sessionId,
       );
-      if (sessionData != null && mounted) {
-        final summaryText = sessionData['summary']?.toString() ?? '';
-        setState(() {
-          _currentSessionId = sessionId;
-          _executiveSummary = summaryText;
-          _importantSteps =
-              (sessionData['important_steps'] as List?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              [];
-          _stepDescriptions = Map<String, dynamic>.from(
-            sessionData['step_descriptions'] ?? {},
+      if (!mounted) return;
+      if (sessionData == null) {
+        if (showNotification) {
+          _showTopNotification(
+            'This meeting\'s saved data could not be found. It may have been deleted.',
+            isError: true,
           );
-          _transcriptData = sessionData['transcript'] is Map
-              ? Map<String, dynamic>.from(sessionData['transcript'])
-              : null;
-          _customFieldsAnalysis = Map<String, dynamic>.from(
-            sessionData['custom_fields'] ?? {},
-          );
-          _meetingSteps = (sessionData['steps'] as List?) ?? [];
-          _pdfUrl = provider.apiService.getMeetingPdfUrl(sessionId);
-          _actionItems = _extractActionItemsFromSummary(summaryText);
-          _meetingTelemetrySteps.clear();
+        }
+        return;
+      }
+      final summaryText = sessionData['summary']?.toString() ?? '';
+      final hasPdf = sessionData['pdf_path'] != null;
+      setState(() {
+        _currentSessionId = sessionId;
+        _executiveSummary = summaryText.isNotEmpty ? summaryText : null;
+        _summaryError = summaryText.isEmpty
+            ? 'This meeting has no report yet. Press Retry summary to create it.'
+            : null;
+        _audioWarning = null;
+        _importantSteps =
+            (sessionData['important_steps'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+        _stepDescriptions = Map<String, dynamic>.from(
+          sessionData['step_descriptions'] ?? {},
+        );
+        _transcriptData = sessionData['transcript'] is Map
+            ? Map<String, dynamic>.from(sessionData['transcript'])
+            : null;
+        _customFieldsAnalysis = Map<String, dynamic>.from(
+          sessionData['custom_fields'] ?? {},
+        );
+        _meetingSteps = (sessionData['steps'] as List?) ?? [];
+        _pdfUrl = hasPdf
+            ? provider.apiService.getMeetingPdfUrl(sessionId)
+            : null;
+        _actionItems = _extractActionItemsFromSummary(summaryText);
+        _meetingTelemetrySteps.clear();
+        if (summaryText.isNotEmpty) {
           _meetingTelemetrySteps.addAll(
             _buildTelemetryStepsFromSessionData(sessionData, sessionId),
           );
-        });
-        if (showNotification) {
-          _showTopNotification('Loaded meeting report: $sessionId');
         }
+      });
+      if (showNotification) {
+        _showTopNotification(
+          summaryText.isNotEmpty
+              ? 'Loaded meeting report: $sessionId'
+              : 'Loaded meeting $sessionId. It has no report yet.',
+        );
       }
     } catch (e) {
       if (showNotification && mounted) {
-        _showTopNotification('Failed to load session: $e', isError: true);
+        _showTopNotification(
+          'Failed to load session: ${_errorText(e)}',
+          isError: true,
+        );
       }
     }
   }
@@ -374,6 +408,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             _actionItems = [];
             _currentSessionId = null;
             _pdfUrl = null;
+            _summaryError = null;
             _meetingTelemetrySteps.clear();
             _telemetryQueue.clear();
             _isProcessingQueue = false;
@@ -479,39 +514,76 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: isDialogRefreshing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'Refresh',
-                          onPressed: isDialogRefreshing
-                              ? null
-                              : () async {
-                                  setDialogState(
-                                    () => isDialogRefreshing = true,
-                                  );
-                                  await _loadSavedSessions(
-                                    autoLoadLatest: false,
-                                    onDialogState: setDialogState,
-                                  );
-                                  if (ctx.mounted) {
+                        Tooltip(
+                          message: 'Refresh Archives',
+                          child: InkWell(
+                            onTap: isDialogRefreshing
+                                ? null
+                                : () async {
                                     setDialogState(
-                                      () => isDialogRefreshing = false,
+                                      () => isDialogRefreshing = true,
                                     );
-                                  }
-                                },
+                                    await _loadSavedSessions(
+                                      autoLoadLatest: false,
+                                      onDialogState: setDialogState,
+                                    );
+                                    if (ctx.mounted) {
+                                      setDialogState(
+                                        () => isDialogRefreshing = false,
+                                      );
+                                    }
+                                  },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: theme.bgCanvas,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: theme.borderDefault),
+                              ),
+                              child: isDialogRefreshing
+                                  ? SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation(
+                                          theme.accentFg,
+                                        ),
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.refresh_rounded,
+                                      size: 17,
+                                      color: theme.fgMuted,
+                                    ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 6),
-                        CircularCloseButton(
-                          size: 18,
-                          tooltip: 'Close',
-                          onTap: () => Navigator.pop(ctx),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Close',
+                          child: InkWell(
+                            onTap: () => Navigator.pop(ctx),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: theme.bgCanvas,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: theme.borderDefault),
+                              ),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 17,
+                                color: theme.fgMuted,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -519,32 +591,109 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     if (_savedSessions.isEmpty)
                       Expanded(
                         child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.folder_open_rounded,
-                                size: 52,
-                                color: theme.fgMuted,
+                          child: Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 20,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 36,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.bgCanvas,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: theme.borderDefault,
+                                width: 0.8,
                               ),
-                              const SizedBox(height: 14),
-                              Text(
-                                'No saved meeting sessions found',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.fgDefault,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: theme.accentFg.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: theme.accentFg.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.folder_open_rounded,
+                                    size: 30,
+                                    color: theme.accentFg,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Recorded meetings and executive summaries will appear here automatically.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.fgMuted,
+                                const SizedBox(height: 18),
+                                Text(
+                                  'No Saved Meeting Archives',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.fgDefault,
+                                    letterSpacing: -0.2,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 6),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 380,
+                                  ),
+                                  child: Text(
+                                    'When you record meetings, your audio transcripts, visual slides, and executive PDF reports will automatically appear here.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: theme.fgMuted,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.bgSubtle,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: theme.borderDefault,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.shield_outlined,
+                                        size: 13,
+                                        color: AppTheme.emerald,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Retained 100% locally on this computer',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.fgMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       )
@@ -744,31 +893,29 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                       if (hasPdf) ...[
                                         OutlinedButton.icon(
                                           icon: const Icon(
-                                            Icons.picture_as_pdf_rounded,
-                                            size: 13,
+                                            Icons.file_download_outlined,
+                                            size: 14,
                                           ),
                                           label: const Text(
                                             'Download PDF',
                                             style: TextStyle(
-                                              fontSize: 11.5,
+                                              fontSize: 12,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                           style: OutlinedButton.styleFrom(
-                                            foregroundColor:
-                                                AppTheme.recordingRed,
+                                            foregroundColor: theme.fgDefault,
+                                            backgroundColor: theme.bgCanvas,
                                             side: BorderSide(
-                                              color: AppTheme.recordingRed
-                                                  .withValues(alpha: 0.4),
+                                              color: theme.borderDefault,
                                             ),
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 6,
+                                              horizontal: 10,
+                                              vertical: 7,
                                             ),
-                                            minimumSize: Size.zero,
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(6),
+                                                  BorderRadius.circular(7),
                                             ),
                                           ),
                                           onPressed: () {
@@ -787,27 +934,27 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                       if (!isCurrent) ...[
                                         ElevatedButton.icon(
                                           icon: const Icon(
-                                            Icons.folder_open_rounded,
-                                            size: 13,
+                                            Icons.visibility_outlined,
+                                            size: 14,
                                           ),
                                           label: const Text(
-                                            'Open',
+                                            'View Session',
                                             style: TextStyle(
-                                              fontSize: 11.5,
+                                              fontSize: 12,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: theme.accentFg,
                                             foregroundColor: Colors.white,
+                                            elevation: 0,
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 6,
+                                              horizontal: 12,
+                                              vertical: 7,
                                             ),
-                                            minimumSize: Size.zero,
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(6),
+                                                  BorderRadius.circular(7),
                                             ),
                                           ),
                                           onPressed: () {
@@ -817,17 +964,22 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                         ),
                                         const SizedBox(width: 6),
                                       ],
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete_outline_rounded,
-                                          size: 18,
+                                      Tooltip(
+                                        message: 'Delete Archive',
+                                        child: IconButton(
+                                          icon: Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 17,
+                                            color: theme.fgMuted,
+                                          ),
+                                          hoverColor: theme.dangerFg.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          onPressed: () async {
+                                            await _confirmAndDeleteSession(id);
+                                            setDialogState(() {});
+                                          },
                                         ),
-                                        tooltip: 'Delete Session',
-                                        color: AppTheme.recordingRed,
-                                        onPressed: () async {
-                                          await _confirmAndDeleteSession(id);
-                                          setDialogState(() {});
-                                        },
                                       ),
                                     ],
                                   ),
@@ -878,12 +1030,24 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   void _startPolling() {
     _statusTimer?.cancel();
+    var pollInFlight = false;
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (pollInFlight || !mounted) return;
+      pollInFlight = true;
       final provider = Provider.of<ChatProvider>(context, listen: false);
       try {
         final status = await provider.apiService.getMeetingStatus();
+        if (status['state'] == 'unreachable') {
+          // Keep the recording UI and Stop button; the next poll retries.
+          if (mounted) setState(() => _uptimeSeconds++);
+          return;
+        }
         if (mounted) {
           setState(() {
+            final warning = status['audio_warning'];
+            if (warning is String && warning.isNotEmpty) {
+              _audioWarning = warning;
+            }
             _isRecording =
                 status['state'] == 'recording' || status['state'] == 'running';
             _uptimeSeconds =
@@ -902,7 +1066,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             timer.cancel();
           }
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        pollInFlight = false;
+      }
     });
   }
 
@@ -924,15 +1091,21 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         fps: 2.0,
         allowLightweightMode: provider.useLightweightVision,
         startMuted: _isMicMuted,
+        geminiApiKey: provider.isUsingGemini ? provider.geminiApiKey : null,
       );
       final delayFuture = Future.delayed(const Duration(milliseconds: 1200));
       final results = await Future.wait([startFuture, delayFuture]);
       final res = results[0] as Map<String, dynamic>;
       if (mounted) {
+        final warning = res['audio_warning'];
         setState(() {
           _isRecording = true;
           _isStarting = false;
           _currentSessionId = res['session_id'];
+          _audioWarning = warning is String && warning.isNotEmpty
+              ? warning
+              : null;
+          _summaryError = null;
           _uptimeSeconds = 0;
           _framesProcessed = 0;
           _eventsDetected = 0;
@@ -949,11 +1122,17 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           _isProcessingQueue = false;
         });
         _startPolling();
+        if (_audioWarning != null) {
+          _showTopNotification(_audioWarning!, isError: true);
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isStarting = false);
-        _showTopNotification('Failed to start meeting: $e', isError: true);
+        _showTopNotification(
+          'Failed to start meeting: ${_errorText(e)}',
+          isError: true,
+        );
       }
     }
   }
@@ -1073,23 +1252,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   const SizedBox(height: 10),
 
                   // 3. Visual Intelligence Status Card
-                  _buildAiStatusCard(
-                    theme: theme,
-                    color: provider.isVisionActive
-                        ? theme.successFg
-                        : theme.attentionFg,
-                    icon: provider.isVisionActive
-                        ? Icons.check_circle_rounded
-                        : Icons.visibility_off_rounded,
-                    title: provider.isVisionActive
-                        ? (provider.useLightweightVision
-                              ? 'Vision: Lightweight Laptop Mode'
-                              : 'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}')
-                        : 'Vision: Inactive',
-                    subtitle: provider.isVisionActive
-                        ? 'Screen OCR capture & keyframe grounding enabled'
-                        : 'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
-                  ),
+                  _buildVisionStatusCard(theme, provider),
                   const SizedBox(height: 14),
 
                   // Quick Action: Enable Lightweight Mode if vision inactive
@@ -1268,10 +1431,19 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     setState(() => _isTogglingMic = true);
     final provider = Provider.of<ChatProvider>(context, listen: false);
     try {
-      await provider.apiService.setMeetingMicMuted(targetMuted);
+      final res = await provider.apiService.setMeetingMicMuted(targetMuted);
+      if (!mounted) return;
+      if (res['status'] != 'ok') {
+        setState(() => _isTogglingMic = false);
+        _showTopNotification(
+          'Mic could not be changed because audio recording is not running for this meeting.',
+          isError: true,
+        );
+        return;
+      }
       if (mounted) {
         setState(() {
-          _isMicMuted = targetMuted;
+          _isMicMuted = res['muted'] == true;
           _isTogglingMic = false;
         });
         _showTopNotification(
@@ -1284,7 +1456,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       if (mounted) {
         setState(() => _isTogglingMic = false);
         _showTopNotification(
-          'Failed to update mic mute state: $e',
+          'Failed to update mic mute state: ${_errorText(e)}',
           isError: true,
         );
       }
@@ -1415,8 +1587,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   ) {
     final transcript = data['transcript'] as Map<String, dynamic>?;
     final steps = (data['steps'] as List<dynamic>?) ?? [];
-    final speakers = (transcript?['speakers'] as List?) ?? [];
-    final speakersCount = speakers.isNotEmpty ? speakers.length : 1;
+    final speakersCount = _countSpeakers(transcript);
     final stepsCount = steps.length;
     final now = DateTime.now();
 
@@ -1490,6 +1661,25 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   Future<void> _stopRecording() async {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     _statusTimer?.cancel();
+    setState(() {
+      _isRecording = false;
+      _audioWarning = null;
+    });
+    try {
+      await provider.apiService.stopMeeting();
+    } catch (e) {
+      _showTopNotification(
+        'Stopping the meeting reported a problem: ${_errorText(e)}. Trying to build the report anyway.',
+        isError: true,
+      );
+    }
+    await _runSummarization();
+  }
+
+  /// Builds the report for [_currentSessionId]. Used after Stop and by Retry summary.
+  Future<void> _runSummarization() async {
+    if (_currentSessionId == null || _isSummarizing || !mounted) return;
+    final provider = Provider.of<ChatProvider>(context, listen: false);
 
     // Reset telemetry queue & steps
     _meetingTelemetrySteps.clear();
@@ -1497,7 +1687,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     _isProcessingQueue = false;
 
     setState(() {
-      _isRecording = false;
+      _summaryError = null;
       _isSummarizing = true;
       _postProcessingStage = 1;
       _postProcessingProgress = 0.20;
@@ -1519,10 +1709,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     _startPostProcessingTelemetry();
 
     try {
-      await provider.apiService.stopMeeting();
       final summaryRes = await provider.apiService.summarizeMeeting(
         sessionId: _currentSessionId,
         customFields: _customFocusTopics.isNotEmpty ? _customFocusTopics : null,
+        geminiApiKey: provider.isUsingGemini ? provider.geminiApiKey : null,
       );
 
       _postProcessingTimer?.cancel();
@@ -1541,9 +1731,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           (summaryRes['custom_fields'] as Map<String, dynamic>?) ?? {};
       final transcript = summaryRes['transcript'] as Map<String, dynamic>?;
       final steps = (summaryRes['steps'] as List<dynamic>?) ?? [];
-      final speakers = (transcript?['speakers'] as List?) ?? [];
-      final speakerCount = speakers.isNotEmpty ? speakers.length : 1;
+      final speakerCount = _countSpeakers(transcript);
       final stepsCount = steps.length;
+      final pdfGenerated = summaryRes['pdf_generated'] == true;
 
       // Ensure stages 2, 3, and 4 are enqueued if backend completed quickly
       if (!_meetingTelemetrySteps.any((s) => s.step == 2) &&
@@ -1605,21 +1795,52 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
           _customFieldsAnalysis = customAnalysis;
           _transcriptData = transcript;
           _meetingSteps = steps;
-          if (_currentSessionId != null) {
-            _pdfUrl = provider.apiService.getMeetingPdfUrl(_currentSessionId!);
-          }
+          _pdfUrl = pdfGenerated && _currentSessionId != null
+              ? provider.apiService.getMeetingPdfUrl(_currentSessionId!)
+              : null;
         });
         _loadSavedSessions(autoLoadLatest: false);
+
+        final transcriptReason = transcript?['reason'];
+        if (!pdfGenerated) {
+          _showTopNotification(
+            'The summary is ready, but the PDF could not be created, so Download, Email and Drive are unavailable. Press Retry summary to try again.',
+            isError: true,
+          );
+          setState(() {
+            _summaryError =
+                'The PDF could not be created for this meeting. Press Retry summary to try again.';
+          });
+        } else if (transcriptReason is String && transcriptReason.isNotEmpty) {
+          _showTopNotification(transcriptReason, isError: true);
+        }
       }
     } catch (e) {
       _postProcessingTimer?.cancel();
       _meetingWebSocket?.close();
       _meetingWebSocket = null;
       if (mounted) {
-        setState(() => _isSummarizing = false);
-        _showTopNotification('Summarization error: $e', isError: true);
+        final message = e is TimeoutException
+            ? 'The report is taking longer than expected. Press Retry summary in a few minutes.'
+            : _errorText(e);
+        setState(() {
+          _isSummarizing = false;
+          _summaryError = message;
+        });
+        _showTopNotification(message, isError: true);
       }
     }
+  }
+
+  static int _countSpeakers(Map<String, dynamic>? transcript) {
+    final segments = transcript?['segments'];
+    if (segments is! List || segments.isEmpty) return 0;
+    return segments
+        .whereType<Map>()
+        .map((s) => s['speaker']?.toString() ?? '')
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .length;
   }
 
   void _startPostProcessingTelemetry() {
@@ -1722,7 +1943,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     } catch (e) {
       if (mounted) {
         setState(() => _isSyncingTasks = false);
-        _showTopNotification('Task sync failed: $e', isError: true);
+        _showTopNotification(
+          'Task sync failed: ${_errorText(e)}',
+          isError: true,
+        );
       }
     }
   }
@@ -1732,10 +1956,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     openExternal(_pdfUrl!);
   }
 
+  static const String _googleSignInHint =
+      'Working on it. If a browser window opens, sign in to Google to continue.';
+
   Future<void> _exportToGoogleDrive() async {
     if (_currentSessionId == null) return;
     final provider = Provider.of<ChatProvider>(context, listen: false);
     setState(() => _isExportingDrive = true);
+    _showTopNotification(_googleSignInHint);
     try {
       final res = await provider.apiService.exportMeetingToDrive(
         sessionId: _currentSessionId!,
@@ -1751,7 +1979,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     } catch (e) {
       if (mounted) {
         setState(() => _isExportingDrive = false);
-        _showTopNotification('Google Drive export failed: $e', isError: true);
+        _showTopNotification(_errorText(e), isError: true);
       }
     }
   }
@@ -2084,12 +2312,15 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     final subject = subjectController.text.trim();
     final ccEmail = ccController.text.trim();
 
-    userNameController.dispose();
-    designationController.dispose();
-    senderEmailController.dispose();
-    emailController.dispose();
-    subjectController.dispose();
-    ccController.dispose();
+    // Dispose after the dialog's exit animation, which still reads the controllers.
+    Future.delayed(const Duration(milliseconds: 400), () {
+      userNameController.dispose();
+      designationController.dispose();
+      senderEmailController.dispose();
+      emailController.dispose();
+      subjectController.dispose();
+      ccController.dispose();
+    });
 
     if (result == true && toEmail.isNotEmpty) {
       if (!mounted) return;
@@ -2107,6 +2338,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
       final provider = Provider.of<ChatProvider>(context, listen: false);
       setState(() => _isSendingEmail = true);
+      _showTopNotification(_googleSignInHint);
       try {
         final res = await provider.apiService.sendMeetingEmail(
           sessionId: _currentSessionId!,
@@ -2128,7 +2360,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       } catch (e) {
         if (mounted) {
           setState(() => _isSendingEmail = false);
-          _showTopNotification('Failed to send email: $e', isError: true);
+          _showTopNotification(_errorText(e), isError: true);
         }
       }
     }
@@ -2162,9 +2394,32 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   _buildTelemetryGrid(theme),
                   const SizedBox(height: 20),
 
+                  if (_isRecording && _audioWarning != null) ...[
+                    _buildNoticeCard(
+                      theme,
+                      icon: Icons.mic_off_rounded,
+                      message: _audioWarning!,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
                   // --- SUMMARIZING LOADER ---
                   if (_isSummarizing) ...[
                     _buildSummarizingIndicator(theme),
+                    const SizedBox(height: 20),
+                  ],
+
+                  if (!_isSummarizing &&
+                      !_isRecording &&
+                      _summaryError != null &&
+                      _currentSessionId != null) ...[
+                    _buildNoticeCard(
+                      theme,
+                      icon: Icons.error_outline_rounded,
+                      message: _summaryError!,
+                      actionLabel: 'Retry summary',
+                      onAction: _runSummarization,
+                    ),
                     const SizedBox(height: 20),
                   ],
 
@@ -2544,6 +2799,110 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     );
   }
 
+  Widget _buildVisionStatusCard(ThemeData theme, ChatProvider provider) {
+    const activeSubtitle = 'Screen OCR capture & keyframe grounding enabled';
+    final ollamaOnline = provider.isLocalLlmOnline;
+
+    if (provider.isUsingGemini) {
+      return _buildAiStatusCard(
+        theme: theme,
+        color: theme.accentFg,
+        icon: Icons.cloud_done_rounded,
+        title: 'Vision: Gemini 2.5 Flash (Cloud)',
+        subtitle: activeSubtitle,
+      );
+    }
+    if (provider.useLightweightVision) {
+      return _buildAiStatusCard(
+        theme: theme,
+        color: AppTheme.teal,
+        icon: Icons.laptop_chromebook_rounded,
+        title: ollamaOnline
+            ? 'Vision: Lightweight Laptop Mode'
+            : 'Vision: Lightweight Laptop Mode (Requires Ollama)',
+        subtitle: ollamaOnline
+            ? activeSubtitle
+            : 'Lightweight mode is enabled. Start Ollama to run the local chat model with OCR.',
+      );
+    }
+    if (provider.hasVisionModel) {
+      return _buildAiStatusCard(
+        theme: theme,
+        color: theme.successFg,
+        icon: Icons.check_circle_rounded,
+        title:
+            'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}',
+        subtitle: activeSubtitle,
+      );
+    }
+    if (!ollamaOnline) {
+      return _buildAiStatusCard(
+        theme: theme,
+        color: theme.dangerFg,
+        icon: Icons.visibility_off_rounded,
+        title: 'Vision: Offline (Ollama Offline)',
+        subtitle:
+            'Ollama is offline. Start Ollama to use vision models, or configure Gemini API key.',
+      );
+    }
+    return _buildAiStatusCard(
+      theme: theme,
+      color: theme.attentionFg,
+      icon: Icons.visibility_off_rounded,
+      title: 'Vision: Inactive',
+      subtitle:
+          'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
+    );
+  }
+
+  Widget _buildNoticeCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.attentionFg.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.attentionFg.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: theme.attentionFg, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.fgDefault,
+                height: 1.4,
+              ),
+            ),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: Text(actionLabel),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.accentFg,
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildAiStatusCard({
     required ThemeData theme,
     required Color color,
@@ -2651,7 +3010,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   String get _activeEngineName {
     final provider = Provider.of<ChatProvider>(context, listen: false);
     return provider.isUsingGemini
-        ? 'Gemini 1.5 Flash (Cloud Multimodal)'
+        ? 'Gemini 2.5 Flash (Cloud Multimodal)'
         : (provider.hasVisionModel
               ? 'Local Ollama (${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'llama3.2-vision'})'
               : (provider.effectiveModel.isNotEmpty
@@ -2960,85 +3319,105 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             OutlinedButton.icon(
               onPressed: () =>
                   _showScreenshotModal(context, 0, _getDisplaySteps()),
-              icon: const Icon(Icons.photo_library_outlined, size: 16),
-              label: Text('Inspect Screenshots (${_getDisplaySteps().length})'),
+              icon: const Icon(Icons.photo_library_outlined, size: 15),
+              label: Text('Screenshots (${_getDisplaySteps().length})'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: theme.accentFg,
-                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
+                foregroundColor: theme.fgDefault,
+                backgroundColor: theme.bgCanvas,
+                side: BorderSide(color: theme.borderDefault),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 8,
+                  vertical: 9,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
             OutlinedButton.icon(
               onPressed: () => _showTranscriptModal(context, theme),
-              icon: const Icon(Icons.record_voice_over_rounded, size: 16),
-              label: const Text('View Transcript'),
+              icon: const Icon(Icons.record_voice_over_rounded, size: 15),
+              label: const Text('Transcript'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: theme.accentFg,
-                side: BorderSide(color: theme.accentFg.withValues(alpha: 0.5)),
+                foregroundColor: theme.fgDefault,
+                backgroundColor: theme.bgCanvas,
+                side: BorderSide(color: theme.borderDefault),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 8,
+                  vertical: 9,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
             if (_pdfUrl != null) ...[
-              OutlinedButton.icon(
+              ElevatedButton.icon(
                 onPressed: _openPdf,
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-                label: const Text('Download PDF'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.accentFg,
-                  side: BorderSide(color: theme.accentFg),
+                icon: const Icon(Icons.file_download_outlined, size: 16),
+                label: const Text(
+                  'Download PDF',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.accentFg,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
-              ElevatedButton.icon(
+              OutlinedButton.icon(
+                onPressed: _isSendingEmail ? null : _promptSendEmail,
+                icon: _isSendingEmail
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: theme.fgDefault,
+                        ),
+                      )
+                    : const Icon(Icons.mail_outline_rounded, size: 15),
+                label: const Text('Email Report'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.fgDefault,
+                  backgroundColor: theme.bgCanvas,
+                  side: BorderSide(color: theme.borderDefault),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
                 onPressed: _isExportingDrive ? null : _exportToGoogleDrive,
                 icon: _isExportingDrive
                     ? const SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.cloud_upload_outlined, size: 16),
+                    : const Icon(Icons.cloud_upload_outlined, size: 15),
                 label: const Text('Save to Drive'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.purplePrimary,
-                  foregroundColor: Colors.white,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.fgDefault,
+                  backgroundColor: theme.bgCanvas,
+                  side: BorderSide(color: theme.borderDefault),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
-                    vertical: 8,
+                    vertical: 9,
                   ),
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: _isSendingEmail ? null : _promptSendEmail,
-                icon: _isSendingEmail
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.mail_outline_rounded, size: 16),
-                label: const Text('Email PDF'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.darkBgSubtle,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),

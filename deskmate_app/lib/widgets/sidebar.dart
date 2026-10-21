@@ -411,7 +411,7 @@ class _SidebarState extends State<Sidebar> {
               final reasoningText = isUsingLocalReasoning
                   ? 'Reasoning: ${provider.selectedLocalModel}'
                   : (isGemini
-                        ? 'Reasoning: Gemini 1.5 Flash (Cloud)'
+                        ? 'Reasoning: Gemini 2.5 Flash (Cloud)'
                         : (isLlmOnline
                               ? (provider.effectiveModel.isNotEmpty
                                     ? 'Reasoning: ${provider.effectiveModel}'
@@ -478,49 +478,49 @@ class _SidebarState extends State<Sidebar> {
             const SizedBox(height: 2),
             Builder(
               builder: (context) {
-                final hasVision = provider.hasVisionModel;
                 final isGemini = provider.isUsingGemini;
+                final hasVision = provider.hasVisionModel;
                 final isLightweight = provider.useLightweightVision;
-                final isVisionActive = isLightweight || hasVision || isGemini;
 
-                final Color visionColor = isVisionActive
-                    ? (isLightweight
-                          ? AppTheme.teal
-                          : (hasVision ? theme.successFg : theme.accentFg))
-                    : theme.attentionFg;
-                final IconData visionIcon = isLightweight
-                    ? Icons.laptop_chromebook_rounded
-                    : (hasVision
-                          ? Icons.visibility_rounded
-                          : (isGemini
-                                ? Icons.cloud_done_rounded
-                                : Icons.visibility_off_rounded));
-
+                final Color visionColor;
+                final IconData visionIcon;
                 final String visionModelText;
-                if (isLightweight) {
-                  final name = provider.effectiveModel.isNotEmpty
-                      ? provider.effectiveModel
-                      : 'Chat LLM';
-                  visionModelText = 'Vision: Lightweight ($name)';
+
+                if (isGemini) {
+                  visionColor = theme.accentFg;
+                  visionIcon = Icons.cloud_done_rounded;
+                  visionModelText = 'Vision: Gemini 2.5 Flash (Cloud)';
+                } else if (isLightweight) {
+                  visionColor = AppTheme.teal;
+                  visionIcon = Icons.laptop_chromebook_rounded;
+                  visionModelText = 'Vision: Lightweight Mode';
                 } else if (hasVision) {
+                  visionColor = theme.successFg;
+                  visionIcon = Icons.visibility_rounded;
                   final name = provider.visionModelName.isNotEmpty
                       ? provider.visionModelName
                       : 'llama3.2-vision';
                   visionModelText = 'Vision: $name';
-                } else if (isGemini) {
-                  visionModelText = 'Vision: Gemini 1.5 Flash (Cloud)';
                 } else {
+                  // Only show red when no vision model, no lightweight mode, and no Gemini API
+                  visionColor = theme.dangerFg;
+                  visionIcon = Icons.visibility_off_rounded;
                   visionModelText = 'Vision: Setup Required';
                 }
 
+                final String activeModel = provider.effectiveModel.isNotEmpty
+                    ? provider.effectiveModel
+                    : 'Chat LLM';
+                final String tooltipMessage = isGemini
+                    ? 'Gemini Multimodal Cloud Active — No local vision model required. Click to manage.'
+                    : (isLightweight
+                          ? 'Lightweight Laptop Mode: Screen OCR paired with $activeModel. Zero vision model download needed.'
+                          : (hasVision
+                                ? 'Llama Vision active in Ollama. Click to view settings.'
+                                : 'Vision Setup Required: Pull llama3.2-vision, enable Lightweight Mode, or configure Gemini.'));
+
                 return Tooltip(
-                  message: isGemini
-                      ? 'Gemini Multimodal Cloud Active — No local vision model required. Click to manage.'
-                      : (hasVision
-                            ? 'Llama Vision active in Ollama. Click to view settings.'
-                            : (isLightweight
-                                  ? 'Lightweight Laptop Mode: Using ${provider.effectiveModel} + OCR for small laptops. Click to manage.'
-                                  : 'Click to setup: Pull llama3.2-vision, enable Lightweight Mode, or configure Gemini.')),
+                  message: tooltipMessage,
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -559,9 +559,7 @@ class _SidebarState extends State<Sidebar> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: isVisionActive
-                                      ? theme.fgDefault
-                                      : theme.attentionFg,
+                                  color: theme.fgDefault,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -602,14 +600,17 @@ class _SidebarState extends State<Sidebar> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final isOllamaOnline = provider.isLocalLlmOnline;
           final isLightweight = provider.useLightweightVision;
           final hasVision = provider.hasVisionModel;
           final isGemini = provider.isUsingGemini;
-          final isReady = isLightweight || hasVision || isGemini;
+          final isReady = provider.isVisionActive;
 
           final Color badgeColor = isReady
               ? (isLightweight ? AppTheme.teal : theme.successFg)
-              : theme.attentionFg;
+              : (!isOllamaOnline && !isGemini
+                    ? theme.dangerFg
+                    : theme.attentionFg);
 
           return AlertDialog(
             backgroundColor: theme.bgSubtle,
@@ -629,7 +630,9 @@ class _SidebarState extends State<Sidebar> {
                   ),
                   child: Icon(
                     isReady
-                        ? Icons.visibility_rounded
+                        ? (isLightweight
+                              ? Icons.laptop_chromebook_rounded
+                              : Icons.visibility_rounded)
                         : Icons.visibility_off_rounded,
                     color: badgeColor,
                     size: 20,
@@ -694,7 +697,7 @@ class _SidebarState extends State<Sidebar> {
                               isGemini
                                   ? 'Active: Using Google Gemini Cloud Vision'
                                   : (isLightweight
-                                        ? 'Active: Using Lightweight Laptop Mode (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : "Chat LLM"})'
+                                        ? 'Active: Using Lightweight Laptop Mode (Screen OCR)'
                                         : (hasVision
                                               ? 'Active: Using Ollama Vision (${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"})'
                                               : 'Action Required: Choose an option below to enable recording')),
@@ -780,7 +783,7 @@ class _SidebarState extends State<Sidebar> {
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     color: isLightweight
-                                        ? theme.successFg
+                                        ? AppTheme.teal
                                         : (theme.isDark
                                               ? const Color(0xFFFDBA74)
                                               : const Color(0xFFC2410C)),
@@ -865,9 +868,11 @@ class _SidebarState extends State<Sidebar> {
                               Icon(
                                 Icons.visibility_rounded,
                                 size: 18,
-                                color: hasVision
-                                    ? theme.successFg
-                                    : theme.accentFg,
+                                color: !isOllamaOnline
+                                    ? theme.fgMuted
+                                    : (hasVision
+                                          ? theme.successFg
+                                          : theme.accentFg),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -876,7 +881,9 @@ class _SidebarState extends State<Sidebar> {
                                   style: TextStyle(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w700,
-                                    color: theme.fgDefault,
+                                    color: !isOllamaOnline
+                                        ? theme.fgMuted
+                                        : theme.fgDefault,
                                   ),
                                 ),
                               ),
@@ -887,8 +894,8 @@ class _SidebarState extends State<Sidebar> {
                                 ),
                                 decoration: BoxDecoration(
                                   color:
-                                      (hasVision && !isLightweight && !isGemini
-                                              ? theme.successFg
+                                      (!isOllamaOnline
+                                              ? theme.dangerFg
                                               : (hasVision
                                                     ? theme.successFg
                                                     : theme.accentFg))
@@ -896,17 +903,23 @@ class _SidebarState extends State<Sidebar> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  hasVision && !isLightweight && !isGemini
-                                      ? '✓ CURRENTLY IN USE'
-                                      : (hasVision
-                                            ? '✓ INSTALLED IN OLLAMA'
-                                            : 'High-End Laptops / 16GB+ RAM'),
+                                  !isOllamaOnline
+                                      ? 'Ollama Offline'
+                                      : (hasVision &&
+                                                !isLightweight &&
+                                                !isGemini
+                                            ? '✓ CURRENTLY IN USE'
+                                            : (hasVision
+                                                  ? '✓ INSTALLED IN OLLAMA'
+                                                  : 'High-End Laptops / 16GB+ RAM')),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: hasVision
-                                        ? theme.successFg
-                                        : theme.accentFg,
+                                    color: !isOllamaOnline
+                                        ? theme.dangerFg
+                                        : (hasVision
+                                              ? theme.successFg
+                                              : theme.accentFg),
                                   ),
                                 ),
                               ),
@@ -914,9 +927,11 @@ class _SidebarState extends State<Sidebar> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            hasVision
-                                ? '${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"} is installed in Ollama for 100% offline pixel-by-pixel screen analysis.'
-                                : 'Inspects raw screenshots pixel-by-pixel. Pull and run this model in Ollama via your Mac terminal:',
+                            !isOllamaOnline
+                                ? 'Ollama is offline. Start the Ollama application in macOS to use llama3.2-vision.'
+                                : (hasVision
+                                      ? '${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"} is installed in Ollama for 100% offline pixel-by-pixel screen analysis.'
+                                      : 'Inspects raw screenshots pixel-by-pixel. Pull and run this model in Ollama via your Mac terminal:'),
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.fgMuted,
@@ -1093,7 +1108,7 @@ class _SidebarState extends State<Sidebar> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Zero local RAM used. Multimodal vision is processed natively via Gemini 1.5 Flash in Google Cloud.',
+                            'Zero local RAM used. Multimodal vision is processed natively via Gemini 2.5 Flash in Google Cloud.',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.fgMuted,
@@ -1212,8 +1227,7 @@ class _SidebarState extends State<Sidebar> {
                                               .trim();
                                           if (key.isNotEmpty) {
                                             await provider.saveAiConfiguration(
-                                              model:
-                                                  provider.selectedLocalModel,
+                                              model: AppConstants.geminiModelId,
                                               geminiApiKey: key,
                                             );
                                             if (!context.mounted) return;
@@ -1285,7 +1299,7 @@ class _SidebarState extends State<Sidebar> {
                                     tooltip: 'Remove Gemini Key',
                                     onPressed: () async {
                                       await provider.saveAiConfiguration(
-                                        model: provider.selectedLocalModel,
+                                        model: provider.selectedModel,
                                         geminiApiKey: '',
                                       );
                                       if (!context.mounted) return;
@@ -1320,21 +1334,24 @@ class _SidebarState extends State<Sidebar> {
                           isRechecking = true;
                         });
                         try {
-                          await provider.retryConnecting();
-                          await provider.fetchAvailableModels();
+                          await provider.refreshHealthStatus();
                         } catch (e) {
                           // ignore error
                         } finally {
+                          final isOllamaOnline = provider.isLocalLlmOnline;
                           final isLightweight = provider.useLightweightVision;
                           final hasVision = provider.hasVisionModel;
                           final isGemini = provider.isUsingGemini;
                           final String statusText;
                           if (isGemini) {
                             statusText =
-                                'Active: Google Gemini 1.5 Flash Cloud Vision';
+                                'Active: Google Gemini 2.5 Flash Cloud Vision';
+                          } else if (!isOllamaOnline) {
+                            statusText =
+                                'Ollama is offline. Start Ollama to use vision.';
                           } else if (isLightweight) {
                             statusText =
-                                'Active: Lightweight Laptop Mode (${provider.effectiveModel.isNotEmpty ? provider.effectiveModel : "Local Chat LLM"})';
+                                'Active: Lightweight Laptop Mode (Screen OCR)';
                           } else if (hasVision) {
                             statusText =
                                 'Active: Local Ollama Vision (${provider.visionModelName.isNotEmpty ? provider.visionModelName : "llama3.2-vision"})';
@@ -1343,9 +1360,11 @@ class _SidebarState extends State<Sidebar> {
                                 '${provider.availableLocalModels.length} models detected. Vision model setup needed.';
                           }
 
-                          setDialogState(() {
-                            isRechecking = false;
-                          });
+                          if (ctx.mounted) {
+                            setDialogState(() {
+                              isRechecking = false;
+                            });
+                          }
                           widget.onShowTopNotification?.call(
                             'Refreshed: $statusText',
                           );
@@ -1634,7 +1653,8 @@ class _SidebarState extends State<Sidebar> {
     final isOnline = provider.isBackendOnline;
     final hasFs = isOnline && (checks['filesystem_access'] ?? true);
     final hasQdrant = isOnline && (checks['qdrant_db'] ?? true);
-    final isPrivacy = isOnline && (checks['privacy_mode'] ?? true);
+    // Files stay on this Mac only when Gemini (cloud) is not in use.
+    final isPrivacy = isOnline && !provider.isUsingGemini;
 
     return _buildHealthCard(
       theme: theme,
@@ -1646,7 +1666,13 @@ class _SidebarState extends State<Sidebar> {
         const SizedBox(height: 4),
         _buildHealthRow(theme, 'Qdrant Vector DB', hasQdrant),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Privacy Mode', isPrivacy),
+        _buildHealthRow(
+          theme,
+          isPrivacy
+              ? 'Privacy Mode (local only)'
+              : 'Privacy Mode (Gemini cloud)',
+          isPrivacy,
+        ),
       ],
     );
   }

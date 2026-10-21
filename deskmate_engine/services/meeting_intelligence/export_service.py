@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 from pathlib import Path
 import shutil
 from datetime import datetime
@@ -22,7 +21,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Optional
 
-from settings import DRIVE_TOKEN_PATH, GMAIL_TOKEN_PATH
 from services.meeting_intelligence.email_template import (
     parse_meeting_summary,
     resolve_proper_pdf_name,
@@ -47,6 +45,25 @@ def _resolve_logo_path() -> Optional[Path]:
     return None
 
 
+def _friendly_google_error(err: Exception, action: str) -> str:
+    """Turn Google client/OAuth exceptions into a message the user can act on."""
+    text = str(err)
+    lowered = text.lower()
+    if isinstance(err, FileNotFoundError) or "credentials.json" in lowered:
+        return (
+            f"Google account is not connected, so the report could not be {action}. "
+            "Open Settings > Google Workspace OAuth, add your Client ID and Secret, then try again."
+        )
+    if "access_denied" in lowered or "403" in lowered:
+        return (
+            f"Google blocked the request, so the report could not be {action}. "
+            "Add your Gmail address as a Test user in Google Cloud Console > Google Auth Platform > Audience, then try again."
+        )
+    if "invalid_grant" in lowered or "token" in lowered and "expired" in lowered:
+        return f"Your Google sign-in expired, so the report could not be {action}. Try again and sign in when the browser opens."
+    return f"The report could not be {action} because Google returned an error. Check your internet connection and try again."
+
+
 class MeetingExportService:
     """
     Handles Google Drive upload, Gmail mailing with attached PDF,
@@ -57,10 +74,10 @@ class MeetingExportService:
         self.output_dir = Path(output_dir)
         self.max_retained_sessions = max_retained_sessions
 
-    def _get_google_service(self, scopes: list[str], token_filename: str, api: str, version: str) -> Any:
-        """Obtain authenticated Google API service using DeskMate's OAuth manager."""
+    def _get_google_service(self, api: str, version: str) -> Any:
+        """Obtain authenticated Google API service using DeskMate's shared Google sign-in."""
         from services.personal_assistant.tools import _google_service
-        return _google_service(scopes, token_filename, api, version)
+        return _google_service(api, version)
 
     def upload_to_drive(
         self,
@@ -84,12 +101,7 @@ class MeetingExportService:
         try:
             from googleapiclient.http import MediaFileUpload
 
-            svc = self._get_google_service(
-                ["https://www.googleapis.com/auth/drive"],
-                DRIVE_TOKEN_PATH,
-                "drive",
-                "v3",
-            )
+            svc = self._get_google_service("drive", "v3")
 
             # 1. Locate or create destination folder
             folder_id = None
@@ -136,7 +148,7 @@ class MeetingExportService:
 
         except Exception as e:
             logger.exception(f"Failed to upload to Google Drive: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": _friendly_google_error(e, "saved to Google Drive")}
 
     def send_email_with_pdf(
         self,
@@ -178,12 +190,7 @@ class MeetingExportService:
             body_text = "Please find attached the DeskMate Executive Meeting Intelligence Report."
 
         try:
-            svc = self._get_google_service(
-                ["https://www.googleapis.com/auth/gmail.send"],
-                GMAIL_TOKEN_PATH,
-                "gmail",
-                "v1",
-            )
+            svc = self._get_google_service("gmail", "v1")
 
             # 2. Resolve Authenticated User Email, Display Name & Designation
             user_email = (sender_email or "").strip()
@@ -321,7 +328,7 @@ class MeetingExportService:
 
         except Exception as e:
             logger.exception(f"Failed to send email with PDF: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": _friendly_google_error(e, "emailed")}
 
     def cleanup_old_sessions(self, max_keep: Optional[int] = None) -> dict[str, Any]:
         """

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
@@ -17,8 +18,10 @@ from pydantic import BaseModel, Field
 
 from core.config import get_user_data_dir, persist_env_variables, base_dir, generate_conversation_id
 from core.models import check_local_llm_status, get_installed_chat_models
-from settings import APP_VERSION
+from core.telemetry import friendly_agent_error
+from settings import APP_VERSION, GOOGLE_TOKEN_PATH, LEGACY_GOOGLE_TOKENS, google_client_credentials
 from services.file_copilot.agent import run_file_copilot
+from services.personal_assistant.tools import connect_google_account, google_connection_status
 from services.personal_assistant.agent import (
     run_personal_assistant,
     check_personal_health,
@@ -132,7 +135,7 @@ def get_personal_credentials():
             creds_file = base_dir / "credentials.json"
 
     client_id = ""
-    client_secret_exists = False
+    client_secret = ""
 
     if creds_file.exists():
         try:
@@ -140,7 +143,6 @@ def get_personal_credentials():
             installed = data.get("installed") or data.get("web") or {}
             client_id = installed.get("client_id", "").strip()
             client_secret = installed.get("client_secret", "").strip()
-            client_secret_exists = bool(client_secret)
         except Exception as e:
             logger.warning(f"Failed to read existing credentials.json: {e}")
 
@@ -150,16 +152,15 @@ def get_personal_credentials():
             load_dotenv(override=True)
         except Exception as e:
             logger.debug(f"Failed to reload dotenv: {e}")
-        client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
-        client_secret_exists = bool(os.environ.get("GOOGLE_CLIENT_SECRET", "").strip())
+        client_id, client_secret = google_client_credentials()
 
-    is_sample = not is_genuine_credential(client_id) or not is_genuine_credential(os.environ.get("GOOGLE_CLIENT_SECRET", ""))
-    configured = bool(client_id and client_secret_exists and not is_sample)
+    is_sample = not is_genuine_credential(client_id) or not is_genuine_credential(client_secret)
+    configured = bool(client_id and client_secret and not is_sample)
+    client_secret_exists = configured
 
     if not configured:
         client_id = ""
         client_id_preview = ""
-        client_secret_exists = False
     else:
         # Compute preview masking
         if len(client_id) > 28:
@@ -179,12 +180,7 @@ def get_personal_credentials():
         except Exception as e:
             logger.debug(f"Failed to parse credentials file: {e}")
 
-    tokens = {
-        "gmail": (user_data_dir / "token_gmail.json").exists(),
-        "calendar": (user_data_dir / "token_gcal.json").exists() or (user_data_dir / "token_calendar.json").exists(),
-        "drive": (user_data_dir / "token_drive.json").exists(),
-        "tasks": (user_data_dir / "token_tasks.json").exists(),
-    }
+    tokens = google_connection_status()
 
     return {
         "status": "ok",
@@ -200,11 +196,8 @@ def get_personal_credentials():
 
 
 GOOGLE_TOKEN_FILES = (
-    "token_gmail.json",
-    "token_gcal.json",
-    "token_calendar.json",
-    "token_drive.json",
-    "token_tasks.json",
+    Path(GOOGLE_TOKEN_PATH).name,
+    *(name for names in LEGACY_GOOGLE_TOKENS.values() for name in names),
 )
 
 
@@ -304,6 +297,21 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
 
 
 
+@router.post("/api/personal/google/connect")
+def connect_google():
+    """Open ONE Google consent screen for Gmail, Calendar, Drive and Tasks (blocks until done)."""
+    try:
+        connect_google_account()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.warning(f"Google connect failed: {exc}")
+        raise HTTPException(status_code=400, detail=friendly_agent_error(exc))
+    tokens = google_connection_status()
+    missing = [api for api, ok in tokens.items() if not ok]
+    return {"status": "partial" if missing else "connected", "tokens": tokens, "missing": missing}
+
+
 @router.post("/api/reset/{conversation_id}")
 def reset_conversation(conversation_id: str):
     """Clear in-memory conversation history."""
@@ -334,7 +342,7 @@ def _handle_rest_chat(
         )
     except Exception as exc:
         logger.error(f"Error in REST {endpoint_name}: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=friendly_agent_error(exc))
 
     history.append(ChatMessage(role="user", content=request.message))
     history.append(ChatMessage(role="assistant", content=reply))

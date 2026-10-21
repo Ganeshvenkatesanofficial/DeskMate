@@ -4,6 +4,10 @@ abstract final class AppConstants {
   static const int defaultPort = 2026;
   static const List<int> legacyPorts = [8080, 2026, 8000];
   static const String defaultHost = '127.0.0.1';
+
+  /// Model-picker value meaning "use Google Gemini (cloud)" instead of Ollama.
+  static const String geminiModelId = 'gemini-2.5-flash';
+  static const String geminiModelLabel = 'Gemini 2.5 Flash (Cloud)';
   static const String ollamaHost = '$defaultHost:11434';
   static const String ollamaUrl = 'http://$ollamaHost';
 
@@ -42,6 +46,7 @@ abstract final class PrefsKeys {
   static const String userDesignation = 'deskmate_user_designation';
   static const String userEmail = 'deskmate_user_email';
   static const String useLightweightVision = 'deskmate_use_lightweight_vision';
+  static const String aiEngineMigrated = 'deskmate_ai_engine_migrated';
 }
 
 abstract final class ApiPaths {
@@ -52,6 +57,7 @@ abstract final class ApiPaths {
   static const String fileHealth = '/api/file/health';
   static const String personalHealth = '/api/personal/health';
   static const String personalCredentials = '/api/personal/credentials';
+  static const String googleConnect = '/api/personal/google/connect';
   static String resetChat(String id) => '/api/reset/$id';
   static const String dbOverview = '/api/database/overview';
   static String dbTable(String name) => '/api/database/table/$name';
@@ -83,7 +89,10 @@ abstract final class AppTimeouts {
   static const Duration restShort = Duration(seconds: 5);
   static const Duration restMedium = Duration(seconds: 15);
   static const Duration restLong = Duration(minutes: 5);
+  // Transcription + LLM summary of a long meeting can take well over 5 minutes.
+  static const Duration meetingSummarize = Duration(minutes: 30);
+  // Backend waits up to 3 minutes for the user to finish Google sign-in.
+  static const Duration googleSignIn = Duration(minutes: 4);
   static const Duration geminiRequest = Duration(seconds: 30);
-  static const Duration meetingPoll = Duration(seconds: 3);
   static const Duration healthPoll = Duration(seconds: 3);
 }

@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/clipboard_utils.dart';
+import 'google_connect_button.dart';
 import '../utils/open_external.dart';
 
 class CredentialsSetupDialog extends StatefulWidget {
@@ -41,6 +43,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ChatProvider>(context, listen: false);
       provider.fetchPersonalCredentials().then((_) {
+        if (!mounted) return;
         final creds = provider.personalCredentials;
         if (creds['configured'] == true) {
           if (creds['client_id'] != null && _clientIdController.text.isEmpty) {
@@ -569,12 +572,13 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                               _buildStatusPill(
                                 theme,
                                 'Active Model',
-                                provider.selectedLocalModel.isNotEmpty
-                                    ? provider.selectedLocalModel
-                                    : (provider.availableLocalModels.isNotEmpty
-                                          ? provider.availableLocalModels.first
+                                provider.isUsingGemini
+                                    ? AppConstants.geminiModelLabel
+                                    : (provider.effectiveModel.isNotEmpty
+                                          ? provider.effectiveModel
                                           : 'None'),
-                                provider.selectedLocalModel.isNotEmpty,
+                                provider.isUsingGemini ||
+                                    provider.selectedLocalModel.isNotEmpty,
                               ),
                               const SizedBox(width: 6),
                               _buildStatusPill(
@@ -1285,7 +1289,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                       ),
                     ),
                     Text(
-                      isGemini ? 'Gemini 1.5 Flash' : modelName,
+                      isGemini ? 'Gemini 2.5 Flash' : modelName,
                       style: TextStyle(
                         fontFamily: isGemini ? null : 'monospace',
                         fontSize: 12,
@@ -1705,9 +1709,9 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
           _buildStepCard(
             theme: theme,
             stepNumber: '5',
-            title: 'One-Click Instant Authorization',
+            title: 'Connect Your Google Account (Once)',
             description:
-                'Ask DeskMate any question in chat (e.g. "Summarize my unread emails" or "What is on my calendar tomorrow?"). Your browser will automatically open Google\'s authorization screen once, and cache your token permanently on this device!',
+                'Click "Connect Google Account" (in the Quick Setup tab or Settings). Google opens ONE screen asking for Gmail, Calendar, Drive and Tasks together. Keep every permission ticked and click Allow. The sign-in is saved on this device, so you only do this once.',
             actionButton: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -1724,7 +1728,7 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
                   Icon(Icons.bolt_rounded, size: 13, color: theme.statusOk),
                   const SizedBox(width: 4),
                   Text(
-                    'Automatic',
+                    'One Sign-In',
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
@@ -2458,6 +2462,20 @@ class _CredentialsSetupDialogState extends State<CredentialsSetupDialog> {
               ],
             ),
             const SizedBox(height: 12),
+
+            GoogleConnectButton(
+              onResult: (message, {isError = false}) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(message),
+                    backgroundColor: isError ? theme.dangerFg : theme.successFg,
+                    behavior: SnackBarBehavior.floating,
+                    width: 380,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
 
             // Caution Banner
             _buildNoticeBanner(
@@ -4859,7 +4877,7 @@ RAG_CHUNK_OVERLAP=200
             theme,
             icon: Icons.auto_awesome_rounded,
             color: theme.accentFg,
-            label: 'Gemini 1.5 Flash (Cloud Alternative)',
+            label: 'Gemini 2.5 Flash (Cloud Alternative)',
             badge: 'Zero Local Vision Needed',
             desc:
                 'If you add a Google Gemini API Key in Settings, cloud multimodal vision is used natively—llama3.2-vision is NOT required.',
@@ -5120,7 +5138,7 @@ RAG_CHUNK_OVERLAP=200
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Required Google OAuth Scope',
+                        'Google Permission Used',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -5129,7 +5147,7 @@ RAG_CHUNK_OVERLAP=200
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'drive.file',
+                        'drive',
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 11.5,
@@ -5139,7 +5157,7 @@ RAG_CHUNK_OVERLAP=200
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Allows DeskMate to create and upload meeting PDFs without access to your entire Drive.',
+                        'Part of DeskMate\'s single Google sign-in: uploads meeting PDFs to a "DeskMate Meetings" folder and lets the assistant search your Drive files.',
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.4,
@@ -5294,8 +5312,8 @@ RAG_CHUNK_OVERLAP=200
                 const SizedBox(height: 4),
                 _buildOAuthScopeRow(
                   theme,
-                  'gmail.readonly',
-                  'Optional: look up attendee email addresses for auto-fill.',
+                  'gmail.modify',
+                  'Lets the assistant read, label and archive your emails when you ask it to.',
                 ),
                 const SizedBox(height: 6),
                 Text(

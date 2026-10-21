@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,11 @@ from typing import Any
 from settings import MISTRAL_API_KEY, VOXTRAL_LOCAL_MODEL
 
 logger = logging.getLogger("deskmate.voxtral")
+
+VOXTRAL_SAMPLE_RATE = 16000
+LOCAL_WINDOW_SECONDS = 30
+LOCAL_MAX_NEW_TOKENS = 512
+SILENCE_PEAK = 0.01  # skip windows that are effectively silent
 
 
 class VoxtralSpeechEngine:
@@ -84,35 +88,40 @@ class VoxtralSpeechEngine:
             if cloud_res:
                 return cloud_res
 
-        # 2. Check if local Voxtral weights are installed via Transformers
+        # 2. Local Voxtral Realtime via Transformers (needs mistral-common and cached weights)
         try:
             import torch
-            from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
+            from transformers import AutoProcessor, VoxtralRealtimeForConditionalGeneration
 
             if not self._initialized:
                 logger.info(f"Loading local Voxtral model: {self.model_name}...")
                 from ..utils.hardware_check import get_inference_device
                 device, _ = get_inference_device()
-                dtype = torch.float16 if device in ("cuda", "mps") else torch.float32
+                dtype = torch.bfloat16 if device in ("cuda", "mps") else torch.float32
 
                 try:
-                    self._processor = AutoProcessor.from_pretrained(self.model_name, revision="main")  # nosec B615
-                    self._model = AutoModelForSpeechSeq2Seq.from_pretrained(  # nosec B615
+                    # Cache-only: never start a multi-GB download inside a summarize request.
+                    self._processor = AutoProcessor.from_pretrained(  # nosec B615
+                        self.model_name, revision="main", local_files_only=True
+                    )
+                    self._model = VoxtralRealtimeForConditionalGeneration.from_pretrained(  # nosec B615
                         self.model_name,
                         revision="main",
-                        torch_dtype=dtype,
+                        dtype=dtype,
                         low_cpu_mem_usage=True,
+                        local_files_only=True,
                     ).to(device)
+                    self._model.eval()
                     self._initialized = True
-                    logger.info(f"Local Voxtral 4B loaded successfully into memory on {device}.")
+                    logger.info(f"Local Voxtral 4B loaded on {device}.")
                 except Exception as load_err:
-                    logger.warning(f"Local Voxtral weights not cached: {load_err}. Using acoustic parser.")
+                    logger.warning(f"Local Voxtral could not be loaded: {load_err}")
 
             if self._initialized and self._model is not None:
                 return self._run_local_voxtral_inference(audio_path)
 
-        except ImportError:
-            logger.info("Transformers / Torch initializing lightweight Voxtral pipeline.")
+        except ImportError as import_err:
+            logger.warning(f"Local Voxtral unavailable (missing package): {import_err}")
 
         # 3. Native audio inspection fallback
         return self._generate_audio_analysis_fallback(audio_path)
@@ -157,26 +166,50 @@ class VoxtralSpeechEngine:
     def _run_local_voxtral_inference(self, audio_path: str) -> dict[str, Any]:
         """Execute local Voxtral inference on device."""
         try:
+            import numpy as np
             import soundfile as sf
+            import torch
 
-            audio_data, sample_rate = sf.read(audio_path)
-            inputs = self._processor(audio_data, sampling_rate=sample_rate, return_tensors="pt")
-            predicted_ids = self._model.generate(inputs.input_features)
-            transcription = self._processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+            audio_data, sample_rate = sf.read(audio_path, dtype="float32")
+            if audio_data.ndim > 1:
+                audio_data = audio_data.mean(axis=1)
+            if sample_rate != VOXTRAL_SAMPLE_RATE:
+                target_len = int(len(audio_data) * VOXTRAL_SAMPLE_RATE / sample_rate)
+                audio_data = np.interp(
+                    np.linspace(0, len(audio_data) - 1, target_len),
+                    np.arange(len(audio_data)),
+                    audio_data,
+                ).astype("float32")
+                sample_rate = VOXTRAL_SAMPLE_RATE
+
+            # Windowed decoding gives timestamped segments and bounds memory use.
+            window = LOCAL_WINDOW_SECONDS * sample_rate
+            segments: list[dict[str, Any]] = []
+            for offset in range(0, len(audio_data), window):
+                chunk = audio_data[offset : offset + window]
+                if len(chunk) < sample_rate // 2 or float(np.abs(chunk).max()) < SILENCE_PEAK:
+                    continue
+                inputs = self._processor(chunk, return_tensors="pt")
+                inputs = inputs.to(self._model.device, dtype=self._model.dtype)
+                with torch.no_grad():
+                    outputs = self._model.generate(**inputs, max_new_tokens=LOCAL_MAX_NEW_TOKENS)
+                text = self._processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+                if text:
+                    start = offset / float(sample_rate)
+                    segments.append({
+                        "start": round(start, 2),
+                        "end": round(start + len(chunk) / float(sample_rate), 2),
+                        "speaker": "Speaker 1",
+                        "text": text,
+                    })
 
             duration = len(audio_data) / float(sample_rate) if sample_rate else 0.0
             return {
-                "full_transcript": transcription,
-                "segments": [
-                    {
-                        "start": 0.0,
-                        "end": round(duration, 2),
-                        "speaker": "Speaker 1",
-                        "text": transcription,
-                    }
-                ],
+                "full_transcript": " ".join(s["text"] for s in segments),
+                "segments": segments,
                 "duration_seconds": round(duration, 2),
                 "language": "en",
+                "engine": "voxtral-local",
             }
         except Exception as e:
             logger.error(f"Local Voxtral inference error: {e}")
@@ -190,5 +223,8 @@ class VoxtralSpeechEngine:
             "duration_seconds": 0.0,
             "language": "en",
             "status": "unavailable",
-            "reason": "No transcription engine configured (set MISTRAL_API_KEY or install local Voxtral weights).",
+            "reason": (
+                "Speech transcription is not set up, so the report uses screen activity only. "
+                "Add a Gemini API key in Settings (or set MISTRAL_API_KEY) to include what was said."
+            ),
         }

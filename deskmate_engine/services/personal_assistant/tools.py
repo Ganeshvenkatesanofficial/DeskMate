@@ -50,12 +50,11 @@ from core.database import (
 )
 from settings import (
     GOOGLE_CREDENTIALS_PATH,
-    GMAIL_TOKEN_PATH,
-    GCAL_TOKEN_PATH,
-    DRIVE_TOKEN_PATH,
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
+    GOOGLE_SCOPES,
+    GOOGLE_TOKEN_PATH,
+    LEGACY_GOOGLE_TOKENS,
     GITHUB_TOKEN,
+    google_client_credentials,
 )
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -63,102 +62,146 @@ from settings import (
 _CREDS = GOOGLE_CREDENTIALS_PATH
 
 
-def _google_service(scopes: list[str], token_path: str, api: str, version: str) -> Any:
-    """Return an authenticated Google API service, refreshing token if needed."""
+OAUTH_TIMEOUT_SECONDS = 180
+_OAUTH_LOCK = threading.Lock()
 
-    # Always write tokens in user data directory
-    resolved_token_path = str(get_user_data_dir() / Path(token_path).name)
 
-    # Dynamically generate credentials.json if absent but GOOGLE_CLIENT_ID/SECRET exist in .env
-    resolved_creds = get_user_data_dir() / "credentials.json"
+def _client_secrets_file() -> str:
+    """Path to the OAuth client file, generated from saved Settings values if needed."""
     if Path(_CREDS).exists():
-        actual_creds = _CREDS
-    elif resolved_creds.exists():
-        actual_creds = str(resolved_creds)
-    else:
-        client_id = GOOGLE_CLIENT_ID or os.getenv("CI")
-        client_secret = GOOGLE_CLIENT_SECRET or os.getenv("CS")
-        if client_id and client_secret:
-            creds_data = {
-                "installed": {
-                    "client_id": client_id,
-                    "project_id": "deskmate-personal-agent",
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_secret": client_secret,
-                    "redirect_uris": ["http://localhost"]
-                }
-            }
-            try:
-                resolved_creds.write_text(json.dumps(creds_data), encoding="utf-8")
-                actual_creds = str(resolved_creds)
-            except Exception:
-                actual_creds = _CREDS
-        else:
-            actual_creds = _CREDS
+        return _CREDS
+    resolved_creds = get_user_data_dir() / "credentials.json"
+    if resolved_creds.exists():
+        return str(resolved_creds)
+    client_id, client_secret = google_client_credentials()
+    if not (client_id and client_secret):
+        raise FileNotFoundError(
+            "Google account is not connected. Add your Google Client ID and Secret in Settings > Google Workspace OAuth."
+        )
+    resolved_creds.write_text(json.dumps({
+        "installed": {
+            "client_id": client_id,
+            "project_id": "deskmate-personal-agent",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": client_secret,
+            "redirect_uris": ["http://localhost"],
+        }
+    }), encoding="utf-8")
+    return str(resolved_creds)
 
-    creds = None
-    if Path(resolved_token_path).exists():
+
+def _load_token(path: Path, required_scopes: list[str] | None = None) -> Credentials | None:
+    """Load a saved token, refreshing it if expired. None if missing, revoked or too narrow."""
+    if not path.exists():
+        return None
+    try:
+        creds = Credentials.from_authorized_user_file(str(path))
+        if required_scopes and not set(required_scopes) <= set(creds.scopes or []):
+            return None
+        if not creds.valid:
+            if not (creds.expired and creds.refresh_token):
+                return None
+            creds.refresh(Request())
+            path.write_text(creds.to_json(), encoding="utf-8")
+        return creds
+    except Exception as e:
+        logger.debug(f"Google token {path.name} unusable: {e}")
+        return None
+
+
+def _unified_token_path() -> Path:
+    return get_user_data_dir() / Path(GOOGLE_TOKEN_PATH).name
+
+
+def _service_scopes(api: str) -> list[str]:
+    return [sc for sc in GOOGLE_SCOPES if f"/auth/{api}" in sc]
+
+
+def _token_scopes(path: Path) -> set[str]:
+    try:
+        return set(json.loads(path.read_text(encoding="utf-8")).get("scopes") or [])
+    except Exception:
+        return set()
+
+
+def google_connection_status() -> dict[str, bool]:
+    """Which Google services a saved token fully covers (reads files only, no network)."""
+    data_dir = get_user_data_dir()
+    unified = _token_scopes(_unified_token_path())
+    status = {}
+    for api, legacy_names in LEGACY_GOOGLE_TOKENS.items():
+        needed = set(_service_scopes(api))
+        status[api] = needed <= unified or any(
+            needed <= _token_scopes(data_dir / name) for name in legacy_names
+        )
+    return status
+
+
+def connect_google_account() -> Credentials:
+    """Show ONE Google consent screen for Gmail, Calendar, Drive and Tasks, and save the token."""
+    secrets = _client_secrets_file()
+    orig_open = webbrowser.open
+
+    def _robust_open(url, new=0, autoraise=True):
+        sys.stderr.write(f"\n[Google sign-in] Open this URL if the browser doesn't open automatically:\n{url}\n\n")
+        sys.stderr.flush()
         try:
-            # Read the raw JSON scopes to find the actual authorized permissions
-            with open(resolved_token_path, "r", encoding="utf-8") as f:
-                token_data = json.load(f)
-            authorized_scopes = token_data.get("scopes", [])
-            if all(s in authorized_scopes for s in scopes):
-                creds = Credentials.from_authorized_user_file(resolved_token_path, scopes)
-            else:
-                creds = None # Force re-auth due to missing scopes
-        except Exception as e:
-            logger.debug(f"Failed to read authorized scopes from token file: {e}")
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception:
-                creds = None
-        
-        if not creds:
-            # Merge requested scopes with any already authorized in the token file to avoid scope thrashing
-            req_scopes = scopes
-            if Path(resolved_token_path).exists():
-                try:
-                    with open(resolved_token_path, "r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
-                    existing_scopes = existing_data.get("scopes", [])
-                    if existing_scopes:
-                        req_scopes = list(set(scopes + existing_scopes))
-                except Exception as e:
-                    logger.debug(f"Failed to read existing scopes from token file: {e}")
+            if sys.platform == "win32":
+                os.startfile(url)
+                return True
+        except Exception as err:
+            sys.stderr.write(f"[Google sign-in] os.startfile failed: {err}\n")
+        try:
+            return orig_open(url, new, autoraise)
+        except Exception:
+            return False
 
-            orig_open = webbrowser.open
+    # Google lets users untick single permissions; accept the partial grant
+    # instead of failing the whole sign-in ("Scope has changed").
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
-            def _robust_open(url, new=0, autoraise=True):
-                sys.stderr.write(f"\n[OAuth Re-Auth] Please open this URL in your browser if it doesn't open automatically:\n{url}\n\n")
-                sys.stderr.flush()
-                try:
-                    if sys.platform == "win32":
-                        os.startfile(url)
-                        return True
-                except Exception as err:
-                    sys.stderr.write(f"[OAuth Re-Auth] Failed to use os.startfile: {err}\n")
-                    sys.stderr.flush()
-                try:
-                    return orig_open(url, new, autoraise)
-                except Exception:
-                    return False
+    # One sign-in at a time, and never wait forever on an ignored browser tab.
+    with _OAUTH_LOCK:
+        existing = _load_token(_unified_token_path(), GOOGLE_SCOPES)
+        if existing:
+            return existing
+        webbrowser.open = _robust_open
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(secrets, GOOGLE_SCOPES)
+            creds = flow.run_local_server(port=0, timeout_seconds=OAUTH_TIMEOUT_SECONDS)
+        except Exception as oauth_err:
+            logger.warning(f"Google sign-in did not complete: {oauth_err}")
+            raise RuntimeError(
+                f"Google sign-in was not completed within {OAUTH_TIMEOUT_SECONDS // 60} minutes. "
+                "Press Connect Google Account and finish signing in in the browser window that opens."
+            ) from oauth_err
+        finally:
+            webbrowser.open = orig_open
+        # Written inside the lock so a waiting caller sees it instead of prompting again.
+        _unified_token_path().write_text(creds.to_json(), encoding="utf-8")
+    return creds
 
-            webbrowser.open = _robust_open
-            try:
-                flow = InstalledAppFlow.from_client_secrets_file(actual_creds, req_scopes)
-                creds = flow.run_local_server(port=0)
-            finally:
-                webbrowser.open = orig_open
-        
-        Path(resolved_token_path).write_text(creds.to_json(), encoding="utf-8")
+
+def _google_service(api: str, version: str) -> Any:
+    """Authenticated Google API client. Uses the shared token, an older per-service token,
+    or asks for one combined consent if neither covers this service."""
+    needed = _service_scopes(api)
+    creds = _load_token(_unified_token_path(), needed)
+    if not creds:
+        for name in LEGACY_GOOGLE_TOKENS.get(api, []):
+            creds = _load_token(get_user_data_dir() / name, needed)
+            if creds:
+                break
+    if not creds:
+        creds = connect_google_account()
+        if not set(needed) <= set(creds.scopes or []):
+            raise RuntimeError(
+                f"Google sign-in finished, but {api.capitalize()} access was not allowed. "
+                "Press Connect Google Account and keep every permission ticked."
+            )
     return build(api, version, credentials=creds)
-
-
 
 
 # ─── FAISS vector memory (in-process, fully offline) ─────────────────────────
@@ -254,11 +297,7 @@ class SearchEmailsTool(Tool):
     def forward(self, query: str, max_results: int | None = 10) -> str:
         try:
             max_results = max_results or 10
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.readonly"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             res = svc.users().messages().list(userId="me", q=query, maxResults=max_results).execute()
             summaries = []
             for msg in res.get("messages", []):
@@ -295,11 +334,7 @@ class ReadEmailTool(Tool):
 
     def forward(self, email_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.readonly"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             msg = svc.users().messages().get(userId="me", id=email_id, format="full").execute()
 
             # Extract headers
@@ -346,11 +381,7 @@ class SendEmailTool(Tool):
     def forward(self, to: str, subject: str, body: str, cc: str | None = "") -> str:
         try:
             cc = cc or ""
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.send"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             mime = MIMEText(body)
             mime["To"] = to
             mime["Subject"] = subject
@@ -383,11 +414,7 @@ class ListEventsTool(Tool):
         try:
             days_ahead = days_ahead or 7
             max_results = max_results or 15
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/calendar.readonly"],
-                os.getenv("GCAL_TOKEN_PATH", "token_gcal.json"),
-                "calendar", "v3",
-            )
+            svc = _google_service("calendar", "v3")
             now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             end = (datetime.now(timezone.utc) + timedelta(days=days_ahead)).isoformat().replace("+00:00", "Z")
             res = svc.events().list(
@@ -432,11 +459,7 @@ class CreateEventTool(Tool):
             description = description or ""
             attendees = attendees or ""
             location = location or ""
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/calendar"],
-                os.getenv("GCAL_TOKEN_PATH", "token_gcal.json"),
-                "calendar", "v3",
-            )
+            svc = _google_service("calendar", "v3")
             body: dict[str, Any] = {
                 "summary": summary,
                 "description": description,
@@ -473,11 +496,7 @@ class SearchDriveTool(Tool):
     def forward(self, query: str | None = None, mime_type: str | None = None, order_by: str | None = "modifiedTime desc", max_results: int | None = 10) -> str:
         try:
             max_results = max_results or 10
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/drive.readonly"],
-                os.getenv("DRIVE_TOKEN_PATH", "token_drive.json"),
-                "drive", "v3",
-            )
+            svc = _google_service("drive", "v3")
             q = "trashed = false"
             if query:
                 safe_q = query.replace("'", "\\'")
@@ -900,11 +919,7 @@ class ReplyEmailTool(Tool):
 
     def forward(self, email_id: str, body: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.modify"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             full_orig = svc.users().messages().get(userId="me", id=email_id, format="full").execute()
             thread_id = full_orig.get("threadId")
             headers = {x["name"].lower(): x["value"] for x in full_orig.get("payload", {}).get("headers", [])}
@@ -948,11 +963,7 @@ class DeleteEmailTool(Tool):
 
     def forward(self, email_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.modify"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             svc.users().messages().trash(userId="me", id=email_id).execute()
             return f"Email {email_id} successfully moved to Trash."
         except Exception as e:
@@ -969,11 +980,7 @@ class MarkEmailReadTool(Tool):
 
     def forward(self, email_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/gmail.modify"],
-                os.getenv("GMAIL_TOKEN_PATH", "token_gmail.json"),
-                "gmail", "v1",
-            )
+            svc = _google_service("gmail", "v1")
             svc.users().messages().batchModify(
                 userId="me",
                 body={"ids": [email_id], "removeLabelIds": ["UNREAD"]}
@@ -993,11 +1000,7 @@ class DeleteCalendarEventTool(Tool):
 
     def forward(self, event_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/calendar"],
-                os.getenv("GCAL_TOKEN_PATH", "token_gcal.json"),
-                "calendar", "v3",
-            )
+            svc = _google_service("calendar", "v3")
             svc.events().delete(calendarId="primary", eventId=event_id).execute()
             return f"Calendar event {event_id} successfully deleted."
         except Exception as e:
@@ -1022,11 +1025,7 @@ class UpdateCalendarEventTool(Tool):
                 end_datetime: str | None = None, description: str | None = None,
                 location: str | None = None, attendees: str | None = None) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/calendar"],
-                os.getenv("GCAL_TOKEN_PATH", "token_gcal.json"),
-                "calendar", "v3",
-            )
+            svc = _google_service("calendar", "v3")
             event = svc.events().get(calendarId="primary", eventId=event_id).execute()
             
             if summary:
@@ -1066,11 +1065,7 @@ class CreateDriveFileTool(Tool):
 
     def forward(self, title: str, file_type: str, content: str | None = None) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/drive"],
-                os.getenv("DRIVE_TOKEN_PATH", "token_drive.json"),
-                "drive", "v3",
-            )
+            svc = _google_service("drive", "v3")
             
             mime_types = {
                 "doc": "application/vnd.google-apps.document",
@@ -1112,11 +1107,7 @@ class ReadDriveFileTool(Tool):
 
     def forward(self, file_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/drive.readonly"],
-                os.getenv("DRIVE_TOKEN_PATH", "token_drive.json"),
-                "drive", "v3",
-            )
+            svc = _google_service("drive", "v3")
             
             meta = svc.files().get(fileId=file_id, fields="name, mimeType").execute()
             mime = meta.get("mimeType", "")
@@ -1160,11 +1151,7 @@ class DeleteDriveFileTool(Tool):
 
     def forward(self, file_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/drive"],
-                os.getenv("DRIVE_TOKEN_PATH", "token_drive.json"),
-                "drive", "v3",
-            )
+            svc = _google_service("drive", "v3")
             svc.files().update(fileId=file_id, body={"trashed": True}).execute()
             return f"Google Drive file/folder with ID {file_id} was successfully moved to Trash."
         except Exception as e:
@@ -1184,11 +1171,7 @@ class ListGoogleTasksTool(Tool):
         try:
             max_results = max_results or 20
             show_completed = show_completed or False
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/tasks.readonly"],
-                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
-                "tasks", "v1",
-            )
+            svc = _google_service("tasks", "v1")
             
             res = svc.tasks().list(
                 tasklist="@default",
@@ -1224,11 +1207,7 @@ class CreateGoogleTaskTool(Tool):
 
     def forward(self, title: str, notes: str | None = None, due_date: str | None = None) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/tasks"],
-                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
-                "tasks", "v1",
-            )
+            svc = _google_service("tasks", "v1")
 
             body = {"title": title}
             if notes:
@@ -1252,11 +1231,7 @@ class CompleteGoogleTaskTool(Tool):
 
     def forward(self, task_id: str) -> str:
         try:
-            svc = _google_service(
-                ["https://www.googleapis.com/auth/tasks"],
-                os.getenv("TASKS_TOKEN_PATH", "token_tasks.json"),
-                "tasks", "v1",
-            )
+            svc = _google_service("tasks", "v1")
 
             svc.tasks().patch(tasklist="@default", task=task_id, body={"status": "completed"}).execute()
             return f"Google Task {task_id} successfully marked as completed."

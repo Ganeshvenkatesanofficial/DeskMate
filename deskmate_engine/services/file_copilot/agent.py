@@ -145,6 +145,5 @@ def check_file_copilot_health() -> Dict[str, Any]:
         "checks": {
             "filesystem_access": has_fs_access,
             "qdrant_db": has_qdrant,
-            "privacy_mode": True,
         },
     }

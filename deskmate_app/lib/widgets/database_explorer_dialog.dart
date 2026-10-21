@@ -86,6 +86,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
     try {
       final apiService = context.read<ChatProvider>().apiService;
       final overview = await apiService.getDatabaseOverview();
+      if (!mounted) return;
 
       if (overview['status'] == 'offline') {
         setState(() {
@@ -117,6 +118,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
         await _loadTableData(initialTable);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingOverview = false;
         _overviewError = 'Failed to load database overview: $e';
@@ -136,6 +138,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
     try {
       final apiService = context.read<ChatProvider>().apiService;
       final data = await apiService.getDatabaseTableData(tableName, limit: 300);
+      if (!mounted) return;
 
       if (data['status'] == 'error') {
         setState(() {
@@ -157,6 +160,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
             .toList();
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingTableData = false;
         _tableDataError = 'Error fetching rows: $e';
@@ -179,6 +183,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
       final apiService = context.read<ChatProvider>().apiService;
       final result = await apiService.executeDatabaseQuery(query);
       stopwatch.stop();
+      if (!mounted) return;
 
       if (result['status'] == 'error') {
         setState(() {
@@ -204,6 +209,7 @@ class _DatabaseExplorerDialogState extends State<DatabaseExplorerDialog> {
       });
     } catch (e) {
       stopwatch.stop();
+      if (!mounted) return;
       setState(() {
         _isExecutingQuery = false;
         _queryError = 'Execution failed: $e';

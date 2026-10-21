@@ -30,6 +30,10 @@ from services.meeting_intelligence import (
 )
 from services.meeting_intelligence.audio_service import LiveAudioRecorder
 from services.meeting_intelligence.screen_capture_service import ScreenCapture
+from services.meeting_intelligence.summarizer import (
+    NothingToSummarizeError,
+    SummarizationUnavailableError,
+)
 
 from settings import SESSIONS_OUTPUT_DIR, DEFAULT_SCREEN_FPS, MAX_RETAINED_SESSIONS
 
@@ -44,7 +48,7 @@ _SESSION_STATE: dict[str, Any] = {
     "voxtral": VoxtralSpeechEngine(),
     "summarizer": MeetingSummarizer(),
     "pdf_generator": MeetingPDFGenerator(),
-    "export_service": MeetingExportService(),
+    "export_service": MeetingExportService(output_dir=SESSIONS_OUTPUT_DIR),
     "active_session_id": None,
     "output_dir": SESSIONS_OUTPUT_DIR,
 }
@@ -55,12 +59,14 @@ class StartMeetingRequest(BaseModel):
     fps: float = DEFAULT_SCREEN_FPS
     allow_lightweight_mode: bool = False
     start_muted: bool = False
+    gemini_api_key: Optional[str] = None
 
 
 class SummarizeMeetingRequest(BaseModel):
     session_id: Optional[str] = None
     custom_fields: Optional[list[dict[str, str]]] = None
     purge_raw_assets_after: bool = False
+    gemini_api_key: Optional[str] = None
 
 
 class SyncTasksRequest(BaseModel):
@@ -105,7 +111,7 @@ async def start_meeting(req: StartMeetingRequest):
         # Compulsory Vision Model Verification (or Lightweight Laptop Mode)
         from core.models import get_installed_vision_models, get_installed_chat_models
         vision_models = get_installed_vision_models()
-        has_gemini = bool(_SESSION_STATE["summarizer"].gemini_api_key)
+        has_gemini = bool((req.gemini_api_key or "").strip() or _SESSION_STATE["summarizer"].gemini_api_key)
         installed_chat_models = get_installed_chat_models()
 
         if not vision_models and not has_gemini:
@@ -139,9 +145,11 @@ async def start_meeting(req: StartMeetingRequest):
         session_id = pipeline.start()
         session_dir = str(Path(_SESSION_STATE["output_dir"]) / session_id)
 
-        # Start automated background audio recording (captures earphones/system & mic)
+        # Start automated background audio recording (captures speakers/system & mic)
         audio_rec = LiveAudioRecorder()
-        audio_rec.start_recording(session_dir, "audio.wav", start_muted=req.start_muted)
+        await asyncio.to_thread(
+            audio_rec.start_recording, session_dir, "audio.wav", start_muted=req.start_muted
+        )
         _SESSION_STATE["audio_recorder"] = audio_rec
 
         _SESSION_STATE["capture"] = capture
@@ -153,12 +161,20 @@ async def start_meeting(req: StartMeetingRequest):
             "session_id": session_id,
             "fps": req.fps,
             "monitor": req.monitor,
-            "audio_recording": True,
+            "audio_recording": audio_rec.is_recording,
+            "system_audio": audio_rec.system_audio_active,
+            "mic_audio": audio_rec.mic_audio_active,
+            "audio_warning": audio_rec.warning,
             "mic_muted": req.start_muted,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Failed to start meeting session: {e}")
-        raise HTTPException(status_code=500, detail="Meeting start failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Meeting start failed. Check that DeskMate has Screen Recording and Microphone permission in System Settings > Privacy & Security, then try again.",
+        )
 
 
 @router.get("/status")
@@ -173,6 +189,7 @@ async def get_meeting_status():
         stats = dict(pipeline.stats)
         stats["mic_muted"] = mic_muted
         stats["audio_recording"] = audio_recording
+        stats["audio_warning"] = audio_rec.warning if audio_rec else None
         return stats
 
     return {
@@ -224,7 +241,7 @@ async def stop_meeting():
         }
     except Exception as e:
         logger.exception(f"Error stopping meeting session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Stopping the meeting failed")
 
 
 _MAX_AUDIO_BYTES = 500 * 1024 * 1024  # 500 MB
@@ -259,7 +276,7 @@ async def upload_session_audio(session_id: str, file: UploadFile = File(...)):
 
 @router.post("/summarize")
 async def summarize_meeting(req: SummarizeMeetingRequest):
-    """Run multimodal Gemini 1.5 Flash / Ollama summarization and generate DeskMate PDF."""
+    """Run multimodal Gemini 2.5 Flash / Ollama summarization and generate DeskMate PDF."""
     session_id = req.session_id or _SESSION_STATE.get("active_session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="No session_id provided or active.")
@@ -272,7 +289,10 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
     session_dir = output_dir / session_id
 
     if not report_file.exists():
-        raise HTTPException(status_code=404, detail=f"Session report not found: {report_file}")
+        raise HTTPException(
+            status_code=404,
+            detail="This meeting's screen data was not saved, so it can't be summarized.",
+        )
 
     try:
         report_data = await asyncio.to_thread(
@@ -301,11 +321,11 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 audio_path = str(p)
                 break
 
-        transcript_data = None
-        if audio_path and Path(audio_path).exists():
-            extractor = AudioExtractor()
-            normalized_path = extractor.extract_and_normalize(audio_path)
+        summarizer: MeetingSummarizer = _SESSION_STATE["summarizer"]
+        gemini_key = (req.gemini_api_key or "").strip() or summarizer.gemini_api_key
 
+        transcript_data: Optional[dict[str, Any]] = None
+        if audio_path and Path(audio_path).exists():
             # Stage 2: Voxtral 4B Diarization Telemetry
             await meeting_ws_manager.broadcast({
                 "type": "post_processing_telemetry",
@@ -317,14 +337,45 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 "title": "Voxtral 4B Diarization",
                 "detail": "Transcribing speech and diarizing speaker conversational turns...",
             })
-
-            voxtral = _SESSION_STATE["voxtral"]
-            chunker = ChunkedTranscriber(voxtral)
-            transcript_data = await chunker.transcribe_long_file(normalized_path)
+            try:
+                extractor = AudioExtractor()
+                normalized_path = await asyncio.to_thread(extractor.extract_and_normalize, audio_path)
+                voxtral: VoxtralSpeechEngine = _SESSION_STATE["voxtral"]
+                chunker = ChunkedTranscriber(voxtral)
+                transcript_data = await chunker.transcribe_long_file(normalized_path)
+                has_speech = bool(transcript_data.get("segments") or transcript_data.get("full_transcript"))
+                if not has_speech and gemini_key:
+                    gemini_transcript = await asyncio.to_thread(
+                        summarizer.transcribe_audio_with_gemini, normalized_path, gemini_key
+                    )
+                    if gemini_transcript:
+                        transcript_data = gemini_transcript
+                        has_speech = bool(gemini_transcript.get("segments"))
+                if not has_speech and not transcript_data.get("reason"):
+                    transcript_data["status"] = "unavailable"
+                    transcript_data["reason"] = "No speech was detected in the recording."
+            except Exception as audio_err:
+                logger.exception(f"Audio transcription failed for {session_id}: {audio_err}")
+                transcript_data = {
+                    "full_transcript": "",
+                    "segments": [],
+                    "status": "unavailable",
+                    "reason": "Audio could not be processed, so the report uses screen activity only.",
+                }
+        else:
+            transcript_data = {
+                "full_transcript": "",
+                "segments": [],
+                "status": "unavailable",
+                "reason": "No audio was recorded for this meeting. Check Microphone and Screen Recording permission.",
+            }
 
         # Stage 3: Multimodal Reasoning & Visual Synthesis Telemetry
-        summarizer: MeetingSummarizer = _SESSION_STATE["summarizer"]
-        active_engine = "Gemini 1.5 Flash" if summarizer.gemini_api_key else f"Ollama ({summarizer._resolve_available_ollama_model()})"
+        active_engine = (
+            f"Gemini ({summarizer.gemini_model})"
+            if gemini_key
+            else f"Ollama ({await asyncio.to_thread(summarizer._resolve_available_ollama_model)})"
+        )
         await meeting_ws_manager.broadcast({
             "type": "post_processing_telemetry",
             "session_id": session_id,
@@ -339,10 +390,12 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         loop = asyncio.get_running_loop()
         summary_md, important_steps, step_desc, custom_fields_res = await loop.run_in_executor(
             None,
-            summarizer.summarize_meeting,
-            steps,
-            transcript_data,
-            req.custom_fields,
+            lambda: summarizer.summarize_meeting(
+                steps,
+                transcript_data,
+                req.custom_fields,
+                gemini_api_key=gemini_key,
+            ),
         )
 
         # Stage 4: PDF Report Compilation Telemetry
@@ -389,6 +442,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         report_data["important_steps"] = important_steps
         report_data["step_descriptions"] = step_desc
         report_data["custom_fields"] = custom_fields_res
+        report_data["transcript"] = transcript_data
         report_data["pdf_path"] = pdf_path if pdf_ok else None
 
         await asyncio.to_thread(
@@ -414,9 +468,16 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             "pdf_generated": pdf_ok,
             "pdf_url": f"/api/meeting/pdf/{session_id}" if pdf_ok else None,
         }
+    except NothingToSummarizeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except SummarizationUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.exception(f"Summarization error: {e}")
-        raise HTTPException(status_code=500, detail="Summarization failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Summarization failed. Your recording is saved, so you can retry from this screen.",
+        )
 
 
 @router.get("/asset/{session_id}/{filename}")
@@ -438,6 +499,8 @@ async def get_session_asset(session_id: str, filename: str):
 @router.get("/pdf/{session_id}")
 async def download_meeting_pdf(session_id: str):
     """Stream DeskMate-branded executive PDF report."""
+    if "/" in session_id or "\\" in session_id or ".." in session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
     output_dir = Path(_SESSION_STATE["output_dir"])
     pdf_path = output_dir / session_id / f"deskmate_report_{session_id}.pdf"
     if pdf_path.exists():

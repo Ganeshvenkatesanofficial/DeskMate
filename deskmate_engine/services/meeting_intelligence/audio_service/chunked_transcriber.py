@@ -57,8 +57,14 @@ class ChunkedTranscriber:
         all_segments = []
         transcript_parts = []
 
+        unavailable_reason = None
         for chunk in chunks:
             chunk_res = await self.engine.transcribe_file(chunk.path)
+            if chunk_res.get("status") == "unavailable":
+                # No engine: every chunk would fail the same way, so stop here.
+                unavailable_reason = chunk_res.get("reason")
+                self._remove_chunk(chunk.path, audio_path)
+                break
             # Offset segment timestamps
             for seg in chunk_res.get("segments", []):
                 all_segments.append({
@@ -71,20 +77,30 @@ class ChunkedTranscriber:
             if t_text:
                 transcript_parts.append(t_text)
 
-            # Cleanup temporary chunk file
-            try:
-                chunk_p = Path(chunk.path)
-                if chunk_p.exists() and str(chunk_p) != str(Path(audio_path)):
-                    chunk_p.unlink(missing_ok=True)
-            except Exception as e:
-                logger.debug(f"Failed to unlink temp chunk file {chunk_p}: {e}")
+            self._remove_chunk(chunk.path, audio_path)
 
-        return {
+        for chunk in chunks:
+            self._remove_chunk(chunk.path, audio_path)
+
+        result = {
             "full_transcript": " ".join(transcript_parts),
             "segments": all_segments,
             "duration_seconds": total_duration,
             "language": "en",
         }
+        if unavailable_reason and not all_segments:
+            result["status"] = "unavailable"
+            result["reason"] = unavailable_reason
+        return result
+
+    @staticmethod
+    def _remove_chunk(chunk_path: str, audio_path: str) -> None:
+        try:
+            chunk_p = Path(chunk_path)
+            if chunk_p.exists() and str(chunk_p) != str(Path(audio_path)):
+                chunk_p.unlink(missing_ok=True)
+        except Exception as e:
+            logger.debug(f"Failed to unlink temp chunk file {chunk_path}: {e}")
 
     def _get_audio_duration(self, audio_path: str) -> float:
         try:

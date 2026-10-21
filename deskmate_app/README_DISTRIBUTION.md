@@ -6,11 +6,17 @@ Welcome to **DeskMate**, your local offline AI Desktop Copilot and Personal Assi
 
 ## 🚀 Quick Start (Running DeskMate)
 
-1. **Extract** the entire ZIP folder onto your computer.
-2. Double-click **`DeskMate.exe`**.
-   * *Note: DeskMate automatically launches its silent local AI backend process in the background. No console prompts or black windows will appear.*
-3. Paste your **Gemini API Key** in the sidebar configuration and click **Load Key**.
-4. You can now toggle between **File Explorer** and **Personal Agent** modes instantly!
+1. **Install**
+   * **macOS** (Apple Silicon M1/M2/M3/M4 only): open `DeskMate.dmg` and drag **DeskMate** into **Applications**, then open it from Applications.
+   * **Windows**: extract the ZIP folder and double-click **`DeskMate.exe`**.
+   * *DeskMate starts its local AI engine silently in the background. The first launch can take 1–2 minutes.*
+2. **Choose your AI model** in **Settings → AI Model**:
+   * A local **Ollama** model (for example `qwen2.5-coder:1.5b`): everything stays on your computer.
+   * **Gemini 2.5 Flash (Cloud)**: paste your Gemini API key first (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)), then pick it. Your chats and files are sent to Google.
+   * *Saving a Gemini key alone does not switch to Gemini. DeskMate always uses the model you pick.*
+3. **macOS permissions**: when asked, allow **Microphone** and **Screen Recording** (System Settings → Privacy & Security). Meeting Scribe needs both.
+4. Switch between **File Explorer**, **Personal Agent** and **Meeting Scribe** in the sidebar.
+5. Changed your mind while the assistant is working? Press the **Stop** button (it replaces Send while a reply is running).
 
 ---
 
@@ -138,25 +144,23 @@ You can choose either of the following two methods:
 
 ---
 
-### Step 7: Launch & One-Click Authorization
-1. Open DeskMate.
-2. Select **Personal Agent** in the sidebar mode selector.
-3. Ask any command in chat:
-   - *"Show my calendar for tomorrow"*
-   - *"List my unread emails"*
-   - *"Show my to-do tasks"*
-4. Your default web browser will automatically open Google's authorization screen.
-5. Sign in using the same email you added as a **Test User** in Step 4.
-6. Click **Continue** (if prompted that the app is unverified) and click **Allow** to grant permissions.
-7. Return to DeskMate: All indicators under **PERSONAL AGENT HEALTH** will turn GREEN! ✅
+### Step 7: Connect Your Google Account (One Sign-In)
+1. Open DeskMate → **Settings → Google Workspace OAuth** (or the **Quick Setup** tab of the setup guide).
+2. Click **Connect Google Account**. Your browser opens **one** Google screen for Gmail, Calendar, Drive and Tasks together.
+3. Sign in with the same email you added as a **Test User** in Step 4.
+4. If Google says the app is unverified, click **Continue**. **Keep every permission ticked** and click **Allow**.
+5. Return to DeskMate. It shows **"Google account connected (Gmail, Calendar, Drive, Tasks)"**, and **PERSONAL AGENT HEALTH** turns green. ✅
+6. Try it: in **Personal Agent**, ask *"List my unread emails"* or *"Show my calendar for tomorrow"*.
+
+> **You only sign in once.** If you untick a permission, DeskMate tells you which one is missing; click **Connect Google Account** again to fix it. Finish within 3 minutes, or press the button again.
 
 ---
 
 ## 💡 Health Dashboard Reference
 
-* **Backend Active**: Green dot indicates local API service is online (`http://127.0.0.1:8080`).
+* **Backend Active**: Green dot indicates the local engine is online (`http://127.0.0.1:2026` by default; another free port is used if 2026 is busy).
 * **Local LLM Active**: Green dot indicates local Ollama / LM Studio server is detected on port `11434` / `1234`.
-* **Personal Services Health**: Shows individual green checkmarks for each Google Workspace service once authorized.
+* **Personal Services Health**: Shows a green checkmark for each Google service (Gmail, Calendar, Drive, Tasks) once your Google account is connected.
 
 ---
 
@@ -184,7 +188,15 @@ DeskMate provides 3 flexible ways to process meetings, making it extremely feasi
 * **Option B: 🦙 Full Multimodal Vision (`llama3.2-vision`)**:
   * For 16GB+ RAM laptops. Pull via `ollama run llama3.2-vision` to inspect raw screenshots pixel-by-pixel.
 * **Option C: ☁️ Google Gemini Cloud Vision**:
-  * When a **Google Gemini API Key** is configured in Settings, cloud multimodal reasoning is used natively. **Zero local RAM needed**, and no local vision model download is required.
+  * When **Gemini 2.5 Flash (Cloud)** is selected in **Settings → AI Model** (with your API key saved), cloud multimodal reasoning is used. **Zero local RAM needed**, and no local vision model download is required.
+
+### 2b. Speech Transcription (What Was Said)
+The meeting report includes the spoken conversation only when a speech engine is available:
+* **Gemini selected** (recommended): speech is transcribed by Gemini. No download needed.
+* **Local Voxtral 4B** (fully offline): needs a one-time **~9 GB** model download of [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602). Once downloaded, it is used automatically when a local model is selected.
+* **Neither available**: the report is built from screen activity only, and DeskMate tells you speech was not transcribed.
+
+If a speaker or microphone stream can't start (for example a missing permission), DeskMate shows a warning while recording so you can fix it before the meeting ends.
 
 ### 3. Agentic Post-Recording Telemetry Flow
 When you click **"End Meeting"**, DeskMate replaces the opaque loading spinner with an animated **Live Agentic Mission Control Stepper**:
@@ -193,3 +205,4 @@ When you click **"End Meeting"**, DeskMate replaces the opaque loading spinner w
 3. **Multimodal Synthesis**: Cross-referencing visual OCR and dialogue via your active model.
 4. **PDF Compilation**: Generating vector PDF reports with redacted host UI and syncing action items.
 * Features a live elapsed stopwatch timer (`00:08s`) and streaming console feed.
+* **If the report fails** (for example the AI engine was offline), press **Retry summary**. Your recording is kept, and past meetings without a report can be retried from **Past Meetings**.

@@ -9,6 +9,7 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 from smolagents import Tool
 from core.config import get_user_data_dir
+from services.file_copilot.tools import SECRET_FILE_REFUSAL, is_secret_path
 
 # Storage directory for Qdrant database (guaranteed-writable location)
 QDRANT_PATH = str(get_user_data_dir() / ".qdrant_data")
@@ -51,6 +52,8 @@ class IndexDocumentTool(Tool):
             path = Path(file_path).resolve()
             if not path.is_file():
                 return f"Error: '{file_path}' is not a valid file."
+            if is_secret_path(path):
+                return SECRET_FILE_REFUSAL.format(name=path.name)
 
             if path.suffix.lower() == ".pdf":
                 import pypdf
