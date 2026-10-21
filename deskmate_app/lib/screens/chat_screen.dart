@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../core/constants.dart';
@@ -1903,6 +1904,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ] else ...[
                     Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: theme.bgCode,
@@ -1931,26 +1933,62 @@ class _ChatScreenState extends State<ChatScreen> {
                               color: theme.fgMuted,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.isDark
-                                  ? Colors.black
-                                  : const Color(0xFFEAEEF2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'ollama run llama3.2',
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 11,
-                                color: theme.isDark
-                                    ? const Color(0xFF7EE787)
-                                    : const Color(0xFF116329),
+                          const SizedBox(height: 8),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(5),
+                              mouseCursor: SystemMouseCursors.click,
+                              onTap: () {
+                                Clipboard.setData(
+                                  const ClipboardData(
+                                    text: 'ollama run llama3.2',
+                                  ),
+                                );
+                                _showTopNotification(
+                                  'Copied to clipboard: ollama run llama3.2',
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.isDark
+                                      ? Colors.black
+                                      : const Color(0xFFEAEEF2),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: theme.borderDefault,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'ollama run llama3.2',
+                                      style: TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.isDark
+                                            ? const Color(0xFF7EE787)
+                                            : const Color(0xFF116329),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: 'Copy command',
+                                      child: Icon(
+                                        Icons.copy_rounded,
+                                        size: 13,
+                                        color: theme.fgMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -2620,7 +2658,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? 'Edit your message...'
                           : (!provider.isLocalLlmOnline &&
                                 !provider.isUsingGemini)
-                          ? 'Please configure your Gemini API Key in Settings to continue...'
+                          ? 'Start Ollama locally or configure Gemini API Key in Settings to continue...'
                           : provider.mode == AgentMode.personal
                           ? 'Ask about Tasks, Drive Docs, Gmail, Calendar...'
                           : 'Ask about your files...',
@@ -2637,68 +2675,78 @@ class _ChatScreenState extends State<ChatScreen> {
                 SizedBox(
                   height: 40,
                   width: 42,
-                  child: MouseRegion(
-                    cursor:
-                        (provider.isSending ||
-                            (!provider.isLocalLlmOnline &&
-                                !provider.isUsingGemini))
-                        ? SystemMouseCursors.basic
-                        : SystemMouseCursors.click,
-                    child: ElevatedButton(
-                      onPressed:
-                          provider.isSending ||
+                  child: Tooltip(
+                    message:
+                        (!provider.isLocalLlmOnline && !provider.isUsingGemini)
+                        ? 'Start Ollama locally or configure Gemini in Settings to send messages'
+                        : (provider.isSending
+                              ? 'Sending...'
+                              : 'Send message (Enter)'),
+                    child: MouseRegion(
+                      cursor:
+                          (provider.isSending ||
                               (!provider.isLocalLlmOnline &&
-                                  !provider.isUsingGemini)
-                          ? null
-                          : () => _handleSendMessage(provider),
-                      style: ButtonStyle(
-                        padding: WidgetStateProperty.all(EdgeInsets.zero),
-                        elevation: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.hovered)) {
-                            return 2.0;
-                          }
-                          return 0.0;
-                        }),
-                        mouseCursor: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.disabled)) {
-                            return SystemMouseCursors.basic;
-                          }
-                          return SystemMouseCursors.click;
-                        }),
-                        backgroundColor: WidgetStateProperty.resolveWith((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.disabled)) {
-                            return theme.bgEmphasis;
-                          }
-                          if (states.contains(WidgetState.hovered)) {
-                            return theme.accentHover;
-                          }
-                          if (states.contains(WidgetState.pressed)) {
-                            return AppTheme.purpleActive;
-                          }
-                          return theme.accentEmphasis;
-                        }),
-                        shape: WidgetStateProperty.all(
-                          RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
+                                  !provider.isUsingGemini))
+                          ? SystemMouseCursors.basic
+                          : SystemMouseCursors.click,
+                      child: ElevatedButton(
+                        onPressed:
+                            provider.isSending ||
+                                (!provider.isLocalLlmOnline &&
+                                    !provider.isUsingGemini)
+                            ? null
+                            : () => _handleSendMessage(provider),
+                        style: ButtonStyle(
+                          padding: WidgetStateProperty.all(EdgeInsets.zero),
+                          elevation: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.hovered)) {
+                              return 2.0;
+                            }
+                            return 0.0;
+                          }),
+                          mouseCursor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.disabled)) {
+                              return SystemMouseCursors.basic;
+                            }
+                            return SystemMouseCursors.click;
+                          }),
+                          backgroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.disabled)) {
+                              return theme.bgEmphasis;
+                            }
+                            if (states.contains(WidgetState.hovered)) {
+                              return theme.accentHover;
+                            }
+                            if (states.contains(WidgetState.pressed)) {
+                              return AppTheme.purpleActive;
+                            }
+                            return theme.accentEmphasis;
+                          }),
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                           ),
                         ),
-                      ),
-                      child: provider.isSending
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
+                        child: provider.isSending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.send_rounded,
                                 color: Colors.white,
-                                strokeWidth: 2,
+                                size: 18,
                               ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
+                      ),
                     ),
                   ),
                 ),

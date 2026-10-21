@@ -387,7 +387,7 @@ jobs:
           path: DeskMate-Windows.zip
 
       - name: Publish Windows Continuous Pre-release
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/meeting-intelligence-engine')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
@@ -395,6 +395,7 @@ jobs:
           name: "DeskMate Continuous Build"
           body: "Automated continuous build from ${{ github.ref_name }} branch (commit ${{ github.sha }})."
           prerelease: true
+          make_latest: false
           files: |
             DeskMate-Windows.zip
         env:
@@ -534,7 +535,7 @@ jobs:
           path: DeskMate-macOS.zip
 
       - name: Publish Continuous Pre-release
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/meeting-intelligence-engine')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
@@ -542,6 +543,7 @@ jobs:
           name: "DeskMate Continuous Build"
           body: "Automated continuous build from ${{ github.ref_name }} branch (commit ${{ github.sha }})."
           prerelease: true
+          make_latest: false
           files: |
             DeskMate-macOS.dmg
             DeskMate-macOS.zip

@@ -21,70 +21,93 @@ $TargetDir = Join-Path $env:LOCALAPPDATA "DeskMate"
 $TempZip = Join-Path $env:TEMP "DeskMate-Windows.zip"
 $ExtractTemp = Join-Path $env:TEMP "DeskMate_Extract_Temp"
 
-$Repo = "Ganeshvenkatesanofficial/DeskMate"
-$ReleaseUrls = @(
-    "https://github.com/$Repo/releases/download/continuous/DeskMate-Windows.zip",
-    "https://github.com/$Repo/releases/latest/download/DeskMate-Windows.zip"
+# Check for local Release build in repository
+$LocalBuildCandidates = @(
+    (Join-Path $PSScriptRoot "..\..\deskmate_app\build\windows\x64\runner\Release"),
+    (Join-Path (Get-Location) "deskmate_app\build\windows\x64\runner\Release"),
+    (Join-Path $HOME "DeskMate\deskmate_app\build\windows\x64\runner\Release")
 )
 
-# 3. Download Release
-$Downloaded = $false
-foreach ($url in $ReleaseUrls) {
-    try {
-        Write-Host "Downloading DeskMate from $url ..."
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $url -OutFile $TempZip -UseBasicParsing
-        if ((Test-Path $TempZip) -and ((Get-Item $TempZip).Length -gt 100000)) {
-            Write-Host "Download successful!" -ForegroundColor Green
-            $Downloaded = $true
-            break
+$LocalBuild = $null
+foreach ($Candidate in $LocalBuildCandidates) {
+    if ((Test-Path $Candidate) -and (Test-Path (Join-Path $Candidate "DeskMate.exe"))) {
+        $LocalBuild = $Candidate
+        break
+    }
+}
+
+if ($LocalBuild) {
+    Write-Host "Found local Release build in repository: $LocalBuild" -ForegroundColor Yellow
+    Write-Host "Installing from local Release build..."
+    if (Test-Path $TargetDir) { Remove-Item $TargetDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    Copy-Item -Path "$LocalBuild\*" -Destination $TargetDir -Recurse -Force
+} else {
+    $Repo = "Ganeshvenkatesanofficial/DeskMate"
+    $ReleaseUrls = @(
+        "https://github.com/$Repo/releases/download/continuous/DeskMate-Windows.zip",
+        "https://github.com/$Repo/releases/latest/download/DeskMate-Windows.zip"
+    )
+
+    # 3. Download Release
+    $Downloaded = $false
+    foreach ($url in $ReleaseUrls) {
+        try {
+            Write-Host "Downloading DeskMate from $url ..."
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $url -OutFile $TempZip -UseBasicParsing
+            if ((Test-Path $TempZip) -and ((Get-Item $TempZip).Length -gt 100000)) {
+                Write-Host "Download successful!" -ForegroundColor Green
+                $Downloaded = $true
+                break
+            }
+        } catch {
+            Write-Host "Notice: Could not download from $url" -ForegroundColor Yellow
         }
-    } catch {
-        Write-Host "Notice: Could not download from $url" -ForegroundColor Yellow
     }
-}
 
-if (-not $Downloaded) {
-    # Check if user already downloaded it to ~/Downloads
-    $Candidate = Join-Path $HOME "Downloads\DeskMate-Windows.zip"
-    if (Test-Path $Candidate) {
-        Write-Host "Found DeskMate-Windows.zip in Downloads folder!" -ForegroundColor Green
-        Copy-Item $Candidate -Destination $TempZip -Force
-        $Downloaded = $true
+    if (-not $Downloaded) {
+        # Check if user already downloaded it to ~/Downloads
+        $Candidate = Join-Path $HOME "Downloads\DeskMate-Windows.zip"
+        if (Test-Path $Candidate) {
+            Write-Host "Found DeskMate-Windows.zip in Downloads folder!" -ForegroundColor Green
+            Copy-Item $Candidate -Destination $TempZip -Force
+            $Downloaded = $true
+        }
     }
+
+    if (-not $Downloaded) {
+        Write-Error "Failed to download DeskMate-Windows.zip. Please download it manually from https://github.com/$Repo/releases"
+        exit 1
+    }
+
+    # 4. Extract Package
+    Write-Host "Extracting DeskMate package..."
+    if (Test-Path $ExtractTemp) { Remove-Item $ExtractTemp -Recurse -Force }
+    Expand-Archive -Path $TempZip -DestinationPath $ExtractTemp -Force
+
+    # Locate DeskMate.exe in extracted contents
+    $ExeCandidate = Get-ChildItem -Path $ExtractTemp -Filter "DeskMate.exe" -Recurse | Select-Object -First 1
+
+    if (-not $ExeCandidate) {
+        Write-Error "DeskMate.exe not found in extracted archive."
+        exit 1
+    }
+
+    $SourceFolder = $ExeCandidate.DirectoryName
+
+    # 5. Install to LocalAppData
+    Write-Host "Installing DeskMate to $TargetDir ..."
+    if (Test-Path $TargetDir) {
+        Remove-Item $TargetDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    Copy-Item -Path "$SourceFolder\*" -Destination $TargetDir -Recurse -Force
+
+    # Clean up temporary files
+    Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
+    Remove-Item $ExtractTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
-
-if (-not $Downloaded) {
-    Write-Error "Failed to download DeskMate-Windows.zip. Please download it manually from https://github.com/$Repo/releases"
-    exit 1
-}
-
-# 4. Extract Package
-Write-Host "Extracting DeskMate package..."
-if (Test-Path $ExtractTemp) { Remove-Item $ExtractTemp -Recurse -Force }
-Expand-Archive -Path $TempZip -DestinationPath $ExtractTemp -Force
-
-# Locate DeskMate.exe in extracted contents
-$ExeCandidate = Get-ChildItem -Path $ExtractTemp -Filter "DeskMate.exe" -Recurse | Select-Object -First 1
-
-if (-not $ExeCandidate) {
-    Write-Error "DeskMate.exe not found in extracted archive."
-    exit 1
-}
-
-$SourceFolder = $ExeCandidate.DirectoryName
-
-# 5. Install to LocalAppData
-Write-Host "Installing DeskMate to $TargetDir ..."
-if (Test-Path $TargetDir) {
-    Remove-Item $TargetDir -Recurse -Force
-}
-New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-Copy-Item -Path "$SourceFolder\*" -Destination $TargetDir -Recurse -Force
-
-# Clean up temporary files
-Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
-Remove-Item $ExtractTemp -Recurse -Force -ErrorAction SilentlyContinue
 
 # 6. Create Desktop & Start Menu Shortcuts
 try {

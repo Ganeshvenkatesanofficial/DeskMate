@@ -374,7 +374,7 @@ class _SidebarState extends State<Sidebar> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isOnline ? 'Backend Online' : 'Backend Offline',
+                    isOnline ? 'Backend: Online' : 'Backend: Offline',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1600,33 +1600,6 @@ class _SidebarState extends State<Sidebar> {
       );
     }
 
-    if (status == 'offline') {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: theme.dangerBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: theme.dangerBorder, width: 1),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: theme.dangerFg, size: 14),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                offlineLabel,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.dangerFg,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1656,27 +1629,22 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildFileAgentHealthCard(ChatProvider provider, ThemeData theme) {
     final health = provider.fileAgentHealth;
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
-    final status = health['status'] as String? ?? 'loading';
+    final isOnline = provider.isBackendOnline;
+    final hasFs = isOnline && (checks['filesystem_access'] ?? true);
+    final hasQdrant = isOnline && (checks['qdrant_db'] ?? true);
+    final isPrivacy = isOnline && (checks['privacy_mode'] ?? true);
 
     return _buildHealthCard(
       theme: theme,
-      status: status,
-      title: 'FILE COPILOT HEALTH',
-      offlineLabel: 'File Copilot offline',
+      status: isOnline ? 'online' : 'offline',
+      title: 'FILE EXPLORER HEALTH',
+      offlineLabel: 'File Explorer offline',
       rows: [
-        _buildHealthRow(
-          theme,
-          'Filesystem Access',
-          checks['filesystem_access'] ?? false,
-        ),
+        _buildHealthRow(theme, 'Filesystem Access', hasFs),
         const SizedBox(height: 4),
-        _buildHealthRow(
-          theme,
-          'Qdrant Vector DB',
-          checks['qdrant_db'] ?? false,
-        ),
+        _buildHealthRow(theme, 'Qdrant Vector DB', hasQdrant),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Privacy Mode', checks['privacy_mode'] ?? true),
+        _buildHealthRow(theme, 'Privacy Mode', isPrivacy),
       ],
     );
   }
@@ -1684,29 +1652,37 @@ class _SidebarState extends State<Sidebar> {
   Widget _buildPersonalHealthCard(ChatProvider provider, ThemeData theme) {
     final health = provider.personalAgentHealth;
     final checks = health['checks'] as Map<String, dynamic>? ?? {};
-    final status = health['status'] as String? ?? 'loading';
+    final isOnline = provider.isBackendOnline;
 
     return _buildHealthCard(
       theme: theme,
-      status: status,
-      title: 'PERSONAL HEALTH',
+      status: isOnline ? 'online' : 'offline',
+      title: 'PERSONAL AGENT HEALTH',
       offlineLabel: 'Personal Agent offline',
       rows: [
         _buildHealthRow(
           theme,
           'Credentials JSON',
-          checks['google_credentials_file'] ?? false,
+          isOnline && (checks['google_credentials_file'] ?? false),
         ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Gmail Access', checks['gmail_token'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Gmail Access',
+          isOnline && (checks['gmail_token'] ?? false),
+        ),
         const SizedBox(height: 4),
         _buildHealthRow(
           theme,
           'Calendar Access',
-          checks['calendar_token'] ?? false,
+          isOnline && (checks['calendar_token'] ?? false),
         ),
         const SizedBox(height: 4),
-        _buildHealthRow(theme, 'Drive Access', checks['drive_token'] ?? false),
+        _buildHealthRow(
+          theme,
+          'Drive Access',
+          isOnline && (checks['drive_token'] ?? false),
+        ),
       ],
     );
   }

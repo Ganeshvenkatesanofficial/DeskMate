@@ -65,20 +65,27 @@ DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/DeskMate-macOS
 TMP_DIR="$(mktemp -d /tmp/deskmate_install_XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LOCAL_APP_PATH="${SCRIPT_DIR}/deskmate_app/build/macos/Build/Products/Release/DeskMate.app"
-LOCAL_DEBUG_PATH="${SCRIPT_DIR}/deskmate_app/build/macos/Build/Products/Debug/DeskMate.app"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" 2>/dev/null && pwd || pwd )"
 
-if [ -d "$LOCAL_APP_PATH" ]; then
-  echo -e "${YELLOW}Found local Release build in repository.${NC}"
-  echo "Installing from local Release build..."
+LOCAL_APP_CANDIDATE=""
+for CANDIDATE in \
+  "${SCRIPT_DIR}/../../deskmate_app/build/macos/Build/Products/Release/DeskMate.app" \
+  "$PWD/deskmate_app/build/macos/Build/Products/Release/DeskMate.app" \
+  "$HOME/DeskMate/deskmate_app/build/macos/Build/Products/Release/DeskMate.app" \
+  "${SCRIPT_DIR}/../../deskmate_app/build/macos/Build/Products/Debug/DeskMate.app" \
+  "$PWD/deskmate_app/build/macos/Build/Products/Debug/DeskMate.app" \
+  "$HOME/DeskMate/deskmate_app/build/macos/Build/Products/Debug/DeskMate.app"; do
+  if [ -d "$CANDIDATE" ]; then
+    LOCAL_APP_CANDIDATE="$CANDIDATE"
+    break
+  fi
+done
+
+if [ -n "$LOCAL_APP_CANDIDATE" ]; then
+  echo -e "${YELLOW}Found local build in repository: ${LOCAL_APP_CANDIDATE}${NC}"
+  echo "Installing from local build..."
   rm -rf "$TARGET_APP"
-  cp -R "$LOCAL_APP_PATH" "$APP_DIR/"
-elif [ -d "$LOCAL_DEBUG_PATH" ]; then
-  echo -e "${YELLOW}Found local Debug build in repository.${NC}"
-  echo "Installing from local Debug build..."
-  rm -rf "$TARGET_APP"
-  cp -R "$LOCAL_DEBUG_PATH" "$APP_DIR/"
+  cp -R "$LOCAL_APP_CANDIDATE" "$APP_DIR/"
 else
   echo -e "Checking for latest release package from GitHub..."
   DOWNLOADED_FILE=""
