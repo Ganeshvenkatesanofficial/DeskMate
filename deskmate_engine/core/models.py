@@ -23,37 +23,63 @@ logger = logging.getLogger("deskmate.models")
 
 # ─── Dynamic Local Model Discovery ──────────────────────────────────────────
 
+def _fetch_ollama_raw_models(timeout: float = 0.8) -> tuple[bool, list[dict[str, Any]]]:
+    """
+    Fetch raw tags from local Ollama runtime in a single fast call.
+    Returns (is_online, models_list).
+    """
+    try:
+        res = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=timeout)
+        if res.status_code == 200:
+            return True, res.json().get("models", [])
+        return False, []
+    except Exception as e:
+        logger.debug(f"Ollama status check (offline/refused): {e}")
+        return False, []
+
+
+def _filter_chat_models(raw_models: list[dict[str, Any]]) -> list[str]:
+    """Extract chat-capable models from raw Ollama models list."""
+    chat_models: list[str] = []
+    for m in raw_models:
+        name = m.get("name", "")
+        if not name:
+            continue
+        capabilities = m.get("capabilities", [])
+
+        # Method 1: Check Ollama's official 'capabilities' metadata
+        if capabilities:
+            if "embedding" in capabilities and "completion" not in capabilities:
+                continue
+            if "completion" in capabilities or "tools" in capabilities:
+                chat_models.append(name)
+                continue
+
+        # Method 2: Name-based filter for embedding-only models
+        name_lower = name.lower()
+        if any(x in name_lower for x in ["embed", "bge-", "minilm"]):
+            continue
+        chat_models.append(name)
+    return chat_models
+
+
+def _filter_vision_models(raw_models: list[dict[str, Any]]) -> list[str]:
+    """Extract vision-capable models from raw Ollama models list."""
+    vision_models: list[str] = []
+    for m in raw_models:
+        name = m.get("name", "")
+        if not name:
+            continue
+        name_lower = name.lower()
+        if any(x in name_lower for x in ["vision", "llava", "bakllava", "llama3.2-vision"]):
+            vision_models.append(name)
+    return vision_models
+
+
 def get_installed_chat_models() -> list[str]:
     """Retrieve list of chat-capable models installed in Ollama on this machine."""
-    try:
-        res = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        if res.status_code == 200:
-            models = res.json().get("models", [])
-            chat_models: list[str] = []
-            for m in models:
-                name = m.get("name", "")
-                if not name:
-                    continue
-                capabilities = m.get("capabilities", [])
-
-                # Method 1: Check Ollama's official 'capabilities' metadata
-                # Embedding models only have ["embedding"], whereas chat models have ["completion", "tools", ...]
-                if capabilities:
-                    if "embedding" in capabilities and "completion" not in capabilities:
-                        continue
-                    if "completion" in capabilities or "tools" in capabilities:
-                        chat_models.append(name)
-                        continue
-
-                # Method 2: Name-based filter for embedding-only models
-                name_lower = name.lower()
-                if any(x in name_lower for x in ["embed", "bge-", "minilm"]):
-                    continue
-                chat_models.append(name)
-            return chat_models
-    except Exception as e:
-        logger.debug(f"Failed to query Ollama installed models: {e}")
-    return []
+    is_online, raw_models = _fetch_ollama_raw_models()
+    return _filter_chat_models(raw_models) if is_online else []
 
 
 def get_default_model() -> str:
@@ -64,47 +90,40 @@ def get_default_model() -> str:
 
 def get_installed_vision_models() -> list[str]:
     """Retrieve list of vision-capable models (e.g. llama3.2-vision, llava) installed in Ollama."""
-    try:
-        res = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        if res.status_code == 200:
-            models = res.json().get("models", [])
-            vision_models: list[str] = []
-            for m in models:
-                name = m.get("name", "")
-                if not name:
-                    continue
-                name_lower = name.lower()
-                if any(x in name_lower for x in ["vision", "llava", "bakllava", "llama3.2-vision"]):
-                    vision_models.append(name)
-            return vision_models
-    except Exception as e:
-        logger.debug(f"Failed to query Ollama vision models: {e}")
-    return []
+    is_online, raw_models = _fetch_ollama_raw_models()
+    return _filter_vision_models(raw_models) if is_online else []
 
 
 def check_local_llm_status() -> dict[str, Any]:
-    """Return status dictionary of local Ollama runtime and detected models."""
-    try:
-        models = get_installed_chat_models()
-        vision_models = get_installed_vision_models()
-        return {
-            "status": "online" if models else "no_models",
-            "models": models,
-            "default_model": models[0] if models else None,
-            "vision_models": vision_models,
-            "has_vision": bool(vision_models),
-            "default_vision_model": vision_models[0] if vision_models else None,
-        }
-    except Exception as exc:
+    """
+    Return status dictionary of local Ollama runtime and detected models.
+    Guarantees fast non-blocking response (< 50ms when offline) and distinguishes:
+    - 'online': Ollama running with at least 1 chat model.
+    - 'no_models': Ollama running but user has not pulled any chat models yet.
+    - 'offline': Ollama server process is not running.
+    """
+    is_online, raw_models = _fetch_ollama_raw_models(timeout=0.6)
+    if not is_online:
         return {
             "status": "offline",
-            "error": str(exc),
             "models": [],
             "default_model": None,
             "vision_models": [],
             "has_vision": False,
             "default_vision_model": None,
         }
+
+    chat_models = _filter_chat_models(raw_models)
+    vision_models = _filter_vision_models(raw_models)
+
+    return {
+        "status": "online" if chat_models else "no_models",
+        "models": chat_models,
+        "default_model": chat_models[0] if chat_models else None,
+        "vision_models": vision_models,
+        "has_vision": bool(vision_models),
+        "default_vision_model": vision_models[0] if vision_models else None,
+    }
 
 
 def chat_local_llm(

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/clipboard_utils.dart';

@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../models/chat_message.dart';
 import '../theme/app_theme.dart';
 import '../utils/clipboard_utils.dart';

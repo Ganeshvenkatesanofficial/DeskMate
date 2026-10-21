@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+
 import '../core/constants.dart';
 import '../services/gemini_service.dart';
 
@@ -133,7 +135,7 @@ class ApiService {
   Future<Map<String, dynamic>> checkHealth() async {
     return _getJson(
       ApiPaths.health,
-      timeout: const Duration(seconds: 2),
+      timeout: const Duration(seconds: 4),
       fallback: {'status': 'offline', 'local_llm': 'offline'},
     );
   }

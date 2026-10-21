@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:ui';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../core/constants.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
@@ -2593,7 +2595,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'AI Service is offline. Please wait or retry connecting.',
+                      provider.isLocalLlmOnline
+                          ? 'Backend service is starting or offline, but Ollama is Online. Connecting to backend...'
+                          : 'AI Service is offline. Please wait or retry connecting.',
                       style: TextStyle(
                         color: theme.attentionFg,
                         fontWeight: FontWeight.w600,
@@ -2616,7 +2620,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           vertical: 6,
                         ),
                       ),
-                      label: const Text('Retry'),
+                      label: Text(
+                        provider.isLocalLlmOnline ? 'Reconnect' : 'Retry',
+                      ),
                     ),
                   ),
                 ],

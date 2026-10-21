@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import '../models/chat_message.dart';
 
 enum WebSocketAgentType { fileCopilot, personalAssistant }

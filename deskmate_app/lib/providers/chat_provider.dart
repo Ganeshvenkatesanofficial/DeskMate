@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/constants.dart';
 import '../models/chat_message.dart';
 import '../services/api_service.dart';
 import '../services/agent_websocket_client.dart';
 import '../services/backend_manager.dart';
+import 'package:http/http.dart' as http;
 
 enum AgentMode { deskMate, personal, meeting }
 
@@ -372,7 +375,7 @@ class ChatProvider extends ChangeNotifier {
 
     final candidates = AppConstants.candidateUrls(primaryCandidate);
 
-    const int maxAttempts = 15;
+    const int maxAttempts = 40;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       for (final candidateUrl in candidates) {
         try {
@@ -439,7 +442,20 @@ class ChatProvider extends ChangeNotifier {
       }
 
       final bool newBackendOnline = health['status'] == 'ok';
-      final bool newLocalLlmOnline = health['local_llm'] == 'online';
+      bool newLocalLlmOnline = health['local_llm'] == 'online';
+
+      // If backend is offline, check if Ollama runtime itself is online directly
+      if (!newBackendOnline) {
+        try {
+          final ollamaCheck = await http
+              .get(Uri.parse('http://127.0.0.1:11434/api/tags'))
+              .timeout(const Duration(milliseconds: 600));
+          if (ollamaCheck.statusCode == 200) {
+            newLocalLlmOnline = true;
+          }
+        } catch (_) {}
+      }
+
       final bool oldHasVision = _hasVisionModel;
       final String oldVisionName = _visionModelName;
       _updateVisionState(health);
@@ -468,6 +484,9 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> retryConnecting() async {
+    try {
+      await BackendManager.start();
+    } catch (_) {}
     await _startStartupHealthCheck();
   }
 
