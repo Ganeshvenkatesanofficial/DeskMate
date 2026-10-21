@@ -66,59 +66,82 @@
 
 ## 🚀 Installation Guide
 
-DeskMate offers three simple installation methods: the **1-Line Terminal Installer**, the native **macOS DMG**, and direct **ZIP packages**.
+Choose your operating system below for quick setup instructions:
 
 ---
 
-### Method 1: 1-Line Terminal Auto-Installer (Recommended)
+### 🍏 macOS Installation
 
-#### 🍏 macOS
-Open Terminal and run:
+#### Option 1: 1-Line Terminal Auto-Installer (Recommended)
+Open Terminal (`Cmd + Space` → **Terminal**) and run:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.sh | bash
 ```
 > **What this does**: Automatically downloads the latest verified release, installs `DeskMate.app` directly into `/Applications`, clears macOS Gatekeeper quarantine locks, signs the binaries, and launches the app.
 
-#### 🪟 Windows
+#### Option 2: Native Disk Image (`.dmg`)
+1. Download **`DeskMate-macOS.dmg`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Double-click the downloaded `.dmg` file to mount it.
+3. Install using either method inside the window:
+   - **Drag & Drop**: Drag the **DeskMate** icon into the **Applications** folder shortcut.
+   - **Auto-Installer**: Double-click **`Install DeskMate.command`** to install and configure permissions automatically.
+4. Launch **DeskMate** from `/Applications` or Spotlight (`Cmd + Space`).
+
+#### Option 3: Direct ZIP Archive (`.zip`)
+
+**Step-by-Step Instructions After Downloading:**
+1. **Download the ZIP**:
+   - Download **`DeskMate-macOS.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. **Extract the Archive**:
+   - In Finder, open your `Downloads` folder and **double-click `DeskMate-macOS.zip`** to extract `DeskMate.app`.
+   - *(Or via Terminal)*:
+     ```bash
+     unzip ~/Downloads/DeskMate-macOS.zip -d ~/Downloads/
+     ```
+3. **Move to `/Applications`**:
+   - Drag **`DeskMate.app`** from `Downloads` into the **Applications** folder in your Finder sidebar.
+4. **Bypass macOS Gatekeeper (First Launch Only)**:
+   - Because open-source builds are ad-hoc signed, macOS may display *"DeskMate cannot be opened because the developer cannot be verified"*.
+   - Choose either quick method to allow it:
+     - **Method A (Terminal 1-Liner)**: Run this command in Terminal to strip quarantine flags:
+       ```bash
+       xattr -cr /Applications/DeskMate.app
+       ```
+     - **Method B (Finder)**: **Right-click** (or `Control` + Click) `DeskMate.app` in `/Applications` ➔ Click **Open** ➔ Click **Open** in the confirmation dialog.
+5. **Launch DeskMate**:
+   - Open **DeskMate** directly from `/Applications`, Launchpad, or Spotlight (`Cmd + Space`).
+
+---
+
+### 🪟 Windows Installation
+
+#### Option 1: 1-Line Terminal Auto-Installer (Recommended)
 Open PowerShell (`Win + X` → **Terminal** / **PowerShell**) and run:
 ```powershell
 irm https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.ps1 | iex
 ```
 
----
+*Or run using **`curl`** in Command Prompt / Terminal:*
+```cmd
+curl.exe -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.ps1 -o install.ps1 && powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+> **What this does**: Automatically downloads the latest release package, installs to `%LOCALAPPDATA%\DeskMate`, creates desktop and Start Menu shortcuts, and launches the app.
 
-### Method 2: macOS Disk Image (.dmg)
+#### Option 2: Direct ZIP Archive (`.zip`)
 
-1. Download **`DeskMate-macOS.dmg`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
-2. Double-click the downloaded `.dmg` file to mount it.
-3. Install using either option inside the window:
-   - **Drag & Drop**: Drag the **DeskMate** icon into the **Applications** folder shortcut.
-   - **Auto-Installer**: Double-click **`Install DeskMate.command`** to install and configure permissions automatically.
-4. Open **Applications** from Finder or Launchpad and click **DeskMate** to run.
-
----
-
-### Method 3: Download & Install from ZIP Archive
-
-#### 🍏 macOS (.zip)
-1. Download **`DeskMate-macOS.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
-2. Double-click `DeskMate-macOS.zip` to extract `DeskMate.app` into your `Downloads` folder (or run `unzip DeskMate-macOS.zip`).
-3. Move `DeskMate.app` into your **Applications** folder:
-   - In Finder, drag `DeskMate.app` into **Applications** in the left sidebar.
-4. **First Launch (macOS Gatekeeper)**:  
-   Since open-source builds are ad-hoc signed, macOS may show a prompt:
-   - **Option A (Finder)**: Right-click `DeskMate.app` in `/Applications` → click **Open** → click **Open** on the prompt.
-   - **Option B (Terminal)**: Run this single command to clear the Gatekeeper flag:
-     ```bash
-     xattr -cr /Applications/DeskMate.app
-     ```
-5. Click `DeskMate.app` to launch.
-
-#### 🪟 Windows (.zip)
-1. Download **`DeskMate-Windows.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
-2. Right-click `DeskMate-Windows.zip` and select **Extract All...** to choose an installation folder (e.g., `C:\Program Files\DeskMate` or `C:\Users\<YourUser>\AppData\Local\DeskMate`).
-3. Open the extracted folder and double-click **`DeskMate.exe`** to launch.
-4. *(Tip)* Right-click `DeskMate.exe` → **Pin to Start** or **Pin to taskbar** for easy access.
+**Step-by-Step Instructions After Downloading:**
+1. **Download the ZIP**:
+   - Download **`DeskMate-Windows.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. **Extract the Archive**:
+   - Right-click `DeskMate-Windows.zip` in your Downloads folder ➔ select **Extract All...**
+   - Choose a destination folder (e.g., `C:\Program Files\DeskMate` or `C:\Users\<YourUser>\AppData\Local\DeskMate`) and click **Extract**.
+3. **Handle Windows SmartScreen (First Launch Only)**:
+   - If Windows Defender SmartScreen displays *"Windows protected your PC"* on launch:
+     - Click **More info**.
+     - Click **Run anyway**.
+4. **Launch DeskMate**:
+   - Inside the extracted folder, double-click **`DeskMate.exe`** to run.
+   - *(Tip)* Right-click `DeskMate.exe` ➔ select **Pin to Start** or **Pin to taskbar** for one-click access anytime.
 
 ---
 
