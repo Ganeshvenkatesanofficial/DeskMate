@@ -418,8 +418,9 @@ class ChatProvider extends ChangeNotifier {
             _wsClient = AgentWebSocketClient(baseUrl: candidateUrl);
             _isBackendOnline = true;
             _isLocalLlmOnline = health['local_llm'] == 'online';
-            _engineStatus =
-                _isLocalLlmOnline ? EngineStatus.ready : EngineStatus.degraded;
+            _engineStatus = _isLocalLlmOnline
+                ? EngineStatus.ready
+                : EngineStatus.degraded;
             _isConnecting = false;
             _updateVisionState(health);
             _errorMessage = '';
@@ -509,8 +510,9 @@ class ChatProvider extends ChangeNotifier {
         _isLocalLlmOnline = newLocalLlmOnline;
         _isConnecting = false;
         if (_isBackendOnline) {
-          _engineStatus =
-              _isLocalLlmOnline ? EngineStatus.ready : EngineStatus.degraded;
+          _engineStatus = _isLocalLlmOnline
+              ? EngineStatus.ready
+              : EngineStatus.degraded;
           _errorMessage = '';
           if (_availableLocalModels.isEmpty) {
             fetchAvailableModels();

@@ -2659,7 +2659,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                       label: Text(
-                        provider.isLocalLlmOnline ? 'Reconnect' : 'Restart Engine',
+                        provider.isLocalLlmOnline
+                            ? 'Reconnect'
+                            : 'Restart Engine',
                       ),
                     ),
                   ),

@@ -357,20 +357,22 @@ class _SidebarState extends State<Sidebar> {
                   height: 22,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isOnline
-                            ? theme.successFg
-                            : (provider.isConnecting
-                                ? theme.accentFg
-                                : theme.dangerFg))
-                        .withValues(alpha: 0.12),
+                    color:
+                        (isOnline
+                                ? theme.successFg
+                                : (provider.isConnecting
+                                      ? theme.accentFg
+                                      : theme.dangerFg))
+                            .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color: (isOnline
-                              ? theme.successFg
-                              : (provider.isConnecting
-                                  ? theme.accentFg
-                                  : theme.dangerFg))
-                          .withValues(alpha: 0.35),
+                      color:
+                          (isOnline
+                                  ? theme.successFg
+                                  : (provider.isConnecting
+                                        ? theme.accentFg
+                                        : theme.dangerFg))
+                              .withValues(alpha: 0.35),
                       width: 0.8,
                     ),
                   ),
@@ -397,8 +399,8 @@ class _SidebarState extends State<Sidebar> {
                     isOnline
                         ? 'Backend: Online'
                         : (provider.isConnecting
-                            ? 'Backend: Starting...'
-                            : 'Backend: Offline'),
+                              ? 'Backend: Starting...'
+                              : 'Backend: Offline'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
