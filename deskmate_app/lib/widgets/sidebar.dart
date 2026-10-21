@@ -357,25 +357,48 @@ class _SidebarState extends State<Sidebar> {
                   height: 22,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isOnline ? theme.successFg : theme.dangerFg)
+                    color: (isOnline
+                            ? theme.successFg
+                            : (provider.isConnecting
+                                ? theme.accentFg
+                                : theme.dangerFg))
                         .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color: (isOnline ? theme.successFg : theme.dangerFg)
+                      color: (isOnline
+                              ? theme.successFg
+                              : (provider.isConnecting
+                                  ? theme.accentFg
+                                  : theme.dangerFg))
                           .withValues(alpha: 0.35),
                       width: 0.8,
                     ),
                   ),
-                  child: Icon(
-                    Icons.dns_rounded,
-                    size: 13,
-                    color: isOnline ? theme.successFg : theme.dangerFg,
-                  ),
+                  child: provider.isConnecting
+                      ? SizedBox(
+                          width: 11,
+                          height: 11,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.6,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              theme.accentFg,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.dns_rounded,
+                          size: 13,
+                          color: isOnline ? theme.successFg : theme.dangerFg,
+                        ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isOnline ? 'Backend: Online' : 'Backend: Offline',
+                    isOnline
+                        ? 'Backend: Online'
+                        : (provider.isConnecting
+                            ? 'Backend: Starting...'
+                            : 'Backend: Offline'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

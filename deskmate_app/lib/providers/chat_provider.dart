@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,8 @@ import 'package:http/http.dart' as http;
 
 enum AgentMode { deskMate, personal, meeting }
 
+enum EngineStatus { starting, ready, degraded, failed }
+
 class ChatProvider extends ChangeNotifier {
   List<ChatMessage> _fileMessages = [];
   List<ChatMessage> _personalMessages = [];
@@ -23,6 +26,10 @@ class ChatProvider extends ChangeNotifier {
   bool _isConnecting = true;
   bool _isBackendOnline = false;
   bool _isLocalLlmOnline = false;
+  EngineStatus _engineStatus = EngineStatus.starting;
+  int _initElapsedSeconds = 0;
+  String _engineStatusMessage = 'Starting DeskMate local engine...';
+  Timer? _startupTimer;
   ThemeMode _themeMode = ThemeMode.light;
   AgentMode _mode = AgentMode.deskMate;
   Map<String, dynamic> _personalAgentHealth = {'status': 'loading'};
@@ -62,6 +69,9 @@ class ChatProvider extends ChangeNotifier {
   bool get isBackendOnline => _isBackendOnline;
   bool get isLocalLlmOnline => _isLocalLlmOnline;
   bool get isConnecting => _isConnecting;
+  EngineStatus get engineStatus => _engineStatus;
+  int get initElapsedSeconds => _initElapsedSeconds;
+  String get engineStatusMessage => _engineStatusMessage;
   AgentMode get mode => _mode;
   ThemeMode get themeMode => _themeMode;
   Map<String, dynamic> get personalAgentHealth => _personalAgentHealth;
@@ -130,6 +140,7 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _startupTimer?.cancel();
     _healthTimer?.cancel();
     super.dispose();
   }
@@ -360,9 +371,27 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> _startStartupHealthCheck() async {
+    _engineStatus = EngineStatus.starting;
     _isConnecting = true;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
+    _initElapsedSeconds = 0;
+    _engineStatusMessage = 'Starting DeskMate AI engine...';
+
+    _startupTimer?.cancel();
+    final stopwatch = Stopwatch()..start();
+    _startupTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _initElapsedSeconds = stopwatch.elapsed.inSeconds;
+      if (_initElapsedSeconds < 15) {
+        _engineStatusMessage = 'Starting DeskMate AI engine...';
+      } else if (_initElapsedSeconds < 45) {
+        _engineStatusMessage = 'Binding local port & verifying runtime...';
+      } else {
+        _engineStatusMessage =
+            'Loading dependencies & local models (first launch may take 1-2 min)...';
+      }
+      notifyListeners();
+    });
 
     // Use BackendManager.backendUrl if valid, otherwise fallback candidates
     final primaryCandidate = BackendManager.backendUrl;
@@ -375,20 +404,24 @@ class ChatProvider extends ChangeNotifier {
 
     final candidates = AppConstants.candidateUrls(primaryCandidate);
 
-    const int maxAttempts = 40;
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    const int maxTotalSeconds = 180; // 3 full minutes realistic grace period
+    while (stopwatch.elapsed.inSeconds < maxTotalSeconds) {
       for (final candidateUrl in candidates) {
         try {
           final testService = ApiService(baseUrl: candidateUrl);
           final health = await testService.checkHealth();
           if (health['status'] == 'ok') {
+            stopwatch.stop();
+            _startupTimer?.cancel();
             _backendUrl = candidateUrl;
             _apiService = testService;
             _wsClient = AgentWebSocketClient(baseUrl: candidateUrl);
             _isBackendOnline = true;
             _isLocalLlmOnline = health['local_llm'] == 'online';
-            _updateVisionState(health);
+            _engineStatus =
+                _isLocalLlmOnline ? EngineStatus.ready : EngineStatus.degraded;
             _isConnecting = false;
+            _updateVisionState(health);
             _errorMessage = '';
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString(PrefsKeys.backendUrl, _backendUrl);
@@ -401,16 +434,23 @@ class ChatProvider extends ChangeNotifier {
           }
         } catch (_) {}
       }
-      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Adaptive polling interval: 500ms for first 10s sprint, then 1s, then 1.5s
+      final elapsed = stopwatch.elapsed.inSeconds;
+      final delayMs = elapsed < 10 ? 500 : (elapsed < 45 ? 1000 : 1500);
+      await Future.delayed(Duration(milliseconds: delayMs));
     }
 
+    stopwatch.stop();
+    _startupTimer?.cancel();
+    _engineStatus = EngineStatus.failed;
     _isConnecting = false;
     _isBackendOnline = false;
     _isLocalLlmOnline = false;
     _hasVisionModel = false;
     _visionModelName = '';
     _errorMessage =
-        'Failed to connect to local backend. Please ensure the backend server is running.';
+        'Could not connect to DeskMate local engine after 3 minutes. Please restart the engine or check logs.';
     notifyListeners();
     _startHealthPolling();
   }
@@ -469,6 +509,8 @@ class ChatProvider extends ChangeNotifier {
         _isLocalLlmOnline = newLocalLlmOnline;
         _isConnecting = false;
         if (_isBackendOnline) {
+          _engineStatus =
+              _isLocalLlmOnline ? EngineStatus.ready : EngineStatus.degraded;
           _errorMessage = '';
           if (_availableLocalModels.isEmpty) {
             fetchAvailableModels();
@@ -476,6 +518,7 @@ class ChatProvider extends ChangeNotifier {
           checkFileAgentStatus();
           checkPersonalAgentStatus();
         } else {
+          _engineStatus = EngineStatus.failed;
           _fileAgentHealth = {'status': 'offline'};
           _personalAgentHealth = {'status': 'offline'};
         }
@@ -488,9 +531,25 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> retryConnecting() async {
     try {
+      await BackendManager.killStaleBackendProcesses();
+      await Future.delayed(const Duration(milliseconds: 300));
       await BackendManager.start();
     } catch (_) {}
     await _startStartupHealthCheck();
+  }
+
+  Future<void> openEngineLogs() async {
+    try {
+      if (Platform.isMacOS) {
+        final home = Platform.environment['HOME'] ?? '';
+        final logDir = '$home/Library/Application Support/DeskMate';
+        await Process.run('/usr/bin/open', [logDir]);
+      } else if (Platform.isWindows) {
+        final appData = Platform.environment['APPDATA'] ?? '';
+        final logDir = '$appData\\DeskMate';
+        await Process.run('explorer.exe', [logDir]);
+      }
+    } catch (_) {}
   }
 
   void _addMessage(ChatMessage msg) {

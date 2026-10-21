@@ -2553,25 +2553,63 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           if (provider.isConnecting)
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: theme.accentFg.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: theme.accentFg.withValues(alpha: 0.22),
+                  width: 1,
+                ),
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
-                    width: 16,
-                    height: 16,
+                    width: 14,
+                    height: 14,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
+                      strokeWidth: 1.8,
                       valueColor: AlwaysStoppedAnimation<Color>(theme.accentFg),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Initializing local AI service & loading models...',
-                    style: TextStyle(
-                      color: theme.accentFg,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      provider.engineStatusMessage,
+                      style: TextStyle(
+                        color: theme.fgDefault,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.accentFg.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          size: 11,
+                          color: theme.accentFg,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${provider.initElapsedSeconds}s',
+                          style: TextStyle(
+                            color: theme.accentFg,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -2596,8 +2634,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: Text(
                       provider.isLocalLlmOnline
-                          ? 'Backend service is starting or offline, but Ollama is Online. Connecting to backend...'
-                          : 'AI Service is offline. Please wait or retry connecting.',
+                          ? 'Backend service is offline, but Ollama is Online. Connecting to backend...'
+                          : 'AI Service is offline after 3 min timeout. Please restart or view logs.',
                       style: TextStyle(
                         color: theme.attentionFg,
                         fontWeight: FontWeight.w600,
@@ -2621,8 +2659,30 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                       label: Text(
-                        provider.isLocalLlmOnline ? 'Reconnect' : 'Retry',
+                        provider.isLocalLlmOnline ? 'Reconnect' : 'Restart Engine',
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        provider.openEngineLogs();
+                      },
+                      icon: const Icon(Icons.description_outlined, size: 14),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: theme.fgMuted.withValues(alpha: 0.4),
+                          width: 1,
+                        ),
+                        foregroundColor: theme.fgDefault,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                      ),
+                      label: const Text('Logs'),
                     ),
                   ),
                 ],
