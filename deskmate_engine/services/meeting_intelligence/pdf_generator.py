@@ -6,12 +6,14 @@ Compiles executive markdown summaries, key visual interaction moments, dynamic u
 requirements, and action items into a report with Primer typography and #6A35F5 palette.
 """
 
-import os
 import re
 import logging
 import datetime
 from pathlib import Path
+from typing import Optional, Any
 from fpdf import FPDF
+
+from services.meeting_intelligence.summarizer import extract_meeting_title
 
 logger = logging.getLogger("deskmate.pdf_generator")
 
@@ -129,6 +131,7 @@ class MeetingPDFGenerator:
         output_pdf_path: str,
         specific_fields: list = None,
         specific_fields_analysis: dict = None,
+        transcript_data: Optional[dict] = None,
     ) -> bool:
         try:
             logger.info(f"Generating DeskMate PDF report for session {session_id}...")
@@ -152,7 +155,7 @@ class MeetingPDFGenerator:
             pdf.set_auto_page_break(auto=True, margin=22)
 
             # 1. Branded Metadata Block
-            self._render_metadata_block(pdf, session_id, steps, important_step_ids)
+            self._render_metadata_block(pdf, session_id, steps, important_step_ids, summary_text)
 
             # 2. Executive Summary & Structured Sections
             self._render_section_header(pdf, 'Executive Summary & Analysis')
@@ -161,11 +164,11 @@ class MeetingPDFGenerator:
 
             # 3. Key Visual Interaction Moments
             if steps and important_step_ids:
-                first_card_h = self._get_first_card_height(pdf, steps, important_step_ids, step_descriptions)
+                first_card_h = self._get_first_card_height(pdf, steps, important_step_ids, step_descriptions, transcript_data)
                 if pdf.get_y() + 25 + first_card_h > 270:
                     pdf.add_page()
                 self._render_section_header(pdf, 'Key Visual Interaction Moments')
-                self._render_screenshots(pdf, steps, important_step_ids, step_descriptions)
+                self._render_screenshots(pdf, steps, important_step_ids, step_descriptions, transcript_data)
 
             # 4. Dynamic Custom Requirements Analysis
             if specific_fields and specific_fields_analysis:
@@ -204,7 +207,7 @@ class MeetingPDFGenerator:
 
                     if relevant_steps:
                         str_rel = [str(sid).strip() for sid in relevant_steps]
-                        first_card_h = self._get_first_card_height(pdf, steps, str_rel, step_descriptions)
+                        first_card_h = self._get_first_card_height(pdf, steps, str_rel, step_descriptions, transcript_data)
                         if pdf.get_y() + 14 + first_card_h > 270:
                             pdf.add_page()
                         pdf.ln(4)
@@ -213,7 +216,7 @@ class MeetingPDFGenerator:
                         pdf.set_x(_LEFT_MARGIN)
                         pdf.cell(_CONTENT_WIDTH, 6, "Relevant Visual Evidence", 0, 1)
                         pdf.ln(4)
-                        self._render_screenshots(pdf, steps, str_rel, step_descriptions)
+                        self._render_screenshots(pdf, steps, str_rel, step_descriptions, transcript_data)
 
             Path(output_pdf_path).parent.mkdir(parents=True, exist_ok=True)
             pdf.output(output_pdf_path)
@@ -224,15 +227,18 @@ class MeetingPDFGenerator:
             logger.exception(f"Failed to compile PDF report: {e}")
             return False
 
-    def _render_metadata_block(self, pdf, session_id, steps, important_ids):
+    def _render_metadata_block(self, pdf, session_id, steps, important_ids, summary_text: str = ""):
         """Render a branded metadata card."""
+        meeting_title = extract_meeting_title(summary_text)
+
+        card_h = 27 if meeting_title else 22
         y_start = pdf.get_y()
         pdf.set_fill_color(*_LIGHT_BG)
-        pdf.rect(_LEFT_MARGIN, y_start, _CONTENT_WIDTH, 22, 'F')
+        pdf.rect(_LEFT_MARGIN, y_start, _CONTENT_WIDTH, card_h, 'F')
 
         # Left DeskMate purple accent
         pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, y_start, 3.5, 22, 'F')
+        pdf.rect(_LEFT_MARGIN, y_start, 3.5, card_h, 'F')
 
         col1_x = _LEFT_MARGIN + 8
         col2_x = _LEFT_MARGIN + 95
@@ -247,10 +253,16 @@ class MeetingPDFGenerator:
         pdf.set_font('Helvetica', '', 8.5)
         pdf.set_text_color(*_BODY_TEXT)
         now_str = datetime.datetime.now().strftime('%Y-%m-%d  %H:%M')
-        pdf.cell(80, 4.5, self._make_safe(f'Session ID: {session_id}'), 0, 1)
+
+        if meeting_title:
+            short_t = meeting_title if len(meeting_title) <= 46 else meeting_title[:43] + "..."
+            pdf.cell(80, 4.2, self._make_safe(f'Topic: {short_t}'), 0, 1)
+            pdf.set_x(col1_x)
+
+        pdf.cell(80, 4.2, self._make_safe(f'Session ID: {session_id}'), 0, 1)
 
         pdf.set_x(col1_x)
-        pdf.cell(80, 4.5, f'Generated: {now_str}', 0, 1)
+        pdf.cell(80, 4.2, f'Generated: {now_str}', 0, 1)
 
         # Col 2
         pdf.set_xy(col2_x, y_start + 4)
@@ -266,7 +278,7 @@ class MeetingPDFGenerator:
         pdf.set_x(col2_x)
         pdf.cell(80, 4.5, f'Key Visual Moments: {len(important_ids)}', 0, 1)
 
-        pdf.set_y(y_start + 26)
+        pdf.set_y(y_start + card_h + 4)
 
     def _render_section_header(self, pdf, title):
         """Render a section header with DeskMate branding."""
@@ -617,7 +629,97 @@ class MeetingPDFGenerator:
         ]
         return any(kw in combined for kw in deskmate_noise_keywords)
 
-    def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None):
+    @staticmethod
+    def _parse_timestamp_to_seconds(ts_val: Any) -> Optional[float]:
+        if ts_val is None:
+            return None
+        if isinstance(ts_val, (int, float)):
+            return float(ts_val)
+        s = str(ts_val).strip().strip("[]")
+        parts = s.split(":")
+        try:
+            if len(parts) == 2:
+                return float(parts[0]) * 60.0 + float(parts[1])
+            elif len(parts) == 3:
+                return float(parts[0]) * 3600.0 + float(parts[1]) * 60.0 + float(parts[2])
+        except Exception:
+            pass
+        return None
+
+    def _find_step_audio_transcript(
+        self,
+        step: dict,
+        step_id_val: Any,
+        step_descriptions: dict,
+        transcript_data: Optional[dict] = None,
+    ) -> str:
+        """Find matching spoken audio transcript for this step from diarized audio segments or step metadata."""
+        # 1. Match against diarized Voxtral audio segments via timestamp window
+        actions = step.get("actions", [])
+        step_ts_str = step.get("timestamp") or (actions[0].get("timestamp") if actions and isinstance(actions[0], dict) else "")
+        raw_sec = None
+        if actions and isinstance(actions[0], dict) and "timestamp_raw" in actions[0]:
+            try:
+                raw_sec = float(actions[0]["timestamp_raw"])
+            except Exception:
+                raw_sec = None
+
+        if raw_sec is None:
+            raw_sec = self._parse_timestamp_to_seconds(step_ts_str)
+
+        duration = float(step.get("duration", 8.0) or 8.0)
+
+        if raw_sec is not None and transcript_data and isinstance(transcript_data, dict):
+            segments = transcript_data.get("segments", [])
+            if segments:
+                t_start = max(0.0, raw_sec - 4.0)
+                t_end = raw_sec + max(duration, 4.0) + 4.0
+                matching_quotes = []
+                seen_texts = set()
+                for seg in segments:
+                    if not isinstance(seg, dict):
+                        continue
+                    try:
+                        s_start = float(seg.get("start") or 0.0)
+                        s_end = float(seg.get("end") or 0.0)
+                    except (TypeError, ValueError):
+                        continue
+                    text = str(seg.get("text") or "").strip()
+                    if not text or text.lower() in seen_texts:
+                        continue
+                    if s_start <= t_end and s_end >= t_start:
+                        seen_texts.add(text.lower())
+                        spk = seg.get("speaker", "Speaker")
+                        matching_quotes.append(f'{spk}: "{text}"')
+
+                if matching_quotes:
+                    combined = "  ".join(matching_quotes[:3])
+                    if len(combined) > 280:
+                        combined = combined[:277] + "..."
+                    return combined
+
+        # 2. Fallback to step_descriptions audio_transcript or spoken_context
+        if step_descriptions:
+            cand = [str(step_id_val), f"step_{step_id_val}"]
+            m = _RE_DIGITS.search(str(step_id_val))
+            if m:
+                cand.append(f"step_{m.group()}")
+            for c in cand:
+                if c in step_descriptions and isinstance(step_descriptions[c], dict):
+                    audio = (
+                        step_descriptions[c].get("audio_transcript")
+                        or step_descriptions[c].get("spoken_context")
+                        or step_descriptions[c].get("transcript")
+                    )
+                    if audio and isinstance(audio, str) and audio.strip():
+                        val = audio.strip()
+                        low = val.lower()
+                        if not any(k in low for k in ["no speech", "silent", "no audio", "n/a", "no spoken", "none recorded"]):
+                            return val
+
+        return ""
+
+    def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None, transcript_data=None):
         if step_descriptions is None:
             step_descriptions = {}
 
@@ -663,14 +765,19 @@ class MeetingPDFGenerator:
             if not full_img_path:
                 continue
 
-            card_h = self._calculate_step_card_height(pdf, step, step_descriptions)
+            card_h = self._calculate_step_card_height(pdf, step, step_descriptions, transcript_data)
             if pdf.get_y() + card_h > 275:
                 pdf.add_page()
 
             count += 1
             step_title = self._find_step_title(step_id_val, step_descriptions, step.get("summary", ""))
 
-            # Step Header Pill
+            # Clip Timestamp extraction
+            step_ts = step.get("timestamp") or ""
+            if not step_ts and actions and isinstance(actions[0], dict):
+                step_ts = actions[0].get("timestamp") or ""
+
+            # Step Header Pill with Clip Timestamp
             pdf.ln(2)
             y_hdr = pdf.get_y()
             pdf.set_fill_color(*_CARD_BG)
@@ -682,7 +789,8 @@ class MeetingPDFGenerator:
             pdf.set_xy(_IMG_X + 6, y_hdr + 1.5)
             pdf.set_font('Helvetica', 'B', 9)
             pdf.set_text_color(*_DESKMATE_DEEP)
-            pdf.cell(_IMG_WIDTH - 12, 5, self._make_safe(f'MOMENT #{count}: {step_title}'), 0, 1)
+            hdr_text = f'MOMENT #{count} [{step_ts}]: {step_title}' if step_ts else f'MOMENT #{count}: {step_title}'
+            pdf.cell(_IMG_WIDTH - 12, 5, self._make_safe(hdr_text), 0, 1)
             pdf.ln(3)
 
             # Screenshot Image
@@ -697,10 +805,11 @@ class MeetingPDFGenerator:
             except Exception as ie:
                 logger.debug(f"Screenshot draw failed: {ie}")
 
-            # Description Card
+            # Description Card & Synchronized Audio Transcript below image
             desc = self._find_step_description(step_id_val, step_descriptions)
-            if desc:
-                self._render_step_description(pdf, desc)
+            audio_quote = self._find_step_audio_transcript(step, step_id_val, step_descriptions, transcript_data)
+            if desc or audio_quote:
+                self._render_step_description(pdf, desc, audio_transcript=audio_quote, step_ts=step_ts)
 
             pdf.ln(8)
 
@@ -730,72 +839,129 @@ class MeetingPDFGenerator:
                         return t
         return default_summary or "UI Interaction"
 
-    def _calculate_step_card_height(self, pdf, step: dict, step_descriptions: dict) -> float:
+    def _calculate_step_card_height(self, pdf, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None) -> float:
         header_h = 12
         rendered_img_h = 95.6
         step_id_val = step.get("step_id", 0)
         desc = self._find_step_description(step_id_val, step_descriptions)
+        audio = self._find_step_audio_transcript(step, step_id_val, step_descriptions, transcript_data)
+
         box_h = 0
-        if desc:
-            safe = self._make_safe(desc.replace('**', ''))
+        if desc or audio:
+            safe_desc = self._make_safe(desc.replace('**', '')) if desc else ""
+            safe_audio = self._make_safe(audio.replace('**', '')) if audio else ""
+
             cur_f = pdf.font_family
             cur_s = pdf.font_style
             cur_sz = pdf.font_size_pt
-            pdf.set_font('Helvetica', '', 8.5)
-            try:
-                th = pdf.multi_cell(w=_IMG_WIDTH - 14, h=4.5, text=safe, dry_run=True, output='HEIGHT')
-                box_h = 5 + th + 8
-            except Exception:
-                box_h = 28
+
+            th_desc = 0
+            if safe_desc:
+                pdf.set_font('Helvetica', '', 8.5)
+                try:
+                    th_desc = pdf.multi_cell(w=_IMG_WIDTH - 14, h=4.5, text=safe_desc, dry_run=True, output='HEIGHT')
+                except Exception:
+                    th_desc = 18
+
+            th_audio = 0
+            if safe_audio:
+                pdf.set_font('Helvetica', 'I', 8)
+                try:
+                    th_audio = pdf.multi_cell(w=_IMG_WIDTH - 14, h=4.2, text=safe_audio, dry_run=True, output='HEIGHT')
+                except Exception:
+                    th_audio = 14
+
+            audio_extra_h = (10 + th_audio) if safe_audio else 0
+            box_h = 5 + th_desc + audio_extra_h + 8
             pdf.set_font(cur_f, cur_s, cur_sz)
+
         return header_h + rendered_img_h + box_h + 14
 
-    def _get_first_card_height(self, pdf, steps: list, important_step_ids: list, step_descriptions: dict) -> float:
+    def _get_first_card_height(self, pdf, steps: list, important_step_ids: list, step_descriptions: dict, transcript_data: Optional[dict] = None) -> float:
         if not steps or not important_step_ids:
             return 0.0
-        return self._calculate_step_card_height(pdf, steps[0], step_descriptions)
+        return self._calculate_step_card_height(pdf, steps[0], step_descriptions, transcript_data)
 
-    def _render_step_description(self, pdf, description: str):
+    def _render_step_description(self, pdf, description: str, audio_transcript: str = "", step_ts: str = ""):
         desc_x = _IMG_X
         desc_w = _IMG_WIDTH
-        safe_desc = self._make_safe(description)
-        clean = safe_desc.replace('**', '')
+        safe_desc = self._make_safe(description) if description else ""
+        clean_desc = safe_desc.replace('**', '')
+
+        safe_audio = self._make_safe(audio_transcript) if audio_transcript else ""
+        clean_audio = safe_audio.replace('**', '')
 
         pdf.set_font('Helvetica', '', 8.5)
         try:
-            th = pdf.multi_cell(w=desc_w - 14, h=4.5, text=clean, dry_run=True, output='HEIGHT')
+            th_desc = pdf.multi_cell(w=desc_w - 14, h=4.5, text=clean_desc, dry_run=True, output='HEIGHT') if clean_desc else 0
         except Exception:
-            th = 20
-        box_h = 5 + th + 8
+            th_desc = 18 if clean_desc else 0
+
+        pdf.set_font('Helvetica', 'I', 8)
+        try:
+            th_audio = pdf.multi_cell(w=desc_w - 14, h=4.2, text=clean_audio, dry_run=True, output='HEIGHT') if clean_audio else 0
+        except Exception:
+            th_audio = 14 if clean_audio else 0
+
+        audio_extra_h = (10 + th_audio) if clean_audio else 0
+        box_h = 5 + th_desc + audio_extra_h + 8
         desc_y = pdf.get_y()
 
         if desc_y + box_h > 270:
             pdf.add_page()
             desc_y = pdf.get_y()
 
+        # Background card
         pdf.set_fill_color(*_LIGHT_BG)
         pdf.rect(desc_x, desc_y, desc_w, box_h, 'F')
 
+        # Left primary accent bar
         pdf.set_fill_color(*_DESKMATE_PRIMARY)
         pdf.rect(desc_x, desc_y, 3, box_h, 'F')
 
-        pdf.set_y(desc_y + 2.5)
-        pdf.set_x(desc_x + 7)
-        pdf.set_font('Helvetica', 'B', 8)
-        pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(desc_w - 14, 5, 'KEY INTERACTION CONTEXT', 0, 1)
+        cur_y = desc_y + 3.0
 
-        pdf.set_y(desc_y + 8.5)
-        pdf.set_x(desc_x + 7)
-        old_l = pdf.l_margin
-        old_r = pdf.r_margin
-        pdf.set_left_margin(desc_x + 7)
-        pdf.set_right_margin(210 - (desc_x + desc_w - 7))
+        if clean_desc:
+            pdf.set_y(cur_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'B', 8)
+            pdf.set_text_color(*_DESKMATE_PRIMARY)
+            pdf.cell(desc_w - 14, 4.5, 'KEY INTERACTION CONTEXT', 0, 1)
 
-        self._write_formatted_text(pdf, description, font_size=8.5)
+            cur_y += 6.0
+            pdf.set_y(cur_y)
+            pdf.set_x(desc_x + 7)
+            old_l = pdf.l_margin
+            old_r = pdf.r_margin
+            pdf.set_left_margin(desc_x + 7)
+            pdf.set_right_margin(210 - (desc_x + desc_w - 7))
 
-        pdf.set_left_margin(old_l)
-        pdf.set_right_margin(old_r)
+            self._write_formatted_text(pdf, description, font_size=8.5)
+
+            pdf.set_left_margin(old_l)
+            pdf.set_right_margin(old_r)
+            cur_y = pdf.get_y() + 2.0
+
+        if clean_audio:
+            if clean_desc:
+                pdf.set_draw_color(220, 224, 230)
+                pdf.line(desc_x + 7, cur_y + 1, desc_x + desc_w - 7, cur_y + 1)
+                cur_y += 3.5
+
+            pdf.set_y(cur_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'B', 7.5)
+            pdf.set_text_color(*_DESKMATE_DEEP)
+            ts_label = f" [{step_ts}]" if step_ts else ""
+            pdf.cell(desc_w - 14, 4.5, self._make_safe(f'AUDIO TRANSCRIPT AT CLIP MOMENT{ts_label}:'), 0, 1)
+
+            cur_y += 5.0
+            pdf.set_y(cur_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'I', 8)
+            pdf.set_text_color(55, 65, 81)
+            pdf.multi_cell(w=desc_w - 14, h=4.2, text=clean_audio)
+
         pdf.set_y(desc_y + box_h)
 
     _UNICODE_MAP = str.maketrans({

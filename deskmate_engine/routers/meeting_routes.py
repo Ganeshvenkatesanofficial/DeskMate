@@ -33,6 +33,7 @@ from services.meeting_intelligence.screen_capture_service import ScreenCapture
 from services.meeting_intelligence.summarizer import (
     NothingToSummarizeError,
     SummarizationUnavailableError,
+    extract_meeting_title,
 )
 
 from settings import SESSIONS_OUTPUT_DIR, DEFAULT_SCREEN_FPS, MAX_RETAINED_SESSIONS
@@ -414,15 +415,17 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         pdf_gen: MeetingPDFGenerator = _SESSION_STATE["pdf_generator"]
         pdf_ok = await loop.run_in_executor(
             None,
-            pdf_gen.generate_report,
-            session_id,
-            summary_md,
-            steps,
-            important_steps,
-            step_desc,
-            pdf_path,
-            req.custom_fields,
-            custom_fields_res,
+            lambda: pdf_gen.generate_report(
+                session_id=session_id,
+                summary_text=summary_md,
+                steps=steps,
+                important_step_ids=important_steps,
+                step_descriptions=step_desc,
+                output_pdf_path=pdf_path,
+                specific_fields=req.custom_fields,
+                specific_fields_analysis=custom_fields_res,
+                transcript_data=transcript_data,
+            ),
         )
 
         # Stage 5: Completed Telemetry
@@ -437,7 +440,11 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             "detail": "Report generated with decisions, action items, and audit trail.",
         })
 
+        meeting_title = extract_meeting_title(summary_md)
+
         # Update session report with summary
+        if meeting_title:
+            report_data["title"] = meeting_title
         report_data["summary"] = summary_md
         report_data["important_steps"] = important_steps
         report_data["step_descriptions"] = step_desc
@@ -459,6 +466,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 
         return {
             "session_id": session_id,
+            "title": meeting_title or None,
             "summary": summary_md,
             "important_steps": important_steps,
             "step_descriptions": step_desc,

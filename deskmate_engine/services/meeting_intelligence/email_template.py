@@ -15,8 +15,9 @@ import html
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Optional
+
+from services.meeting_intelligence.summarizer import extract_meeting_title
 
 
 LINKEDIN_PROFILE_URL = "https://www.linkedin.com/in/ganesh-venkatesan-3a4516256/"
@@ -208,7 +209,9 @@ def parse_meeting_summary(
     overview_bullets = raw_bullets[:3]
     overview_text = " ".join(overview_bullets)
 
-    title = f"Executive Meeting Intelligence Brief — {date_str}"
+    meeting_title = str(session_data.get("title") or "").strip() or extract_meeting_title(summary_text)
+
+    title = meeting_title if meeting_title else f"Executive Meeting Intelligence Brief — {date_str}"
 
     return StructuredMeetingContent(
         title=title,
@@ -281,9 +284,7 @@ def generate_meeting_email_html(
     display_email = html.escape(user_email or "")
     display_designation = html.escape((designation or "Lead Analyst & Contributor").strip())
     display_date = html.escape(content.date_str)
-    display_time = html.escape(content.time_str)
     display_duration = html.escape(content.duration_str)
-    display_overview = html.escape(content.overview)
     display_pdf_name = html.escape(pdf_filename)
 
     user_initial = (display_user[0] if display_user else "D").upper()

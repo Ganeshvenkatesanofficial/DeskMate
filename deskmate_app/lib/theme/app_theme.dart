@@ -50,6 +50,13 @@ class AppTheme {
   static const Color emeraldLight = Color(0xFF34D399);
   static const Color amber = Color(0xFFF59E0B);
   static const Color amberLight = Color(0xFFFBBF24);
+  static const Color amberDark = Color(0xFFD97706);
+
+  static final ChipThemeData _chipTheme = ChipThemeData(
+    elevation: 0,
+    pressElevation: 0,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+  );
   static const Color recordingRed = Color(0xFFDC2626);
   static const Color recordingRedLight = Color(0xFFF87171);
   static const Color teal = Color(0xFF0D9488);
@@ -182,6 +189,7 @@ class AppTheme {
         disabledMouseCursor: SystemMouseCursors.basic,
       ),
     ),
+    chipTheme: _chipTheme,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: lightBgCanvas,
@@ -279,6 +287,7 @@ class AppTheme {
         disabledMouseCursor: SystemMouseCursors.basic,
       ),
     ),
+    chipTheme: _chipTheme,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: darkBgCanvas,

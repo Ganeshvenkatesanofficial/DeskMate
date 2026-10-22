@@ -40,18 +40,28 @@ def _read_line_with_timeout(stream: Any, timeout: float) -> Optional[str]:
 
 
 def _find_macos_helper() -> Optional[str]:
-    """Locate the native macOS ScreenCaptureKit audio capture helper binary."""
+    """Locate the native macOS ScreenCaptureKit audio capture helper binary.
+    
+    IMPORTANT: macOS TCC (Screen & System Audio permissions) are strictly tied
+    to the permanent, persistent path of the binary. Temporary directories
+    (like sys._MEIPASS in /var/folders/...) have randomized paths on every launch
+    and are rejected by macOS TCC. Therefore, the stable installed binary in
+    Application Support / DeskMate / bin MUST be prioritized first.
+    """
     search_paths = [
+        # 1. Primary: Persistent stable path installed by DeskMate
+        Path.home() / "Library" / "Application Support" / "DeskMate" / "bin" / "macos_audio_capture",
+        # 2. Bundle / Local development helpers
+        Path(sys.executable).parent / "macos_audio_capture",
+        Path(sys.executable).parent / "helpers" / "macos_audio_capture",
         Path(__file__).resolve().parent / "macos_audio_capture",
         Path(__file__).resolve().parent.parent.parent.parent / "helpers" / "macos_audio_capture",
-        Path.home() / "Library" / "Application Support" / "DeskMate" / "bin" / "macos_audio_capture",
     ]
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        search_paths.insert(0, Path(sys._MEIPASS) / "helpers" / "macos_audio_capture")
-        search_paths.insert(0, Path(sys._MEIPASS) / "macos_audio_capture")
 
-    search_paths.append(Path(sys.executable).parent / "macos_audio_capture")
-    search_paths.append(Path(sys.executable).parent / "helpers" / "macos_audio_capture")
+    # 3. Last fallback: unpacked PyInstaller bundle
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        search_paths.append(Path(sys._MEIPASS) / "helpers" / "macos_audio_capture")
+        search_paths.append(Path(sys._MEIPASS) / "macos_audio_capture")
 
     which_helper = shutil.which("macos_audio_capture")
     if which_helper:

@@ -24,6 +24,20 @@ from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLA
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
+_GENERIC_TITLE_PREFIXES = ("summary", "executive", "meeting summary", "meeting notes", "meeting minutes")
+
+
+def extract_meeting_title(summary_md: str) -> str:
+    """The topic title the summarizer writes as the first `# Heading`, or '' if missing/generic."""
+    for line in (summary_md or "").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("# "):
+            continue
+        title = re.sub(r"[*_`]", "", stripped[2:]).strip()
+        if title and not title.lower().startswith(_GENERIC_TITLE_PREFIXES):
+            return title
+    return ""
+
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 # Tried in order when the configured model has been retired (HTTP 404).
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
@@ -277,17 +291,28 @@ You MUST derive every claim, name, deadline, decision, and action item SOLELY fr
 2. NEVER describe transient window switching, Alt-Tab/Cmd-Tab, Dock clicks, or minimizing/maximizing windows to switch into or out of the meeting.
 3. FOCUS EXCLUSIVELY on the substantive content presented: slides, web pages, software tools, code, diagrams, and spoken discussion.
 4. In ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===, NEVER include internal DeskMate steps or window-switch moments.
+5. **STRICT VISUAL & AUDIO SYNCHRONIZATION**: In ===STEP_DESCRIPTIONS===, each step's "description" and "audio_transcript" MUST strictly correspond to what was on screen and what was spoken at that exact moment. NEVER attach dialogue spoken at other times in the meeting to an unrelated screenshot. If no speech occurred at that moment, output `"audio_transcript": "No speech during this moment"`.
+
+---
+## ACTION ITEM & DECISION RULES (STRICT NON-HALLUCINATION POLICY):
+1. **HIGH-IMPACT DELIVERABLES ONLY**: You MUST only tag an item with `**[ACTION ITEM]**` or `**[HIGH PRIORITY]**` if it represents a CONCRETE, EXPLICIT, SIGNIFICANT TASK, ASSIGNMENT, OR MILESTONE explicitly agreed upon by participants.
+2. **ZERO CONVERSATIONAL FILLER**: NEVER generate action items from passive chatter, greetings, rhetorical questions, routine software navigation, or casual comments (e.g. DO NOT create items like "Check microphone", "Click on browser", "Review presentation", "Look at screen").
+3. **DO NOT FABRICATE ACTION ITEMS**: If participants did NOT explicitly designate follow-up tasks or future commitments during the session, DO NOT invent them. In that case, write:
+   `- No explicit follow-up action items were assigned during this session.`
+4. **FORMAT OF TRUE ACTION ITEMS**:
+   Every genuine action item MUST be concise and state:
+   `- **[ACTION ITEM]** [Assignee / Team if stated]: [Specific deliverable] (Due/Next Step: [Milestone if stated])`
+   `- **[HIGH PRIORITY]** [Critical blocker, security patch, or urgent deadline explicitly flagged as urgent]`
+   `- **[IMPORTANT]** [Key architectural, business, or operational decision finalized]`
 
 ---
 ## INSTRUCTIONS:
-Highlight actionable decisions and next steps using uppercase block tags:
-- `**[HIGH PRIORITY]**` for urgent issues or blockers.
-- `**[ACTION ITEM]**` for assigned tasks and designated follow-ups.
-- `**[IMPORTANT]**` for key technical parameters or decisions.
-
+1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (e.g. `# API Gateway Architecture & Throttle Sync` or `# Q3 Product Roadmap Alignment`). DO NOT use generic phrases like "Meeting Summary".
 STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 
 ===SUMMARY===
+
+# [Specific 3-7 Word Meeting Title Based on Core Topic]
 
 ### Executive Overview
 Concise 3-5 sentence summary of the meeting's core purpose, platforms used, and primary outcome.
@@ -297,7 +322,7 @@ Chronological narrative combining visual on-screen actions, screenshot text/OCR 
 
 {transcript_section}### Decisions & Outcomes
 - Accomplishments finalized.
-- Items designated for follow-up.
+- Items designated for follow-up (use **[ACTION ITEM]** or **[HIGH PRIORITY]** strictly according to the rules above).
 
 ### Technical & Domain Parameters
 Relevant code commands, configuration flags, client requests, or operational parameters.
@@ -306,7 +331,7 @@ Relevant code commands, configuration flags, client requests, or operational par
 ["step_1", "step_3"]
 
 ===STEP_DESCRIPTIONS===
-{{"step_1": {{"title": "Descriptive Action Name", "description": "2-3 sentences explaining screen state and spoken context."}}}}
+{{"step_1": {{"title": "Descriptive Action Name", "description": "2-3 sentences explaining visual screen actions, parameters, or outcomes.", "audio_transcript": "Key spoken dialogue or discussion from the audio transcript during this clip moment (or 'No speech during this moment' if silent)."}}}}
 {custom_delimiters}
 """
 

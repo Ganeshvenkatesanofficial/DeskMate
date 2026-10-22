@@ -4867,7 +4867,7 @@ RAG_CHUNK_OVERLAP=200
           _buildMeetingEngineRow(
             theme,
             icon: Icons.visibility_rounded,
-            color: const Color(0xFFD97706),
+            color: AppTheme.amberDark,
             label: 'Llama 3.2 Vision (Ollama)',
             badge: 'Local Vision (Compulsory if No API Key)',
             desc:
