@@ -6,6 +6,7 @@ on:
       - main
       - dev
       - feat/meeting-intelligence-engine
+      - linux-build
 
   pull_request:
     branches:
@@ -22,6 +23,7 @@ on:
           - all
           - macos
           - windows
+          - linux
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -258,6 +260,7 @@ jobs:
     outputs:
       windows: ${{ steps.filter.outputs.windows }}
       macos: ${{ steps.filter.outputs.macos }}
+      linux: ${{ steps.filter.outputs.linux }}
 
     steps:
       - name: Checkout
@@ -279,6 +282,13 @@ jobs:
               - 'deskmate_engine/**'
               - 'deskmate_app/macos/**'
               - '.github/workflows/**'
+
+            linux:
+              - 'deskmate_app/**'
+              - 'deskmate_engine/**'
+              - 'deskmate_app/linux/**'
+              - '.github/workflows/**'
+              - 'scripts/**'
 
 
 # ============================================================
@@ -562,4 +572,133 @@ jobs:
             DeskMate-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+# ============================================================
+# 11. LINUX BUILD
+# ============================================================
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+
+    needs:
+      - flake8-lint
+      - python-tests
+      - bandit-security
+      - dependency-security
+      - secret-scan
+      - trivy-scan
+      - flutter-quality
+      - check-changes
+
+    if: |
+      (
+        github.event_name == 'workflow_dispatch' &&
+        (
+          github.event.inputs.target_platform == 'all' ||
+          github.event.inputs.target_platform == 'linux'
+        )
+      )
+      ||
+      (
+        github.event_name == 'push' &&
+        needs.check-changes.outputs.linux == 'true'
+      )
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libstdc++-12-dev
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Create Python environment & build backend
+        working-directory: deskmate_engine
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install --no-deps "pillow>=13.0.0"
+          .venv/bin/pip install pyinstaller
+          .venv/bin/pyinstaller deskmate_backend.spec --clean
+
+      - name: Copy backend binary to Flutter assets
+        run: |
+          mkdir -p deskmate_app/assets/backend
+          cp \
+            deskmate_engine/dist/deskmate_backend \
+            deskmate_app/assets/backend/deskmate_backend
+          chmod +x deskmate_app/assets/backend/deskmate_backend
+
+      - name: Flutter dependencies
+        working-directory: deskmate_app
+        run: |
+          flutter pub get
+
+      - name: Build Linux application
+        working-directory: deskmate_app
+        run: |
+          flutter build linux --release
+
+      - name: Verify Linux build
+        run: |
+          test -f deskmate_app/build/linux/x64/release/bundle/DeskMate
+
+      - name: Package Linux tar.gz
+        run: |
+          mkdir -p package/DeskMate
+          cp -r deskmate_app/build/linux/x64/release/bundle/* package/DeskMate/
+          cp scripts/run_linux.sh package/DeskMate/run.sh
+          cp scripts/install_linux.sh package/DeskMate/install_linux.sh
+          cp scripts/deskmate.desktop package/DeskMate/deskmate.desktop
+          cp deskmate_app/assets/app_icon.png package/DeskMate/deskmate.png
+          chmod +x package/DeskMate/DeskMate
+          chmod +x package/DeskMate/run.sh
+          chmod +x package/DeskMate/install_linux.sh
+          chmod +x package/DeskMate/data/flutter_assets/assets/backend/deskmate_backend || true
+          tar -czf DeskMate-Linux-x64.tar.gz -C package DeskMate
+
+      - name: Upload Linux tar.gz
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskMate-Linux-Tar
+          path: DeskMate-Linux-x64.tar.gz
+
+      - name: Publish Linux Continuous Pre-release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/meeting-intelligence-engine')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          target_commitish: ${{ github.sha }}
+          name: "DeskMate Continuous Build"
+          body: "Automated continuous build from ${{ github.ref_name }} branch (commit ${{ github.sha }})."
+          prerelease: true
+          make_latest: false
+          files: |
+            DeskMate-Linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
 
