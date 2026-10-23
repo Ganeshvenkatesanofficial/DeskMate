@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 import requests
 import cv2
-from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL
+from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL, USER_DATA_DIR
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
@@ -43,6 +43,8 @@ GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
 MAX_OLLAMA_CANDIDATES = 2
 GEMINI_AUDIO_CHUNK_SECONDS = 240
+# Transcript segments sent per translation request (keeps prompts small for local models).
+TRANSLATE_BATCH_SIZE = 40
 
 
 class NothingToSummarizeError(RuntimeError):
@@ -131,8 +133,9 @@ class MeetingSummarizer:
         )
         if not steps and not has_audio:
             raise NothingToSummarizeError(
-                "Nothing was captured in this meeting: no screen changes and no speech. "
-                "Check Screen Recording and Microphone permission in System Settings > Privacy & Security."
+                "No meeting content was detected to summarize: no speech and no screen activity. "
+                "Speak or show content on screen during the meeting. If you did, check Screen Recording and "
+                "Microphone permission for DeskMate in System Settings > Privacy & Security."
             )
 
         # 0. Filter out internal DeskMate tool interactions & transient window switches
@@ -183,8 +186,14 @@ class MeetingSummarizer:
             full_img_path = None
             if img_path:
                 cand_p = Path(img_path)
-                for cand in [cand_p, cand_p.resolve(), Path.cwd() / img_path]:
-                    if cand.exists():
+                search_candidates = [
+                    cand_p,
+                    cand_p.resolve(),
+                    Path.cwd() / img_path,
+                    USER_DATA_DIR / img_path,
+                ]
+                for cand in search_candidates:
+                    if cand.exists() and cand.is_file():
                         full_img_path = str(cand)
                         break
 
@@ -431,9 +440,12 @@ Relevant code commands, configuration flags, client requests, or operational par
                 parts = [
                     {
                         "text": (
-                            "Transcribe this meeting audio. Identify different speakers as "
+                            "Transcribe this meeting audio and translate it into clear English. Speech may be "
+                            "Tamil, Tanglish, Hindi or any other language. Identify different speakers as "
                             '"Speaker 1", "Speaker 2", etc. Return ONLY a JSON array: '
-                            '[{"start": seconds, "end": seconds, "speaker": "Speaker 1", "text": "..."}]. '
+                            '[{"start": seconds, "end": seconds, "speaker": "Speaker 1", '
+                            '"text": "English translation", "original": "exact words as spoken"}]. '
+                            'If speech is already English, "original" equals "text". '
                             "Times are seconds from the start of this clip. Return [] if there is no speech."
                         )
                     },
@@ -460,12 +472,16 @@ Relevant code commands, configuration flags, client requests, or operational par
                         end = float(it.get("end", 0.0) or 0.0)
                     except (TypeError, ValueError):
                         start, end = 0.0, len(chunk) / float(sr)
-                    segments.append({
+                    segment = {
                         "start": round(offset_s + start, 2),
                         "end": round(offset_s + end, 2),
                         "speaker": str(it.get("speaker") or "Speaker 1"),
                         "text": text,
-                    })
+                    }
+                    original = str(it.get("original") or "").strip()
+                    if original and original != text:
+                        segment["original_text"] = original
+                    segments.append(segment)
 
             if not segments and failed_chunks:
                 return None
@@ -475,10 +491,61 @@ Relevant code commands, configuration flags, client requests, or operational par
                 "duration_seconds": round(len(data) / float(sr), 2),
                 "language": "en",
                 "engine": f"gemini:{self.gemini_model}",
+                "translated": True,
             }
         except Exception as e:
             logger.warning(f"Gemini audio transcription failed: {e}")
             return None
+
+    def translate_transcript_to_english(
+        self, transcript: dict[str, Any], api_key: str | None = None
+    ) -> dict[str, Any]:
+        """Translate each transcript segment into English (any source language), keeping the
+        spoken words in `original_text`. Segments that can't be translated stay as spoken."""
+        segments = transcript.get("segments") or []
+        if not segments and str(transcript.get("full_transcript") or "").strip():
+            segments = [{
+                "start": 0.0,
+                "end": float(transcript.get("duration_seconds") or 0.0),
+                "speaker": "Speaker 1",
+                "text": str(transcript["full_transcript"]).strip(),
+            }]
+            transcript["segments"] = segments
+        if transcript.get("translated") or not segments:
+            return transcript
+
+        translated_count = 0
+        for start in range(0, len(segments), TRANSLATE_BATCH_SIZE):
+            batch = segments[start : start + TRANSLATE_BATCH_SIZE]
+            lines = [str(seg.get("text") or "") for seg in batch]
+            prompt = (
+                "Translate each line of this meeting transcript into clear, natural English. "
+                "Lines may be Tamil, Tanglish (Tamil written in English letters), Hindi or any other "
+                "language, or a mix. Keep names, numbers and technical terms. If a line is already "
+                "English, return it unchanged. Return ONLY a JSON array of strings with exactly "
+                f"{len(lines)} items, in the same order.\n\n" + json.dumps(lines, ensure_ascii=False)
+            )
+            try:
+                raw = self._query_llm([{"text": prompt}], prompt, api_key)
+                english = json.loads(self._strip_code_fences(raw))
+            except Exception as e:
+                logger.warning(f"Transcript translation failed for lines {start}-{start + len(batch)}: {e}")
+                continue
+            if not isinstance(english, list) or len(english) != len(batch):
+                logger.warning("Transcript translation returned the wrong number of lines; keeping originals.")
+                continue
+            for seg, spoken, eng in zip(batch, lines, english):
+                eng = str(eng or "").strip()
+                if eng and eng != spoken:
+                    seg["original_text"] = spoken
+                    seg["text"] = eng
+                    translated_count += 1
+
+        transcript["full_transcript"] = " ".join(str(seg.get("text") or "") for seg in segments)
+        transcript["translated"] = True
+        transcript["language"] = "en"
+        logger.info(f"Translated {translated_count}/{len(segments)} transcript segments to English.")
+        return transcript
 
     def _query_llm(self, parts: list[dict[str, Any]], plain_prompt: str, api_key: str | None = None) -> str:
         """Query Gemini via REST, falling back to local Ollama."""

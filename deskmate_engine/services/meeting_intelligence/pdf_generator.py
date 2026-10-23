@@ -1,49 +1,36 @@
 """
 services.meeting_intelligence.pdf_generator — Production Executive PDF Layout Engine
 ===================================================================================
-100% DeskMate Branded PDF Generator.
+DeskMate branded PDF generator (fpdf2).
 Compiles executive markdown summaries, key visual interaction moments, dynamic user
 requirements, and action items into a report with Primer typography and #6A35F5 palette.
 """
 
+import os
 import re
+import hashlib
 import logging
 import datetime
 from pathlib import Path
 from typing import Optional, Any
 from fpdf import FPDF
 
-from services.meeting_intelligence.summarizer import extract_meeting_title
+from services.meeting_intelligence import config
 
 logger = logging.getLogger("deskmate.pdf_generator")
 
-# Pre-compiled regular expressions for Markdown and text processing
-_RE_BOLD_SPLIT = re.compile(r'(\*\*.*?\*\*)')
-_RE_BOLD_STRIP = re.compile(r'\*\*')
-_RE_TAGS_STRIP = re.compile(r'\[ACTION ITEM\]|\[HIGH PRIORITY\]|\[IMPORTANT\]', re.IGNORECASE)
-_RE_TAGS_STAR_STRIP = re.compile(r'\*?\*?\[ACTION ITEM\]\*?\*?|\*?\*?\[HIGH PRIORITY\]\*?\*?|\*?\*?\[IMPORTANT\]\*?\*?', re.IGNORECASE)
-_RE_BULLET_MATCH = re.compile(r'^\s*[-*]\s')
-_RE_BULLET_STRIP = re.compile(r'^\s*[-*]\s*')
-_RE_BULLET_LINE_STRIP = re.compile(r'^\s*[-*]\s+')
-_RE_ORDERED_MATCH = re.compile(r'^\s*\d+\.\s')
-_RE_ORDERED_PARSE = re.compile(r'^\s*(\d+)\.\s+(.*)')
-_RE_DIGITS = re.compile(r'\d+')
-
-# ── DeskMate AI Color Palette (GitHub Primer Purple & Dark Canvas) ────────────
+# ── DeskMate AI Color Palette (GitHub Primer Purple & Dark Slate) ────────────
 _DESKMATE_PRIMARY = (106, 53, 245)      # #6A35F5 — Signature DeskMate Purple
 _DESKMATE_DEEP = (22, 27, 34)           # #161B22 — GitHub Primer Dark Slate
-_DESKMATE_ACCENT = (142, 97, 255)       # #8E61FF — Electric Link Lavender
-_DESKMATE_DARK = (13, 17, 23)           # #0D1117 — Dark Heading & Canvas
+_DESKMATE_DARK = (13, 17, 23)           # #0D1117 — Dark Heading Text
 _WHITE = (255, 255, 255)
-_BODY_TEXT = (55, 65, 81)               # #374151 — Body Text
-_MUTED_TEXT = (107, 114, 128)           # #6B7280 — Muted Secondary
-_LIGHT_BG = (245, 243, 255)             # #F5F3FF — Light Purple/Lavender Tint Background
+_BODY_TEXT = (55, 65, 81)               # #374151 — Crisp Charcoal Body Text
+_MUTED_TEXT = (107, 114, 128)           # #6B7280 — Muted Secondary Text
+_LIGHT_BG = (245, 243, 255)             # #F5F3FF — Light Lavender Tint Background
 _CARD_BG = (249, 250, 251)              # #F9FAFB — Clean Neutral Card Background
 _DIVIDER = (226, 232, 240)              # #E2E8F0 — Subtle Divider
-_SUCCESS = (16, 185, 129)               # #10B981 — Success Green
-_WARNING = (245, 158, 11)               # #F59E0B — Action Item Amber
-_GRADIENT_START = (186, 175, 255)       # Soft Lavender
-_GRADIENT_END = (220, 235, 255)         # Soft Sky
+_WARNING = (217, 119, 6)                # #D97706 — Amber / Important Note
+_URGENT = (220, 38, 38)                 # #DC2626 — Critical / High Priority Red
 
 # ── Page Constants ────────────────────────────────────────────────────────────
 _LEFT_MARGIN = 15
@@ -54,72 +41,156 @@ _IMG_X = _LEFT_MARGIN + (_CONTENT_WIDTH - _IMG_WIDTH) / 2
 
 
 def _resolve_logo_path() -> str:
-    base = Path(__file__).resolve().parent
+    """Find DeskMate light theme brand logo across development and packaged application paths."""
     candidates = [
-        base / ".." / ".." / ".." / "deskmate_app" / "assets" / "app_icon.png",
-        base / ".." / ".." / ".." / "docs" / "images" / "deskmate_hero.png",
+        Path(__file__).resolve().parent / "static" / "deskmate_logo.png",
+        Path.home() / "Library" / "Application Support" / "DeskMate" / "static" / "deskmate_logo.png",
+        Path(__file__).resolve().parent.parent.parent.parent / "deskmate_app" / "assets" / "app_icon_light.png",
+        Path("deskmate_app/assets/app_icon_light.png").resolve(),
+        Path(__file__).resolve().parent.parent.parent.parent / "deskmate_app" / "assets" / "app_icon.png",
         Path("deskmate_app/assets/app_icon.png").resolve(),
+        Path.home() / "AppData" / "Roaming" / "DeskMate" / "static" / "deskmate_logo.png",
     ]
     for p in candidates:
-        if p.exists():
-            return str(p.resolve())
+        try:
+            if p.exists() and p.is_file():
+                return str(p.resolve())
+        except Exception:
+            pass
     return ""
 
 
 _LOGO_PATH = _resolve_logo_path()
 
+# Core PDF fonts are Latin-1 only; map common Unicode punctuation instead of dropping it.
+_UNICODE_MAP = str.maketrans({
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u2026": "...",
+    "\u2192": "->", "\u2190": "<-", "\u2194": "<->",
+    "\u2022": "-", "\u2023": "-", "\u25cf": "-", "\u25cb": "o",
+    "\u2713": "[x]", "\u2714": "[x]", "\u2717": "[ ]", "\u2718": "[ ]",
+    "\u00a0": " ", "\u200b": "", "\u200c": "", "\u200d": "", "\ufeff": "", "\u00ad": "",
+    "\u2032": "'", "\u2033": '"',
+    "\u20b9": "INR", "\u20ac": "EUR", "\u2122": "(TM)",
+    "\u2248": "~", "\u2260": "!=", "\u2264": "<=", "\u2265": ">=", "\u221e": "inf",
+})
+
+
+_EXTRA_SPACES = re.compile(r"[ \t]{2,}")
+
+
+def _to_pdf_text(text: Any) -> str:
+    """Any value -> text the core PDF fonts can draw (unsupported scripts such as Tamil are dropped)."""
+    if text is None:
+        return ""
+    latin = str(text).translate(_UNICODE_MAP).encode("latin-1", "ignore").decode("latin-1")
+    return _EXTRA_SPACES.sub(" ", latin)
+
+
+# Lowest y (mm) content may reach before a manual page break.
+_PAGE_BOTTOM_Y = 270
+# Steps whose title/description mention these are DeskMate's own UI, not meeting content.
+_HOST_APP_TERMS = (
+    "deskmate", "deskmate live", "meeting scribe", "recording dashboard",
+    "start meeting", "stop meeting", "end meeting", "mission control", "app switcher",
+)
+
+
+def _resolve_screenshot_path(asset_rel_path: str) -> Optional[str]:
+    """Robust screenshot resolution across dev workspace and macOS Application Support."""
+    if not asset_rel_path:
+        return None
+
+    p = Path(asset_rel_path)
+    if p.is_absolute() and p.exists():
+        return str(p)
+
+    candidates = [
+        Path(config.OUTPUT_DIR) / asset_rel_path,
+        Path(config.OUTPUT_DIR) / "live_sessions" / asset_rel_path,
+        Path(asset_rel_path),
+        Path.cwd() / asset_rel_path,
+        Path.home() / "Library" / "Application Support" / "DeskMate" / asset_rel_path,
+        Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / asset_rel_path,
+        Path.home() / "Library" / "Application Support" / "DeskMate" / "output" / "sessions" / asset_rel_path,
+        Path.home() / "AppData" / "Roaming" / "DeskMate" / asset_rel_path,
+        Path.home() / "AppData" / "Roaming" / "DeskMate" / "sessions" / asset_rel_path,
+    ]
+
+    for prefix in ["output/sessions/", "sessions/", "live_sessions/", "output/"]:
+        if asset_rel_path.startswith(prefix):
+            stripped = asset_rel_path[len(prefix):]
+            candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / stripped)
+            candidates.append(Path(config.OUTPUT_DIR) / stripped)
+
+    for cand in candidates:
+        try:
+            if cand.exists() and cand.is_file():
+                return str(cand.resolve())
+        except Exception:
+            pass
+    return None
+
 
 class MeetingReportPDF(FPDF):
-    """Custom FPDF layout with DeskMate branding on every page."""
+    """Custom FPDF layout with rich DeskMate AI branding on every page."""
+
+    def normalize_text(self, text: str) -> str:
+        # Single choke point: no caller can crash the PDF with unsupported characters.
+        return super().normalize_text(_to_pdf_text(text))
 
     def header(self):
-        # Logo on left
-        if _LOGO_PATH and Path(_LOGO_PATH).exists():
+        # ─── Sleek minimal header on all pages ────────────────────────
+        logo_path = _LOGO_PATH
+        if logo_path:
             try:
-                self.image(_LOGO_PATH, x=_LEFT_MARGIN, y=4.5, w=10.0)
-                self.set_font('Helvetica', 'B', 10)
+                # DeskMate Logo icon on the left (medium size, 11mm wide)
+                self.image(logo_path, x=_LEFT_MARGIN, y=4.5, w=11)
+                self.set_font('Helvetica', 'B', 11)
                 self.set_text_color(*_DESKMATE_PRIMARY)
-                self.set_xy(_LEFT_MARGIN + 12.0, 7.5)
+                self.set_xy(_LEFT_MARGIN + 13, 7.5)
                 self.cell(40, 5, 'DeskMate AI', 0, 0, 'L')
             except Exception:
-                self.set_font('Helvetica', 'B', 10)
+                self.set_font('Helvetica', 'B', 11)
                 self.set_text_color(*_DESKMATE_PRIMARY)
                 self.set_xy(_LEFT_MARGIN, 7.5)
                 self.cell(40, 5, 'DeskMate AI', 0, 0, 'L')
         else:
-            self.set_font('Helvetica', 'B', 10)
+            self.set_font('Helvetica', 'B', 11)
             self.set_text_color(*_DESKMATE_PRIMARY)
             self.set_xy(_LEFT_MARGIN, 7.5)
             self.cell(40, 5, 'DeskMate AI', 0, 0, 'L')
 
-        # Header Title on right
-        self.set_font('Helvetica', 'B', 11)
+        # Header Title on the right
+        self.set_font('Helvetica', 'B', 12)
         self.set_text_color(*_DESKMATE_DEEP)
         self.set_xy(_LEFT_MARGIN, 7.5)
         self.cell(_CONTENT_WIDTH, 5, 'Meeting Intelligence Report', 0, 0, 'R')
 
-        # Thin DeskMate purple accent line
+        # Thin accent line below header in DeskMate signature purple
         self.set_fill_color(*_DESKMATE_PRIMARY)
-        self.rect(_LEFT_MARGIN, 17.5, _CONTENT_WIDTH, 0.5, 'F')
+        self.rect(_LEFT_MARGIN, 18.5, _CONTENT_WIDTH, 0.4, 'F')
 
         # Reset body cursor
-        self.set_y(22)
+        self.set_y(23)
         self.set_text_color(*_BODY_TEXT)
 
     def footer(self):
         self.set_y(-16)
+
+        # ─── Thin accent line above footer ───────────────────────────
         self.set_fill_color(*_DIVIDER)
         self.rect(_LEFT_MARGIN, self.get_y() - 2, _CONTENT_WIDTH, 0.4, 'F')
 
-        self.set_font('Helvetica', '', 8)
+        self.set_font('Helvetica', '', 7.5)
         self.set_text_color(*_MUTED_TEXT)
         self.cell(90, 10, f'Page {self.page_no()}/{{nb}}', 0, 0, 'L')
-        self.set_font('Helvetica', 'I', 8)
+        self.set_font('Helvetica', 'I', 7.5)
         self.cell(90, 10, 'Generated by DeskMate AI  |  Meeting Intelligence', 0, 0, 'R')
 
 
 class MeetingPDFGenerator:
-    """Compiles rich markdown summaries, evidence screenshots, and action items into a premium PDF report."""
+    """Compiles rich markdown summaries and key screenshots into a premium DeskMate PDF report."""
 
     def generate_report(
         self,
@@ -136,16 +207,21 @@ class MeetingPDFGenerator:
         try:
             logger.info(f"Generating DeskMate PDF report for session {session_id}...")
 
-            # Programmatically filter out DeskMate internal application UI states and window switching
-            step_map = {str(s.get("step_id", "")): s for s in steps if isinstance(s, dict)}
-            filtered_ids = []
-            for sid in important_step_ids:
-                clean_id = re.sub(r'[^0-9]', '', str(sid))
-                step_obj = step_map.get(str(sid)) or step_map.get(clean_id) or step_map.get(f"step_{clean_id}") or {}
-                if self._is_internal_deskmate_step(step_obj, step_descriptions):
+            steps = [s for s in (steps or []) if isinstance(s, dict)]
+            step_descriptions = step_descriptions if isinstance(step_descriptions, dict) else {}
+            specific_fields = [f for f in (specific_fields or []) if isinstance(f, dict)]
+            specific_fields_analysis = specific_fields_analysis if isinstance(specific_fields_analysis, dict) else {}
+
+            # Drop steps that show DeskMate's own recording UI
+            filtered_important_step_ids = []
+            for sid in [str(x) for x in (important_step_ids or [])]:
+                desc = self._find_step_description(sid, step_descriptions).lower()
+                title = self._find_step_title(sid, step_descriptions, "").lower()
+                if any(term in desc or term in title for term in _HOST_APP_TERMS):
+                    logger.info(f"Programmatically filtering out step {sid} because it refers to host app UI.")
                     continue
-                filtered_ids.append(sid)
-            important_step_ids = filtered_ids
+                filtered_important_step_ids.append(sid)
+            important_step_ids = filtered_important_step_ids
 
             pdf = MeetingReportPDF()
             pdf.alias_nb_pages()
@@ -154,36 +230,43 @@ class MeetingPDFGenerator:
             pdf.add_page()
             pdf.set_auto_page_break(auto=True, margin=22)
 
-            # 1. Branded Metadata Block
-            self._render_metadata_block(pdf, session_id, steps, important_step_ids, summary_text)
+            # ─── Metadata block ──────────────────────────────────────────
+            self._render_metadata_block(pdf, session_id, steps, important_step_ids)
 
-            # 2. Executive Summary & Structured Sections
+            # ─── Executive Summary ───────────────────────────────────────
             self._render_section_header(pdf, 'Executive Summary & Analysis')
             self._render_markdown_body(pdf, summary_text)
             pdf.ln(6)
 
-            # 3. Key Visual Interaction Moments
+            # ─── Key Visual Moments ──────────────────────────────────────
             if steps and important_step_ids:
-                first_card_h = self._get_first_card_height(pdf, steps, important_step_ids, step_descriptions, transcript_data)
-                if pdf.get_y() + 25 + first_card_h > 270:
+                # Force a page break if the header and first screenshot card won't fit on the current page
+                first_card_h = self._get_first_card_height(pdf, steps, important_step_ids, step_descriptions)
+                if pdf.get_y() + 25 + first_card_h > _PAGE_BOTTOM_Y:
                     pdf.add_page()
                 self._render_section_header(pdf, 'Key Visual Interaction Moments')
-                self._render_screenshots(pdf, steps, important_step_ids, step_descriptions, transcript_data)
+                self._render_screenshots(pdf, steps, important_step_ids, step_descriptions)
 
-            # 4. Dynamic Custom Requirements Analysis
+            # ─── Dynamic Specific Fields (Custom User Requirements) ──────
             if specific_fields and specific_fields_analysis:
                 for sf in specific_fields:
-                    name = sf.get("name", "")
-                    instruction = sf.get("instruction", "")
+                    name = str(sf.get("name") or "")
+                    instruction = str(sf.get("instruction") or "")
+
+                    # Fetch analysis content
                     analysis_data = specific_fields_analysis.get(name)
                     if not analysis_data:
-                        analysis_data = next((v for k, v in specific_fields_analysis.items() if k.lower() == name.lower()), None)
+                        # Fallback case-insensitive
+                        analysis_data = next(
+                            (v for k, v in specific_fields_analysis.items() if str(k).lower() == name.lower()), None
+                        )
 
                     if not analysis_data:
                         continue
 
                     content = ""
                     relevant_steps = []
+
                     if isinstance(analysis_data, dict):
                         content = analysis_data.get("content", "")
                         relevant_steps = analysis_data.get("relevant_steps", [])
@@ -193,796 +276,656 @@ class MeetingPDFGenerator:
                     if not content or not content.strip():
                         continue
 
+                    # Force a page break for each custom field
                     pdf.add_page()
+
+                    # Section Header
                     self._render_section_header(pdf, f"Requested Analysis: {name}")
 
+                    # Render Instruction Context
                     pdf.set_font('Helvetica', 'I', 8.5)
                     pdf.set_text_color(*_MUTED_TEXT)
                     pdf.set_x(_LEFT_MARGIN)
                     pdf.cell(_CONTENT_WIDTH, 5, self._make_safe(f"Instruction: {instruction}"), 0, 1)
                     pdf.ln(4)
 
+                    # Render generated body text
                     self._render_markdown_body(pdf, content)
                     pdf.ln(6)
 
+                    # Render relevant evidence screenshots
                     if relevant_steps:
-                        str_rel = [str(sid).strip() for sid in relevant_steps]
-                        first_card_h = self._get_first_card_height(pdf, steps, str_rel, step_descriptions, transcript_data)
-                        if pdf.get_y() + 14 + first_card_h > 270:
-                            pdf.add_page()
-                        pdf.ln(4)
-                        pdf.set_font('Helvetica', 'B', 10.5)
-                        pdf.set_text_color(*_DESKMATE_DEEP)
-                        pdf.set_x(_LEFT_MARGIN)
-                        pdf.cell(_CONTENT_WIDTH, 6, "Relevant Visual Evidence", 0, 1)
-                        pdf.ln(4)
-                        self._render_screenshots(pdf, steps, str_rel, step_descriptions, transcript_data)
+                        str_relevant_steps = [str(sid).strip() for sid in relevant_steps]
 
+                        has_screenshots = False
+                        for step in steps:
+                            step_id_val = str(step.get("step_id", ""))
+                            if step_id_val in str_relevant_steps or f"step_{step_id_val}" in str_relevant_steps:
+                                has_screenshots = True
+                                break
+
+                        if has_screenshots:
+                            # Force a page break if the header and first screenshot card won't fit together
+                            first_card_h = self._get_first_card_height(pdf, steps, str_relevant_steps, step_descriptions)
+                            if pdf.get_y() + 14 + first_card_h > _PAGE_BOTTOM_Y:
+                                pdf.add_page()
+
+                            pdf.ln(4)
+                            pdf.set_font('Helvetica', 'B', 10.5)
+                            pdf.set_text_color(*_DESKMATE_DEEP)
+                            pdf.set_x(_LEFT_MARGIN)
+                            pdf.cell(_CONTENT_WIDTH, 6, "Relevant Visual Evidence", 0, 1)
+                            pdf.ln(4)
+
+                            self._render_screenshots(pdf, steps, str_relevant_steps, step_descriptions)
+
+            # Ensure parent output directory exists and save PDF
             Path(output_pdf_path).parent.mkdir(parents=True, exist_ok=True)
             pdf.output(output_pdf_path)
             logger.info(f"Successfully compiled DeskMate PDF report to {output_pdf_path}")
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to compile PDF report: {e}")
+            logger.exception(f"Failed to compile DeskMate PDF report: {e}")
             return False
 
-    def _render_metadata_block(self, pdf, session_id, steps, important_ids, summary_text: str = ""):
-        """Render a branded metadata card."""
-        meeting_title = extract_meeting_title(summary_text)
+    # ── Metadata block ────────────────────────────────────────────────────
 
-        card_h = 27 if meeting_title else 22
+    def _render_metadata_block(self, pdf, session_id, steps, important_ids):
+        """Render a branded metadata info card."""
         y_start = pdf.get_y()
+
+        # Card background with left accent
         pdf.set_fill_color(*_LIGHT_BG)
-        pdf.rect(_LEFT_MARGIN, y_start, _CONTENT_WIDTH, card_h, 'F')
-
-        # Left DeskMate purple accent
+        pdf.rect(_LEFT_MARGIN, y_start, _CONTENT_WIDTH, 22, 'F')
         pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, y_start, 3.5, card_h, 'F')
+        pdf.rect(_LEFT_MARGIN, y_start, 3, 22, 'F')
 
-        col1_x = _LEFT_MARGIN + 8
-        col2_x = _LEFT_MARGIN + 95
+        pdf.set_y(y_start + 3)
 
-        # Col 1
-        pdf.set_xy(col1_x, y_start + 4)
-        pdf.set_font('Helvetica', 'B', 10)
+        # Row 1: Session ID + Generated timestamp
+        pdf.set_x(_LEFT_MARGIN + 8)
+        pdf.set_font('Helvetica', 'B', 8.5)
         pdf.set_text_color(*_DESKMATE_DEEP)
-        pdf.cell(80, 5, 'SESSION OVERVIEW', 0, 1)
-
-        pdf.set_x(col1_x)
-        pdf.set_font('Helvetica', '', 8.5)
+        pdf.cell(20, 5, 'SESSION', 0, 0)
+        pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(*_BODY_TEXT)
-        now_str = datetime.datetime.now().strftime('%Y-%m-%d  %H:%M')
+        pdf.cell(62, 5, session_id, 0, 0)
 
-        if meeting_title:
-            short_t = meeting_title if len(meeting_title) <= 46 else meeting_title[:43] + "..."
-            pdf.cell(80, 4.2, self._make_safe(f'Topic: {short_t}'), 0, 1)
-            pdf.set_x(col1_x)
-
-        pdf.cell(80, 4.2, self._make_safe(f'Session ID: {session_id}'), 0, 1)
-
-        pdf.set_x(col1_x)
-        pdf.cell(80, 4.2, f'Generated: {now_str}', 0, 1)
-
-        # Col 2
-        pdf.set_xy(col2_x, y_start + 4)
-        pdf.set_font('Helvetica', 'B', 10)
+        pdf.set_font('Helvetica', 'B', 8.5)
         pdf.set_text_color(*_DESKMATE_DEEP)
-        pdf.cell(80, 5, 'METRICS', 0, 1)
-
-        pdf.set_x(col2_x)
-        pdf.set_font('Helvetica', '', 8.5)
+        pdf.cell(25, 5, 'GENERATED', 0, 0)
+        pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(*_BODY_TEXT)
-        pdf.cell(80, 4.5, f'Total Detected Steps: {len(steps)}', 0, 1)
+        pdf.cell(0, 5, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 0, 1)
 
-        pdf.set_x(col2_x)
-        pdf.cell(80, 4.5, f'Key Visual Moments: {len(important_ids)}', 0, 1)
+        # Row 2: Moments + Key Moments
+        pdf.set_x(_LEFT_MARGIN + 8)
+        pdf.set_font('Helvetica', 'B', 8.5)
+        pdf.set_text_color(*_DESKMATE_DEEP)
+        pdf.cell(20, 5, 'MOMENTS', 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(*_BODY_TEXT)
+        pdf.cell(62, 5, str(len(steps)), 0, 0)
 
-        pdf.set_y(y_start + card_h + 4)
+        pdf.set_font('Helvetica', 'B', 8.5)
+        pdf.set_text_color(*_DESKMATE_DEEP)
+        pdf.cell(25, 5, 'KEY MOMENTS', 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(*_BODY_TEXT)
+        pdf.cell(0, 5, str(len(important_ids)), 0, 1)
+
+        pdf.ln(8)
+
+    # ── Section header ────────────────────────────────────────────────────
 
     def _render_section_header(self, pdf, title):
-        """Render a section header with DeskMate branding."""
-        pdf.ln(3)
+        """Render a rich section header with DeskMate branding."""
+        pdf.ln(5)
+
         y = pdf.get_y()
 
-        if y > 260:
-            pdf.add_page()
-            y = pdf.get_y()
+        # Background highlight strip
+        pdf.set_fill_color(*_LIGHT_BG)
+        pdf.rect(_LEFT_MARGIN, y, _CONTENT_WIDTH, 10, 'F')
 
+        # Left accent bar (DeskMate primary purple)
         pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, y + 1, 3.5, 7, 'F')
+        pdf.rect(_LEFT_MARGIN, y, 4, 10, 'F')
 
-        pdf.set_xy(_LEFT_MARGIN + 7, y)
-        pdf.set_font('Helvetica', 'B', 12.5)
+        # Title text
+        pdf.set_xy(_LEFT_MARGIN + 8, y + 1)
+        pdf.set_font('Helvetica', 'B', 13)
         pdf.set_text_color(*_DESKMATE_DEEP)
-        pdf.cell(_CONTENT_WIDTH - 7, 9, self._make_safe(title), 0, 1)
+        pdf.cell(_CONTENT_WIDTH - 12, 8, title, 0, 1)
 
+        pdf.ln(4)
+
+        # Decorative divider — primary purple thin line + subtle divider
+        pdf.set_fill_color(*_DESKMATE_PRIMARY)
+        pdf.rect(_LEFT_MARGIN, pdf.get_y(), 40, 0.6, 'F')
         pdf.set_fill_color(*_DIVIDER)
-        pdf.rect(_LEFT_MARGIN, pdf.get_y() + 1, _CONTENT_WIDTH, 0.4, 'F')
+        pdf.rect(_LEFT_MARGIN + 40, pdf.get_y(), _CONTENT_WIDTH - 40, 0.3, 'F')
         pdf.ln(5)
 
     def _write_formatted_text(self, pdf, text, font_size=9.5, default_bold=False):
-        """Write text with inline **bold** formatting."""
-        if not text:
-            return
-        tokens = _RE_BOLD_SPLIT.split(text)
-        for token in tokens:
-            if not token:
-                continue
-            if token.startswith('**') and token.endswith('**') and len(token) > 4:
-                inner = self._make_safe(token[2:-2])
+        """Write text with support for inline **bold** formatting and correct word wrapping."""
+        parts = re.split(r'\*\*(.*?)\*\*', text)
+        for idx, part in enumerate(parts):
+            is_bold = (idx % 2 == 1) if not default_bold else (idx % 2 == 0)
+            if is_bold:
                 pdf.set_font('Helvetica', 'B', font_size)
-                pdf.set_text_color(*_DESKMATE_DEEP)
-                pdf.write(5, inner)
+                part_upper = part.upper()
+                if "HIGH PRIORITY" in part_upper or "CRITICAL" in part_upper:
+                    pdf.set_text_color(*_URGENT)            # Red accent for warnings/high priorities
+                elif "ACTION ITEM" in part_upper or "TO BE CONTINUED" in part_upper:
+                    pdf.set_text_color(*_DESKMATE_PRIMARY)   # DeskMate primary purple for action items
+                elif "IMPORTANT" in part_upper:
+                    pdf.set_text_color(*_WARNING)           # Amber for key points
+                else:
+                    pdf.set_text_color(*_DESKMATE_DARK)
             else:
-                clean = self._make_safe(token)
-                pdf.set_font('Helvetica', 'B' if default_bold else '', font_size)
+                pdf.set_font('Helvetica', '', font_size)
                 pdf.set_text_color(*_BODY_TEXT)
-                pdf.write(5, clean)
+            pdf.write(5, self._make_safe(part))
 
     def _render_markdown_body(self, pdf, text):
-        """Parse and render markdown text with rich styling and callout highlighting."""
-        lines = text.split('\n')
+        """Parse and render Markdown text into styled PDF content."""
+        pdf.set_text_color(*_BODY_TEXT)
 
-        # ── Pre-pass: extract all ACTION ITEM / HIGH PRIORITY / IMPORTANT lines ──
-        key_items = []
-        for raw_line in lines:
-            line = raw_line.rstrip()
-            stripped = _RE_BOLD_STRIP.sub('', line)
-            for tag in ['[ACTION ITEM]', '[HIGH PRIORITY]', '[IMPORTANT]']:
-                if tag in stripped.upper() or tag in line.upper():
-                    clean = _RE_TAGS_STRIP.sub('', stripped).strip()
-                    clean = _RE_BULLET_STRIP.sub('', clean).strip()
-                    if clean and len(clean) > 5:
-                        key_items.append((tag, clean))
-                    break
-
-        if key_items:
-            self._render_key_highlights_panel(pdf, key_items)
-
-        for raw_line in lines:
-            line = raw_line.rstrip()
-            if not line.strip():
-                pdf.ln(2.5)
+        for original_line in (text or "").split('\n'):
+            line = original_line.strip()
+            if not line:
+                pdf.ln(3)
                 continue
 
-            if pdf.get_y() > 265:
-                pdf.add_page()
+            # Determine indentation levels for nested lists based on original line leading spaces
+            stripped_left = original_line.lstrip()
+            indent_spaces = len(original_line) - len(stripped_left)
+            level = 1
+            if indent_spaces >= 6:
+                level = 3
+            elif indent_spaces >= 2:
+                level = 2
 
-            if line.startswith('### '):
-                self._render_sub_header(pdf, line[4:].strip(), level=3)
+            # H1 headers
+            if line.startswith('# '):
+                self._render_sub_header(pdf, line[2:], level=2)
+            # H2 headers
             elif line.startswith('## '):
-                self._render_sub_header(pdf, line[3:].strip(), level=2)
-            elif line.startswith('# '):
-                self._render_sub_header(pdf, line[2:].strip(), level=1)
-            elif line.startswith('---') or line.startswith('___'):
-                pdf.set_fill_color(*_DIVIDER)
-                pdf.rect(_LEFT_MARGIN, pdf.get_y() + 2, _CONTENT_WIDTH, 0.4, 'F')
-                pdf.ln(5)
-            elif _RE_BULLET_MATCH.match(line):
-                indent = len(line) - len(line.lstrip())
-                level = 1 if indent < 4 else (2 if indent < 8 else 3)
-                bullet_text = _RE_BULLET_LINE_STRIP.sub('', line)
-
-                # Detect and render callout box for tagged bullet lines
-                upper = bullet_text.upper()
-                if '[ACTION ITEM]' in upper or '[HIGH PRIORITY]' in upper or '[IMPORTANT]' in upper:
-                    tag = '[ACTION ITEM]' if '[ACTION ITEM]' in upper else ('[HIGH PRIORITY]' if '[HIGH PRIORITY]' in upper else '[IMPORTANT]')
-                    clean_text = _RE_TAGS_STAR_STRIP.sub('', bullet_text).strip()
-                    self._render_callout_box(pdf, tag, clean_text)
-                else:
-                    self._render_bullet(pdf, bullet_text, level=level)
-            elif _RE_ORDERED_MATCH.match(line):
-                indent = len(line) - len(line.lstrip())
-                level = 1 if indent < 4 else 2
-                match = _RE_ORDERED_PARSE.match(line)
-                if match:
-                    num = match.group(1)
-                    item_text = match.group(2)
-                    self._render_numbered_item(pdf, num, item_text, level=level)
+                self._render_sub_header(pdf, line[3:], level=2)
+            # H3 headers
+            elif line.startswith('### '):
+                self._render_sub_header(pdf, line[4:], level=3)
+            # H4 headers
+            elif line.startswith('#### '):
+                self._render_sub_header(pdf, line[5:], level=4)
+            # Bullet points
+            elif line.startswith('- ') or line.startswith('* '):
+                self._render_bullet(pdf, line[2:].strip(), level=level)
+            # Numbered list items
+            elif re.match(r'^\d+\.\s', line):
+                num_match = re.match(r'^(\d+)\.\s(.*)$', line)
+                if num_match:
+                    self._render_numbered_item(pdf, num_match.group(1), num_match.group(2).strip(), level=level)
             else:
-                # Inline paragraph — check for embedded action tags
-                upper = line.upper()
-                if '[ACTION ITEM]' in upper or '[HIGH PRIORITY]' in upper or '[IMPORTANT]' in upper:
-                    tag = '[ACTION ITEM]' if '[ACTION ITEM]' in upper else ('[HIGH PRIORITY]' if '[HIGH PRIORITY]' in upper else '[IMPORTANT]')
-                    clean_text = _RE_TAGS_STAR_STRIP.sub('', line.strip()).strip()
-                    self._render_callout_box(pdf, tag, clean_text)
-                else:
-                    self._render_rich_paragraph(pdf, line.strip())
-
-    def _render_key_highlights_panel(self, pdf, key_items: list):
-        """Render a summary highlights panel at the top of the section."""
-        if not key_items:
-            return
-
-        if pdf.get_y() > 250:
-            pdf.add_page()
-
-        y_start = pdf.get_y()
-
-        # Estimate height
-        est_h = 10 + len(key_items) * 9 + 6
-
-        pdf.set_fill_color(245, 243, 255)   # Light lavender tint
-        pdf.rect(_LEFT_MARGIN, y_start, _CONTENT_WIDTH, est_h, 'F')
-
-        # Left accent bar
-        pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, y_start, 3.5, est_h, 'F')
-
-        # Section label
-        pdf.set_xy(_LEFT_MARGIN + 8, y_start + 3)
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(_CONTENT_WIDTH - 8, 5.5, 'KEY MEETING HIGHLIGHTS', 0, 1)
-
-        tag_colors = {
-            '[ACTION ITEM]': _WARNING,
-            '[HIGH PRIORITY]': (207, 34, 46),    # Red
-            '[IMPORTANT]': _DESKMATE_PRIMARY,
-        }
-        tag_labels = {
-            '[ACTION ITEM]': 'ACTION',
-            '[HIGH PRIORITY]': 'PRIORITY',
-            '[IMPORTANT]': 'IMPORTANT',
-        }
-
-        for tag, text in key_items:
-            if pdf.get_y() > 270:
-                break
-            color = tag_colors.get(tag, _DESKMATE_PRIMARY)
-            label = tag_labels.get(tag, 'NOTE')
-
-            # Badge
-            pdf.set_x(_LEFT_MARGIN + 8)
-            badge_y = pdf.get_y()
-            pdf.set_fill_color(*color)
-            badge_w = 17 if label == 'PRIORITY' else (13 if label == 'ACTION' else 18)
-            pdf.rect(_LEFT_MARGIN + 8, badge_y + 0.5, badge_w, 4.5, 'F')
-            pdf.set_xy(_LEFT_MARGIN + 8, badge_y + 0.5)
-            pdf.set_font('Helvetica', 'B', 6.5)
-            pdf.set_text_color(*_WHITE)
-            pdf.cell(badge_w, 4.5, label, 0, 0, 'C')
-
-            # Text
-            pdf.set_xy(_LEFT_MARGIN + 8 + badge_w + 3, badge_y)
-            safe_text = self._make_safe(text[:120] + ('...' if len(text) > 120 else ''))
-            pdf.set_font('Helvetica', '', 8.5)
-            pdf.set_text_color(*_BODY_TEXT)
-            pdf.cell(_CONTENT_WIDTH - badge_w - 20, 5.5, safe_text, 0, 1)
-
-        pdf.set_y(y_start + est_h + 4)
-
-    def _render_callout_box(self, pdf, tag: str, text: str):
-        """Render an inline highlighted callout box for tagged action/priority/important items."""
-        if pdf.get_y() > 265:
-            pdf.add_page()
-
-        tag_configs = {
-            '[ACTION ITEM]': {
-                'color': _WARNING,
-                'bg': (255, 251, 235),
-                'label': 'ACTION ITEM',
-            },
-            '[HIGH PRIORITY]': {
-                'color': (207, 34, 46),
-                'bg': (255, 241, 242),
-                'label': 'HIGH PRIORITY',
-            },
-            '[IMPORTANT]': {
-                'color': _DESKMATE_PRIMARY,
-                'bg': (245, 243, 255),
-                'label': 'IMPORTANT',
-            },
-        }
-
-        upper = tag.upper()
-        cfg = tag_configs.get(upper, tag_configs['[IMPORTANT]'])
-        color = cfg['color']
-        bg = cfg['bg']
-        label = cfg['label']
-
-        # Measure text height
-        safe_text = self._make_safe(text.replace('**', ''))
-        pdf.set_font('Helvetica', '', 8.5)
-        try:
-            th = pdf.multi_cell(w=_CONTENT_WIDTH - 26, h=4.5, text=safe_text, dry_run=True, output='HEIGHT')
-        except Exception:
-            th = 9
-        box_h = max(12, th + 10)
-
-        y_box = pdf.get_y()
-        pdf.set_fill_color(*bg)
-        pdf.rect(_LEFT_MARGIN, y_box, _CONTENT_WIDTH, box_h, 'F')
-
-        # Left color accent bar
-        pdf.set_fill_color(*color)
-        pdf.rect(_LEFT_MARGIN, y_box, 3, box_h, 'F')
-
-        # Label badge
-        pdf.set_fill_color(*color)
-        pdf.rect(_LEFT_MARGIN + 7, y_box + 2.5, 26, 5, 'F')
-        pdf.set_xy(_LEFT_MARGIN + 7, y_box + 2.5)
-        pdf.set_font('Helvetica', 'B', 6.5)
-        pdf.set_text_color(*_WHITE)
-        pdf.cell(26, 5, label, 0, 0, 'C')
-
-        # Content text
-        pdf.set_xy(_LEFT_MARGIN + 36, y_box + 2.5)
-        old_l = pdf.l_margin
-        old_r = pdf.r_margin
-        pdf.set_left_margin(_LEFT_MARGIN + 36)
-        pdf.set_right_margin(210 - (_LEFT_MARGIN + _CONTENT_WIDTH))
-
-        pdf.set_font('Helvetica', '', 8.5)
-        pdf.set_text_color(*_BODY_TEXT)
-        self._write_formatted_text(pdf, text, font_size=8.5)
-
-        pdf.set_left_margin(old_l)
-        pdf.set_right_margin(old_r)
-        pdf.set_y(y_box + box_h + 3)
+                # Regular paragraph
+                self._render_rich_paragraph(pdf, line, font_size=9.5)
 
     def _render_sub_header(self, pdf, text, level=3):
-        pdf.ln(3)
-        sizes = {1: 12, 2: 11, 3: 10}
-        font_size = sizes.get(level, 10)
-        clean_text = self._make_safe(text.replace('**', ''))
+        """Render a sub-header with DeskMate deep purple/slate color."""
+        sizes = {2: 12, 3: 11, 4: 10}
+        font_size = sizes.get(level, 11)
+        text_w = _CONTENT_WIDTH - 5 if level <= 3 else _CONTENT_WIDTH - 3
 
+        # Check height and add page if it doesn't fit on the current page
+        header_h = self._get_text_height(pdf, text, font_size=font_size, width=text_w) + 10
+        if pdf.get_y() + header_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+
+        pdf.ln(3)
         pdf.set_font('Helvetica', 'B', font_size)
         pdf.set_text_color(*_DESKMATE_DEEP)
-        pdf.cell(_CONTENT_WIDTH, 6, clean_text, 0, 1)
 
-        if level <= 2:
+        # Small accent dot before header
+        if level <= 3:
+            pdf.set_x(_LEFT_MARGIN)
             pdf.set_fill_color(*_DESKMATE_PRIMARY)
-            pdf.rect(_LEFT_MARGIN, pdf.get_y() + 0.5, 20, 0.5, 'F')
-            pdf.ln(2.5)
+            dot_y = pdf.get_y() + 2
+            pdf.rect(_LEFT_MARGIN, dot_y, 2, 2, 'F')
+            pdf.set_x(_LEFT_MARGIN + 5)
         else:
-            pdf.ln(1.5)
+            pdf.set_x(_LEFT_MARGIN + 3)
+
+        safe_text = self._make_safe(text)
+        pdf.multi_cell(text_w, 6, safe_text)
+        pdf.ln(2)
+        pdf.set_font('Helvetica', '', 9.5)
+        pdf.set_text_color(*_BODY_TEXT)
 
     def _render_bullet(self, pdf, text, level=1):
-        indent = _LEFT_MARGIN + (level - 1) * 6
-        pdf.set_x(indent)
+        """Render a styled bullet point with inline bold formatting support."""
+        indent = 6 * level
+        bullet_w = 5
+        text_x = _LEFT_MARGIN + indent + bullet_w
+        text_width = _CONTENT_WIDTH - indent - bullet_w
 
-        # Highlight action items with custom icon & color
-        if '[ACTION ITEM]' in text or '[HIGH PRIORITY]' in text:
-            pdf.set_font('Helvetica', 'B', 8.5)
-            pdf.set_text_color(*_WARNING)
-            pdf.cell(5, 5, '!', 0, 0)
-        else:
-            pdf.set_font('Helvetica', '', 8.5)
-            pdf.set_text_color(*_DESKMATE_PRIMARY)
-            pdf.cell(5, 5, chr(149), 0, 0)
+        # Check height and add page if it doesn't fit on the current page
+        bullet_h = self._get_text_height(pdf, text, font_size=9.5, width=text_width)
+        if pdf.get_y() + bullet_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
 
-        old_l = pdf.l_margin
-        old_r = pdf.r_margin
-        pdf.set_left_margin(indent + 5)
-        pdf.set_right_margin(210 - (_LEFT_MARGIN + _CONTENT_WIDTH))
+        pdf.set_x(_LEFT_MARGIN + indent)
+        # Choose bullet character based on level
+        bullet_char = chr(149)  # Level 1: round bullet (•)
+        if level == 2:
+            bullet_char = chr(183)  # Level 2: middle dot (·)
+        elif level >= 3:
+            bullet_char = chr(150)  # Level 3: en dash (–)
 
-        self._write_formatted_text(pdf, text, font_size=9)
-        pdf.ln(5)
+        pdf.set_font('Helvetica', '', 9.5)
+        pdf.set_text_color(*_DESKMATE_PRIMARY)
+        pdf.cell(bullet_w, 5, bullet_char, 0, 0)
 
-        pdf.set_left_margin(old_l)
-        pdf.set_right_margin(old_r)
+        # Temp change left margin for wrap
+        old_margin = pdf.l_margin
+        pdf.set_left_margin(text_x)
+
+        # Write formatted text
+        self._write_formatted_text(pdf, text, font_size=9.5)
+
+        # Reset margin
+        pdf.set_left_margin(old_margin)
+        pdf.ln(6)
 
     def _render_numbered_item(self, pdf, number, text, level=1):
-        indent = _LEFT_MARGIN + (level - 1) * 6
-        pdf.set_x(indent)
-        pdf.set_font('Helvetica', 'B', 8.5)
+        """Render a numbered list item with branded number and inline bold support."""
+        indent = 6 * level
+        num_w = 8
+        text_x = _LEFT_MARGIN + indent + num_w
+        text_width = _CONTENT_WIDTH - indent - num_w
+
+        # Check height and add page if it doesn't fit on the current page
+        item_h = self._get_text_height(pdf, text, font_size=9.5, width=text_width)
+        if pdf.get_y() + item_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+
+        pdf.set_x(_LEFT_MARGIN + indent)
+        # Number in primary purple
+        pdf.set_font('Helvetica', 'B', 9.5)
         pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(6, 5, f'{number}.', 0, 0)
+        pdf.cell(num_w, 5, f"{number}.", 0, 0)
 
-        old_l = pdf.l_margin
-        old_r = pdf.r_margin
-        pdf.set_left_margin(indent + 6)
-        pdf.set_right_margin(210 - (_LEFT_MARGIN + _CONTENT_WIDTH))
+        # Temp change left margin for wrap
+        old_margin = pdf.l_margin
+        pdf.set_left_margin(text_x)
 
-        self._write_formatted_text(pdf, text, font_size=9)
-        pdf.ln(5)
+        # Write formatted text
+        self._write_formatted_text(pdf, text, font_size=9.5)
 
-        pdf.set_left_margin(old_l)
-        pdf.set_right_margin(old_r)
+        # Reset margin
+        pdf.set_left_margin(old_margin)
+        pdf.ln(6)
 
     def _render_rich_paragraph(self, pdf, text, font_size=9.5):
+        """Render a paragraph with inline bold formatting support."""
+        # Check height and add page if it doesn't fit on the current page
+        para_h = self._get_text_height(pdf, text, font_size=font_size, width=_CONTENT_WIDTH)
+        if pdf.get_y() + para_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+
         pdf.set_x(_LEFT_MARGIN)
-        old_l = pdf.l_margin
-        old_r = pdf.r_margin
-        pdf.set_left_margin(_LEFT_MARGIN)
-        pdf.set_right_margin(210 - (_LEFT_MARGIN + _CONTENT_WIDTH))
-
         self._write_formatted_text(pdf, text, font_size=font_size)
-        pdf.ln(5.5)
+        pdf.ln(7)
 
-        pdf.set_left_margin(old_l)
-        pdf.set_right_margin(old_r)
+    # ── Screenshots section ───────────────────────────────────────────────
 
-    @staticmethod
-    def _is_internal_deskmate_step(step: dict, step_descriptions: dict = None) -> bool:
-        """Determines if a step is an internal DeskMate host app UI screenshot that must not be shown."""
-        if not step or not isinstance(step, dict):
-            return False
-        step_descriptions = step_descriptions or {}
-        step_id_val = str(step.get("step_id", ""))
-        summary = str(step.get("summary") or "").lower()
-        actions = step.get("actions", [])
-        action_parts = []
-        for a in actions:
-            if isinstance(a, dict):
-                action_parts.append(str(a.get("target") or ""))
-                action_parts.append(str(a.get("description") or ""))
-                action_parts.append(str(a.get("event") or ""))
-                action_parts.append(str(a.get("app_name") or ""))
-                action_parts.append(str(a.get("window_title") or ""))
-        action_text = " ".join(action_parts).lower()
-        meta = step_descriptions.get(step_id_val) or step_descriptions.get(f"step_{step_id_val}") or {}
-        desc = (meta.get("description") or "").lower() if isinstance(meta, dict) else ""
-        title = (meta.get("title") or "").lower() if isinstance(meta, dict) else ""
-        combined = f"{summary} {action_text} {desc} {title}".lower()
-
-        deskmate_noise_keywords = [
-            "deskmate", "meeting scribe", "recording dashboard",
-            "start meeting", "end meeting", "stop meeting",
-            "save to drive", "download pdf", "email pdf", "email meeting summary",
-            "sync to deskmate", "modal_window", "modal", "runner",
-            "flutter", "electron", "deskmate_app", "app switcher", "mission control",
-            "dock", "taskbar", "window switch", "switching window",
-            "switch to", "deskmate live", "locateanything",
-        ]
-        return any(kw in combined for kw in deskmate_noise_keywords)
-
-    @staticmethod
-    def _parse_timestamp_to_seconds(ts_val: Any) -> Optional[float]:
-        if ts_val is None:
-            return None
-        if isinstance(ts_val, (int, float)):
-            return float(ts_val)
-        s = str(ts_val).strip().strip("[]")
-        parts = s.split(":")
-        try:
-            if len(parts) == 2:
-                return float(parts[0]) * 60.0 + float(parts[1])
-            elif len(parts) == 3:
-                return float(parts[0]) * 3600.0 + float(parts[1]) * 60.0 + float(parts[2])
-        except Exception:
-            pass
-        return None
-
-    def _find_step_audio_transcript(
-        self,
-        step: dict,
-        step_id_val: Any,
-        step_descriptions: dict,
-        transcript_data: Optional[dict] = None,
-    ) -> str:
-        """Find matching spoken audio transcript for this step from diarized audio segments or step metadata."""
-        # 1. Match against diarized Voxtral audio segments via timestamp window
-        actions = step.get("actions", [])
-        step_ts_str = step.get("timestamp") or (actions[0].get("timestamp") if actions and isinstance(actions[0], dict) else "")
-        raw_sec = None
-        if actions and isinstance(actions[0], dict) and "timestamp_raw" in actions[0]:
-            try:
-                raw_sec = float(actions[0]["timestamp_raw"])
-            except Exception:
-                raw_sec = None
-
-        if raw_sec is None:
-            raw_sec = self._parse_timestamp_to_seconds(step_ts_str)
-
-        duration = float(step.get("duration", 8.0) or 8.0)
-
-        if raw_sec is not None and transcript_data and isinstance(transcript_data, dict):
-            segments = transcript_data.get("segments", [])
-            if segments:
-                t_start = max(0.0, raw_sec - 4.0)
-                t_end = raw_sec + max(duration, 4.0) + 4.0
-                matching_quotes = []
-                seen_texts = set()
-                for seg in segments:
-                    if not isinstance(seg, dict):
-                        continue
-                    try:
-                        s_start = float(seg.get("start") or 0.0)
-                        s_end = float(seg.get("end") or 0.0)
-                    except (TypeError, ValueError):
-                        continue
-                    text = str(seg.get("text") or "").strip()
-                    if not text or text.lower() in seen_texts:
-                        continue
-                    if s_start <= t_end and s_end >= t_start:
-                        seen_texts.add(text.lower())
-                        spk = seg.get("speaker", "Speaker")
-                        matching_quotes.append(f'{spk}: "{text}"')
-
-                if matching_quotes:
-                    combined = "  ".join(matching_quotes[:3])
-                    if len(combined) > 280:
-                        combined = combined[:277] + "..."
-                    return combined
-
-        # 2. Fallback to step_descriptions audio_transcript or spoken_context
-        if step_descriptions:
-            cand = [str(step_id_val), f"step_{step_id_val}"]
-            m = _RE_DIGITS.search(str(step_id_val))
-            if m:
-                cand.append(f"step_{m.group()}")
-            for c in cand:
-                if c in step_descriptions and isinstance(step_descriptions[c], dict):
-                    audio = (
-                        step_descriptions[c].get("audio_transcript")
-                        or step_descriptions[c].get("spoken_context")
-                        or step_descriptions[c].get("transcript")
-                    )
-                    if audio and isinstance(audio, str) and audio.strip():
-                        val = audio.strip()
-                        low = val.lower()
-                        if not any(k in low for k in ["no speech", "silent", "no audio", "n/a", "no spoken", "none recorded"]):
-                            return val
-
-        return ""
-
-    def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None, transcript_data=None):
+    def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None):
+        """Render deduplicated screenshots with rich step cards."""
         if step_descriptions is None:
             step_descriptions = {}
 
-        normalized = set()
+        # Normalize step IDs for matching
+        normalized_ids = set()
         for sid in important_step_ids:
-            m = _RE_DIGITS.search(str(sid))
-            if m:
-                normalized.add(int(m.group()))
+            match = re.search(r'\d+', str(sid))
+            if match:
+                normalized_ids.add(int(match.group()))
 
-        count = 0
+        rendered_count = 0
+        rendered_hashes = set()
+
         for step in steps:
             step_id_val = step.get("step_id", 0)
+
             try:
-                step_num = int(_RE_DIGITS.search(str(step_id_val)).group())
+                step_num = int(re.search(r'\d+', str(step_id_val)).group())
             except Exception:
                 step_num = None
 
             is_important = (
-                (step_num is not None and step_num in normalized)
-                or str(step_id_val).lower().strip() in [s.lower().strip() for s in important_step_ids]
+                (step_num is not None and step_num in normalized_ids)
+                or str(step_id_val).lower().strip() in [str(s).lower().strip() for s in important_step_ids]
             )
             if not is_important:
                 continue
 
-            # Exclude internal DeskMate application screenshots
-            if self._is_internal_deskmate_step(step, step_descriptions):
+            actions = step.get("actions", [])
+            asset_rel_path = step.get("screenshot_path") or next(
+                (a.get("asset_path") for a in actions if a.get("asset_path")), None
+            )
+            if not asset_rel_path:
+                continue
+
+            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            if not full_img_path or not os.path.exists(full_img_path):
+                continue
+
+            # ── Deduplicate by file hash ──────────────────────────────
+            try:
+                file_hash = hashlib.md5(Path(full_img_path).read_bytes(), usedforsecurity=False).hexdigest()
+                if file_hash in rendered_hashes:
+                    logger.debug(f"Skipping duplicate image for step {step_id_val}")
+                    continue
+                rendered_hashes.add(file_hash)
+            except Exception:
+                pass
+
+            # Calculate the total height of the current card
+            card_height = self._calculate_step_card_height(pdf, step, step_descriptions)
+            if pdf.get_y() + card_height > _PAGE_BOTTOM_Y:
+                pdf.add_page()
+
+            # ── Step card ─────────────────────────────────────────────
+            card_y = pdf.get_y()
+
+            # Card background
+            pdf.set_fill_color(*_CARD_BG)
+            pdf.rect(_LEFT_MARGIN, card_y, _CONTENT_WIDTH, 12, 'F')
+
+            # Left accent bar in DeskMate primary purple
+            pdf.set_fill_color(*_DESKMATE_PRIMARY)
+            pdf.rect(_LEFT_MARGIN, card_y, 3, 12, 'F')
+
+            # Step badge (pill)
+            pdf.set_y(card_y + 3)
+            pdf.set_x(_LEFT_MARGIN + 7)
+            pdf.set_fill_color(*_DESKMATE_PRIMARY)
+            badge_text = f" Moment {step_id_val} "
+            badge_w = pdf.get_string_width(badge_text) + 8
+            pdf.set_font('Helvetica', 'B', 8.5)
+            pdf.set_text_color(*_WHITE)
+            pdf.cell(badge_w, 6, badge_text, 0, 0, 'C', fill=True)
+
+            # Step summary/title text & Timestamp
+            raw_summary = step.get("summary", "")
+            title = self._find_step_title(step_id_val, step_descriptions, raw_summary)
+            safe_title = self._make_safe(title)
+
+            step_ts = step.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
+            title_w = _CONTENT_WIDTH - badge_w - 38
+
+            pdf.set_x(_LEFT_MARGIN + 7 + badge_w + 4)
+            pdf.set_font('Helvetica', 'B', 9.5)
+            pdf.set_text_color(*_DESKMATE_DARK)
+            pdf.cell(title_w, 6, safe_title, 0, 0)
+
+            # Exact moment timestamp on right of step header card
+            pdf.set_font('Helvetica', 'B', 8.5)
+            pdf.set_text_color(*_MUTED_TEXT)
+            pdf.cell(24, 6, f"[{step_ts}]", 0, 1, 'R')
+
+            pdf.set_y(card_y + 14)
+
+            # ── Image — bordered and centered ─────────────────────────
+            try:
+                img_y = pdf.get_y()
+                pdf.set_draw_color(*_DIVIDER)
+                pdf.set_line_width(0.3)
+
+                pdf.image(full_img_path, x=_IMG_X, w=_IMG_WIDTH)
+
+                # Draw hairline border after image is placed
+                img_h = pdf.get_y() - img_y
+                pdf.rect(_IMG_X - 0.5, img_y - 0.5, _IMG_WIDTH + 1, img_h + 1)
+
+                pdf.ln(3)
+                rendered_count += 1
+            except Exception as img_err:
+                logger.error(f"Failed to embed screenshot {full_img_path}: {img_err}")
+                continue
+
+            # ── Description below screenshot ──────────────────────────
+            description = self._find_step_description(step_id_val, step_descriptions)
+            if description:
+                self._render_step_description(pdf, description, timestamp_str=step_ts)
+
+            pdf.ln(10)
+
+        if rendered_count == 0:
+            pdf.set_font('Helvetica', 'I', 9)
+            pdf.set_text_color(*_MUTED_TEXT)
+            pdf.set_x(_LEFT_MARGIN)
+            pdf.cell(_CONTENT_WIDTH, 6, 'No screenshots available for the identified key moments.', 0, 1)
+
+    @staticmethod
+    def _lookup_step_meta(step_id_val, step_descriptions: dict) -> Any:
+        """Step metadata by id, tolerating 'step_3', 'Step 3', '3' style keys."""
+        if not step_descriptions:
+            return None
+        sid = str(step_id_val)
+        for key in (sid, f"step_{sid}", f"step {sid}", f"Step {sid}", f"Step_{sid}"):
+            if key in step_descriptions:
+                return step_descriptions[key]
+        match = re.search(r'\d+', sid)
+        if match:
+            num = int(match.group())
+            for key, value in step_descriptions.items():
+                key_match = re.search(r'\d+', str(key))
+                if key_match and int(key_match.group()) == num:
+                    return value
+        return None
+
+    def _find_step_description(self, step_id_val, step_descriptions: dict) -> str:
+        meta = self._lookup_step_meta(step_id_val, step_descriptions)
+        if isinstance(meta, dict):
+            return str(meta.get("description") or "")
+        return str(meta) if meta is not None else ""
+
+    def _find_step_title(self, step_id_val, step_descriptions: dict, default_summary: str) -> str:
+        meta = self._lookup_step_meta(step_id_val, step_descriptions)
+        if isinstance(meta, dict) and meta.get("title"):
+            return str(meta["title"])
+        return self._clean_fallback_title(default_summary)
+
+    def _clean_fallback_title(self, summary: str) -> str:
+        """Clean raw technical step summary text into a user-friendly generic title."""
+        if not summary:
+            return "Screen Presentation"
+        if "unclassified" in summary.lower() or "ui_interaction" in summary.lower() or "observed_interaction" in summary.lower():
+            return "Screen Interaction"
+        return re.sub(r'^Step\s+\d+:\s*', '', summary)
+
+    def _calculate_step_card_height(self, pdf, step: dict, step_descriptions: dict) -> float:
+        """Calculate the total height (in mm) required to render a step card (header, image, description)."""
+        header_h = 12
+        spacing_h = 14 + 3 + 10
+
+        # Image height
+        actions = step.get("actions", [])
+        asset_rel_path = step.get("screenshot_path") or next(
+            (a.get("asset_path") for a in actions if a.get("asset_path")), None
+        )
+        rendered_img_h = 95.6  # Default 16:9 aspect ratio height for 170mm width
+
+        if asset_rel_path:
+            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            if full_img_path and os.path.exists(full_img_path):
+                try:
+                    import cv2
+                    img = cv2.imread(full_img_path)
+                    if img is not None:
+                        h_px, w_px = img.shape[:2]
+                        rendered_img_h = _IMG_WIDTH * (h_px / w_px)
+                except Exception:
+                    pass
+
+        # Description box height
+        step_id_val = step.get("step_id", 0)
+        description = self._find_step_description(step_id_val, step_descriptions)
+        box_height = 0
+        if description:
+            safe_desc = self._make_safe(description)
+            text_for_height = safe_desc.replace('**', '')
+
+            current_font = pdf.font_family
+            current_style = pdf.font_style
+            current_size = pdf.font_size_pt
+
+            pdf.set_font('Helvetica', '', 8.5)
+            try:
+                text_height = pdf.multi_cell(
+                    w=_IMG_WIDTH - 14,
+                    h=4.5,
+                    text=text_for_height,
+                    dry_run=True,
+                    output='HEIGHT'
+                )
+                box_height = 5 + text_height + 8
+            except Exception:
+                box_height = 30
+
+            pdf.set_font(current_font, current_style, current_size)
+
+        return header_h + rendered_img_h + box_height + spacing_h
+
+    def _get_first_card_height(self, pdf, steps: list, important_step_ids: list, step_descriptions: dict) -> float:
+        """Find the height of the first step card that will actually be rendered."""
+        if not steps or not important_step_ids:
+            return 0.0
+
+        normalized_ids = set()
+        for sid in important_step_ids:
+            match = re.search(r'\d+', str(sid))
+            if match:
+                normalized_ids.add(int(match.group()))
+
+        for step in steps:
+            step_id_val = step.get("step_id", 0)
+            try:
+                step_num = int(re.search(r'\d+', str(step_id_val)).group())
+            except Exception:
+                step_num = None
+
+            is_important = (
+                (step_num is not None and step_num in normalized_ids)
+                or str(step_id_val).lower().strip() in [str(s).lower().strip() for s in important_step_ids]
+            )
+            if not is_important:
                 continue
 
             actions = step.get("actions", [])
-            asset_rel_path = next((a.get("asset_path") for a in actions if a.get("asset_path")), None)
-            if not asset_rel_path:
-                asset_rel_path = step.get("screenshot_path")
+            asset_rel_path = step.get("screenshot_path") or next(
+                (a.get("asset_path") for a in actions if a.get("asset_path")), None
+            )
             if not asset_rel_path:
                 continue
 
-            full_img_path = None
-            cand_p = Path(asset_rel_path)
-            for cand in [cand_p, cand_p.resolve(), Path.cwd() / asset_rel_path]:
-                if cand.exists():
-                    full_img_path = str(cand)
-                    break
+            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            if full_img_path and os.path.exists(full_img_path):
+                return self._calculate_step_card_height(pdf, step, step_descriptions)
 
-            if not full_img_path:
-                continue
+        return 0.0
 
-            card_h = self._calculate_step_card_height(pdf, step, step_descriptions, transcript_data)
-            if pdf.get_y() + card_h > 275:
-                pdf.add_page()
-
-            count += 1
-            step_title = self._find_step_title(step_id_val, step_descriptions, step.get("summary", ""))
-
-            # Clip Timestamp extraction
-            step_ts = step.get("timestamp") or ""
-            if not step_ts and actions and isinstance(actions[0], dict):
-                step_ts = actions[0].get("timestamp") or ""
-
-            # Step Header Pill with Clip Timestamp
-            pdf.ln(2)
-            y_hdr = pdf.get_y()
-            pdf.set_fill_color(*_CARD_BG)
-            pdf.rect(_IMG_X, y_hdr, _IMG_WIDTH, 8, 'F')
-
-            pdf.set_fill_color(*_DESKMATE_PRIMARY)
-            pdf.rect(_IMG_X, y_hdr, 3, 8, 'F')
-
-            pdf.set_xy(_IMG_X + 6, y_hdr + 1.5)
-            pdf.set_font('Helvetica', 'B', 9)
-            pdf.set_text_color(*_DESKMATE_DEEP)
-            hdr_text = f'MOMENT #{count} [{step_ts}]: {step_title}' if step_ts else f'MOMENT #{count}: {step_title}'
-            pdf.cell(_IMG_WIDTH - 12, 5, self._make_safe(hdr_text), 0, 1)
-            pdf.ln(3)
-
-            # Screenshot Image
-            try:
-                import cv2
-                img = cv2.imread(full_img_path)
-                h_px, w_px = img.shape[:2] if img is not None else (1080, 1920)
-                rendered_h = _IMG_WIDTH * (h_px / w_px)
-
-                pdf.image(full_img_path, x=_IMG_X, y=pdf.get_y(), w=_IMG_WIDTH, h=rendered_h)
-                pdf.set_y(pdf.get_y() + rendered_h + 3)
-            except Exception as ie:
-                logger.debug(f"Screenshot draw failed: {ie}")
-
-            # Description Card & Synchronized Audio Transcript below image
-            desc = self._find_step_description(step_id_val, step_descriptions)
-            audio_quote = self._find_step_audio_transcript(step, step_id_val, step_descriptions, transcript_data)
-            if desc or audio_quote:
-                self._render_step_description(pdf, desc, audio_transcript=audio_quote, step_ts=step_ts)
-
-            pdf.ln(8)
-
-    def _find_step_description(self, step_id_val, step_descriptions: dict) -> str:
-        if not step_descriptions:
-            return ""
-        cand = [str(step_id_val), f"step_{step_id_val}"]
-        m = _RE_DIGITS.search(str(step_id_val))
-        if m:
-            cand.append(f"step_{m.group()}")
-        for c in cand:
-            if c in step_descriptions:
-                val = step_descriptions[c]
-                return val.get("description", "") if isinstance(val, dict) else str(val)
-        return ""
-
-    def _find_step_title(self, step_id_val, step_descriptions: dict, default_summary: str) -> str:
-        if step_descriptions:
-            cand = [str(step_id_val), f"step_{step_id_val}"]
-            m = _RE_DIGITS.search(str(step_id_val))
-            if m:
-                cand.append(f"step_{m.group()}")
-            for c in cand:
-                if c in step_descriptions and isinstance(step_descriptions[c], dict):
-                    t = step_descriptions[c].get("title", "")
-                    if t:
-                        return t
-        return default_summary or "UI Interaction"
-
-    def _calculate_step_card_height(self, pdf, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None) -> float:
-        header_h = 12
-        rendered_img_h = 95.6
-        step_id_val = step.get("step_id", 0)
-        desc = self._find_step_description(step_id_val, step_descriptions)
-        audio = self._find_step_audio_transcript(step, step_id_val, step_descriptions, transcript_data)
-
-        box_h = 0
-        if desc or audio:
-            safe_desc = self._make_safe(desc.replace('**', '')) if desc else ""
-            safe_audio = self._make_safe(audio.replace('**', '')) if audio else ""
-
-            cur_f = pdf.font_family
-            cur_s = pdf.font_style
-            cur_sz = pdf.font_size_pt
-
-            th_desc = 0
-            if safe_desc:
-                pdf.set_font('Helvetica', '', 8.5)
-                try:
-                    th_desc = pdf.multi_cell(w=_IMG_WIDTH - 14, h=4.5, text=safe_desc, dry_run=True, output='HEIGHT')
-                except Exception:
-                    th_desc = 18
-
-            th_audio = 0
-            if safe_audio:
-                pdf.set_font('Helvetica', 'I', 8)
-                try:
-                    th_audio = pdf.multi_cell(w=_IMG_WIDTH - 14, h=4.2, text=safe_audio, dry_run=True, output='HEIGHT')
-                except Exception:
-                    th_audio = 14
-
-            audio_extra_h = (10 + th_audio) if safe_audio else 0
-            box_h = 5 + th_desc + audio_extra_h + 8
-            pdf.set_font(cur_f, cur_s, cur_sz)
-
-        return header_h + rendered_img_h + box_h + 14
-
-    def _get_first_card_height(self, pdf, steps: list, important_step_ids: list, step_descriptions: dict, transcript_data: Optional[dict] = None) -> float:
-        if not steps or not important_step_ids:
-            return 0.0
-        return self._calculate_step_card_height(pdf, steps[0], step_descriptions, transcript_data)
-
-    def _render_step_description(self, pdf, description: str, audio_transcript: str = "", step_ts: str = ""):
+    def _render_step_description(self, pdf, description: str, timestamp_str: str = ""):
+        """Render a premium description card below a screenshot with inline bold support."""
         desc_x = _IMG_X
         desc_w = _IMG_WIDTH
-        safe_desc = self._make_safe(description) if description else ""
-        clean_desc = safe_desc.replace('**', '')
+        safe_desc = self._make_safe(description)
 
-        safe_audio = self._make_safe(audio_transcript) if audio_transcript else ""
-        clean_audio = safe_audio.replace('**', '')
-
+        text_for_height = safe_desc.replace('**', '')
         pdf.set_font('Helvetica', '', 8.5)
-        try:
-            th_desc = pdf.multi_cell(w=desc_w - 14, h=4.5, text=clean_desc, dry_run=True, output='HEIGHT') if clean_desc else 0
-        except Exception:
-            th_desc = 18 if clean_desc else 0
+        text_height = pdf.multi_cell(
+            w=desc_w - 14,
+            h=4.5,
+            text=text_for_height,
+            dry_run=True,
+            output='HEIGHT'
+        )
+        label_height = 5
+        padding = 8
+        box_height = label_height + text_height + padding
 
-        pdf.set_font('Helvetica', 'I', 8)
-        try:
-            th_audio = pdf.multi_cell(w=desc_w - 14, h=4.2, text=clean_audio, dry_run=True, output='HEIGHT') if clean_audio else 0
-        except Exception:
-            th_audio = 14 if clean_audio else 0
-
-        audio_extra_h = (10 + th_audio) if clean_audio else 0
-        box_h = 5 + th_desc + audio_extra_h + 8
         desc_y = pdf.get_y()
 
-        if desc_y + box_h > 270:
+        if desc_y + box_height > _PAGE_BOTTOM_Y:
             pdf.add_page()
             desc_y = pdf.get_y()
 
-        # Background card
+        # Description card background
         pdf.set_fill_color(*_LIGHT_BG)
-        pdf.rect(desc_x, desc_y, desc_w, box_h, 'F')
+        pdf.rect(desc_x, desc_y, desc_w, box_height, 'F')
 
-        # Left primary accent bar
-        pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(desc_x, desc_y, 3, box_h, 'F')
+        # Left accent bar — DeskMate deep slate
+        pdf.set_fill_color(*_DESKMATE_DEEP)
+        pdf.rect(desc_x, desc_y, 3, box_height, 'F')
 
-        cur_y = desc_y + 3.0
+        # "What happened" label with timestamp
+        label_text = f"WHAT HAPPENED AT [{timestamp_str}]" if timestamp_str else "WHAT HAPPENED"
+        pdf.set_y(desc_y + 2.5)
+        pdf.set_x(desc_x + 7)
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_text_color(*_DESKMATE_PRIMARY)
+        pdf.cell(desc_w - 14, label_height, label_text, 0, 1)
 
-        if clean_desc:
-            pdf.set_y(cur_y)
-            pdf.set_x(desc_x + 7)
-            pdf.set_font('Helvetica', 'B', 8)
-            pdf.set_text_color(*_DESKMATE_PRIMARY)
-            pdf.cell(desc_w - 14, 4.5, 'KEY INTERACTION CONTEXT', 0, 1)
+        # Description text
+        pdf.set_y(desc_y + 2.5 + label_height + 1)
+        pdf.set_x(desc_x + 7)
 
-            cur_y += 6.0
-            pdf.set_y(cur_y)
-            pdf.set_x(desc_x + 7)
-            old_l = pdf.l_margin
-            old_r = pdf.r_margin
-            pdf.set_left_margin(desc_x + 7)
-            pdf.set_right_margin(210 - (desc_x + desc_w - 7))
+        old_l_margin = pdf.l_margin
+        old_r_margin = pdf.r_margin
+        pdf.set_left_margin(desc_x + 7)
+        pdf.set_right_margin(210 - (desc_x + desc_w - 7))
 
-            self._write_formatted_text(pdf, description, font_size=8.5)
+        self._write_formatted_text(pdf, description, font_size=8.5)
 
-            pdf.set_left_margin(old_l)
-            pdf.set_right_margin(old_r)
-            cur_y = pdf.get_y() + 2.0
+        pdf.set_left_margin(old_l_margin)
+        pdf.set_right_margin(old_r_margin)
+        pdf.set_y(desc_y + box_height)
 
-        if clean_audio:
-            if clean_desc:
-                pdf.set_draw_color(220, 224, 230)
-                pdf.line(desc_x + 7, cur_y + 1, desc_x + desc_w - 7, cur_y + 1)
-                cur_y += 3.5
+    # ── Utilities ─────────────────────────────────────────────────────────
 
-            pdf.set_y(cur_y)
-            pdf.set_x(desc_x + 7)
-            pdf.set_font('Helvetica', 'B', 7.5)
-            pdf.set_text_color(*_DESKMATE_DEEP)
-            ts_label = f" [{step_ts}]" if step_ts else ""
-            pdf.cell(desc_w - 14, 4.5, self._make_safe(f'AUDIO TRANSCRIPT AT CLIP MOMENT{ts_label}:'), 0, 1)
+    def _get_text_height(self, pdf, text, font_size=9.5, width=_CONTENT_WIDTH):
+        """Calculate the height required to render a block of text."""
+        if not text:
+            return 0.0
+        current_font = pdf.font_family
+        current_style = pdf.font_style
+        current_size = pdf.font_size_pt
 
-            cur_y += 5.0
-            pdf.set_y(cur_y)
-            pdf.set_x(desc_x + 7)
-            pdf.set_font('Helvetica', 'I', 8)
-            pdf.set_text_color(55, 65, 81)
-            pdf.multi_cell(w=desc_w - 14, h=4.2, text=clean_audio)
+        pdf.set_font('Helvetica', '', font_size)
+        try:
+            clean_text = text.replace('**', '')
+            safe_text = self._make_safe(clean_text)
+            h = pdf.multi_cell(
+                w=width,
+                h=5,
+                text=safe_text,
+                dry_run=True,
+                output='HEIGHT'
+            )
+        except Exception:
+            safe_text = self._make_safe(text.replace('**', ''))
+            approx_lines = max(1, len(safe_text) / (width * 0.4))
+            h = approx_lines * 5
 
-        pdf.set_y(desc_y + box_h)
-
-    _UNICODE_MAP = str.maketrans({
-        "‘": "'", "’": "'", "“": '"', "”": '"',
-        "–": "-", "—": "-", "…": "...",
-        "→": "->", "←": "<-", "↔": "<->",
-        "•": "-", "‣": "-", "●": "-", "○": "o",
-        "✓": "[x]", "✔": "[x]", "✗": "[ ]", "✘": "[ ]",
-        " ": " ", "​": "", "‌": "", "‍": "",
-        "﻿": "", "­": "",
-        "′": "'", "″": '"',
-        "₹": "INR", "€": "EUR", "£": "GBP", "¥": "JPY",
-        "™": "(TM)", "®": "(R)", "©": "(c)",
-        "×": "x", "÷": "/",
-        "≈": "~", "≠": "!=", "≤": "<=", "≥": ">=",
-        "∞": "inf",
-    })
+        pdf.set_font(current_font, current_style, current_size)
+        return h
 
     @staticmethod
     def _make_safe(text: str) -> str:
-        if not text:
-            return ""
-        text = text.translate(MeetingPDFGenerator._UNICODE_MAP)
-        return text.encode("latin-1", "replace").decode("latin-1")
+        return _to_pdf_text(text)
+
+
+# Alias for backward compatibility
+PDFGenerator = MeetingPDFGenerator

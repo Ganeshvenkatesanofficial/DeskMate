@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 import cv2
 import numpy as np
 
@@ -108,6 +108,8 @@ class LivePipeline:
         self._action_inference = CursorInformedActionInference()
         self._step_builder = StepBuilder()
         self._locate_anything = LocateAnythingDetector() if grounding_enabled else None
+        self._has_initial_baseline = False
+        self._last_milestone_time = 0.0
 
         self.events: list[dict[str, Any]] = []
 
@@ -149,6 +151,8 @@ class LivePipeline:
         self._change_detector.reset()
         self._step_builder = StepBuilder()
         self._last_disk_sync = time.time()
+        self._has_initial_baseline = False
+        self._last_milestone_time = 0.0
 
         # Immediate initial persistence to guarantee session exists on disk even if interrupted
         self._save_session_report([], status="recording")
@@ -171,6 +175,22 @@ class LivePipeline:
 
         if self._process_thread and self._process_thread.is_alive():
             self._process_thread.join(timeout=3.0)
+
+        # Fallback overview milestone if zero steps were captured during short/static session
+        if self._step_builder and self._step_builder.get_step_count() == 0:
+            last_res = self.screen_capture.get_frame(timeout=0.5)
+            if last_res:
+                _, ts, last_frame = last_res
+                evt = self._create_event(
+                    "screen_presentation",
+                    "Meeting Overview",
+                    None,
+                    [0, 0, last_frame.shape[1], last_frame.shape[0]],
+                    last_frame,
+                    ts,
+                    1.0,
+                )
+                self._record_event(evt)
 
         steps = self._step_builder.get_all_steps() if self._step_builder else []
         report = self._save_session_report(steps)
@@ -210,13 +230,27 @@ class LivePipeline:
 
     def _process_frame(self, frame_idx: int, timestamp: float, frame: np.ndarray) -> None:
         """Execute full 8-stage computer vision detection on a single frame."""
-        # Initial settling grace period: ignore first 2.0s to avoid capturing click on 'Start Meeting' in DeskMate
-        if self._session_start and (time.time() - self._session_start < 2.0):
+        # Settling grace period: skip the click on DeskMate's own 'Start Meeting' button
+        if self._session_start and (time.time() - self._session_start < mi_config.STARTUP_GRACE_SECONDS):
             return
 
         # Stage 1: Spatial Awareness & Safety Mask
         self._spatial_analyzer.detect_sidebar(frame)
         safety_mask = self._spatial_analyzer.get_safety_mask(*frame.shape[:2])
+
+        # Stage 4: Cursor Detection & Tracking
+        cursor_pos, _ = self._cursor_detector.detect(frame, safety_mask)
+
+        # Baseline Frame: Capture initial meeting view right after grace period
+        if not self._has_initial_baseline:
+            self._has_initial_baseline = True
+            self._last_milestone_time = timestamp
+            self._frames_processed += 1
+            _, roi_bbox = self._roi_extractor.extract_relevant_roi(frame, cursor_pos, None, safety_mask)
+            event = self._create_event("screen_presentation", "Meeting Initial View", cursor_pos, roi_bbox, frame, timestamp, 1.0)
+            if self._record_event(event):
+                logger.info(f"Captured initial baseline meeting step at {timestamp:.1f}s")
+            return
 
         # Stage 2: Change Detection & Early Candidate Filtering
         is_candidate, _, _, mask = self._change_detector.is_candidate_frame(frame)
@@ -224,22 +258,23 @@ class LivePipeline:
             self._frames_skipped += 1
             return
 
+        # Periodic checkpoint so long static views (one slide, a video call) still get screenshots
+        is_periodic_checkpoint = timestamp - self._last_milestone_time >= mi_config.MILESTONE_INTERVAL_SECONDS
+
         # Stage 3: Visual Dedup (SSIM)
-        if not self._is_visually_unique(frame):
+        if not is_periodic_checkpoint and not self._is_visually_unique(frame):
             self._frames_skipped += 1
             return
 
         self._frames_processed += 1
-
-        # Stage 4: Cursor Detection & Tracking
-        cursor_pos, _ = self._cursor_detector.detect(frame, safety_mask)
 
         # Stage 5: Action-Centric ROI Extraction
         roi_frame, roi_bbox = self._roi_extractor.extract_relevant_roi(
             frame, cursor_pos, mask, safety_mask
         )
         if roi_frame is None or roi_bbox is None:
-            return
+            roi_frame = frame
+            roi_bbox = [0, 0, frame.shape[1], frame.shape[0]]
 
         # Stage 6: Interaction Detection
         roi_mask = mask[roi_bbox[1]:roi_bbox[3], roi_bbox[0]:roi_bbox[2]]
@@ -248,7 +283,7 @@ class LivePipeline:
         )
 
         is_valid = bool(interactions or cursor_pos is not None)
-        if not is_valid and not is_candidate:
+        if not is_valid and not is_candidate and not is_periodic_checkpoint:
             return
 
         # Stage 7: Heuristic & LocateAnything-3B GUI Grounding
@@ -274,19 +309,16 @@ class LivePipeline:
 
         if action in ["observed_interaction", "unclassified"] and is_valid:
             action = "ui_interaction"
-        elif is_candidate:
+        elif is_candidate or is_periodic_checkpoint:
             # Visual presentation transition / slide advance during meeting
             action = "screen_presentation"
-            if not final_label or final_label.lower() in ["unknown", "generic_view"]:
-                final_label = "Presentation Milestone"
+            if not final_label or final_label.lower() in ["unknown", "generic_view", "modal_window", "unclassified"]:
+                final_label = "Presentation Milestone" if is_candidate else "Presentation Checkpoint"
+            self._last_milestone_time = timestamp
 
         # Create structured event and add to StepBuilder
         event = self._create_event(action, final_label, cursor_pos, roi_bbox, frame, timestamp, final_score)
-        if event:
-            self._step_builder.add_action(event)
-            self.events.append(event)
-            self._events_detected += 1
-
+        if self._record_event(event):
             # Periodically sync progress to disk so crash/sleep never loses meeting data
             now = time.time()
             if now - self._last_disk_sync >= INTERIM_SAVE_SECONDS:
@@ -300,14 +332,26 @@ class LivePipeline:
                 except Exception as cb_err:
                     logger.error(f"Event callback error: {cb_err}")
 
+    def _record_event(self, event: Optional[dict[str, Any]]) -> bool:
+        """Add a created event to the current step. False if the event couldn't be created."""
+        if not event:
+            return False
+        self._step_builder.add_action(event)
+        self.events.append(event)
+        self._events_detected += 1
+        return True
+
+    @staticmethod
+    def _dedup_thumbnail(frame: np.ndarray) -> np.ndarray:
+        return cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), mi_config.DEDUP_THUMBNAIL_SIZE)
+
     def _is_visually_unique(self, frame: np.ndarray) -> bool:
-        """Check if frame differs from the last unique frame via SSIM."""
+        """Check if frame differs from the last saved screenshot via SSIM."""
         if self._last_unique_frame_gray is None:
-            self._last_unique_frame_gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (320, 180))
             return True
 
         f1 = self._last_unique_frame_gray
-        f2 = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (320, 180))
+        f2 = self._dedup_thumbnail(frame)
 
         score = compute_ssim(f1, f2)
 
@@ -315,7 +359,6 @@ class LivePipeline:
         if score > mi_config.MIN_VISUAL_DIFF_SSIM:
             return False
 
-        self._last_unique_frame_gray = f2
         return True
 
     def _create_event(
@@ -347,6 +390,7 @@ class LivePipeline:
         try:
             if filepath:
                 cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])[1].tofile(filepath)
+                self._last_unique_frame_gray = self._dedup_thumbnail(frame)
         except Exception as e:
             logger.error(f"Failed to save step screenshot: {e}")
             filepath = None

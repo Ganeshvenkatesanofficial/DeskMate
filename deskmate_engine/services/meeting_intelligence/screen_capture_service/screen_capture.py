@@ -47,7 +47,7 @@ class ScreenCapture:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
-        self._latest_frame: Optional[np.ndarray] = None
+        self._latest_frame: Optional[Tuple[int, float, np.ndarray]] = None
         self._frame_ready = threading.Event()
 
         self._frame_count = 0
@@ -104,9 +104,9 @@ class ScreenCapture:
 
         with self._lock:
             self._frame_ready.clear()
-            if self._latest_frame is None:
-                return None
-            return (self._frame_count, time.time() - self._start_time, self._latest_frame.copy())
+            frame = self._latest_frame
+            self._latest_frame = None
+            return frame
 
     def _capture_loop(self) -> None:
         fps_timer = time.time()
@@ -130,10 +130,11 @@ class ScreenCapture:
                         sct_img = sct.grab(monitor_cfg)
                         # BGRA -> BGR
                         frame_bgr = np.ascontiguousarray(np.array(sct_img)[:, :, :3])
+                        timestamp = time.time() - self._start_time
+                        self._frame_count += 1
 
                         with self._lock:
-                            self._latest_frame = frame_bgr
-                            self._frame_count += 1
+                            self._latest_frame = (self._frame_count, timestamp, frame_bgr)
                             self._frame_ready.set()
 
                         fps_frames += 1

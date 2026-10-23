@@ -27,7 +27,7 @@ logger = logging.getLogger("deskmate.audio_recorder")
 SAMPLE_RATE = 16000  # Voxtral native target rate
 CHANNELS = 1         # Mono
 # The helper can block on the macOS Screen Recording permission prompt.
-HELPER_READY_TIMEOUT_SECONDS = 8.0
+HELPER_READY_TIMEOUT_SECONDS = 1.5
 
 
 def _read_line_with_timeout(stream: Any, timeout: float) -> Optional[str]:
@@ -145,8 +145,8 @@ class LiveAudioRecorder:
     def start_recording(self, session_dir: str, filename: str = "audio.wav", start_muted: bool = False) -> str:
         """
         Start dual-stream background audio capture:
-        1. System audio (Speakers / Bluetooth earphones / Audio jack).
-        2. Microphone (dynamically muted or unmuted).
+        1. Microphone (dynamically muted or unmuted) — starts immediately at T=0.
+        2. System audio (Speakers / Bluetooth earphones / Audio jack).
         """
         with self._lock:
             if self.is_recording:
@@ -162,7 +162,46 @@ class LiveAudioRecorder:
 
             system_started = False
 
-            # --- 1. Start System Audio Capture (Speakers, Bluetooth, Audio Jack) ---
+            # --- 1. Start Microphone Stream Immediately (T=0 alignment) ---
+            mic_dev = self._find_input_device()
+            try:
+                self._mic_wav = sf.SoundFile(
+                    self._mic_wav_path,
+                    mode="w",
+                    samplerate=self.sample_rate,
+                    channels=CHANNELS,
+                    subtype="PCM_16",
+                )
+
+                def mic_callback(indata, frames, time_info, status):
+                    if not self.is_recording or not self._mic_wav:
+                        return
+                    if self.is_muted:
+                        # When mic is muted, write silence to mic track so room voices are blocked
+                        zeros = np.zeros_like(indata)
+                        self._mic_wav.write(zeros)
+                    else:
+                        self._mic_wav.write(indata)
+                    self._frames_written += frames
+
+                self._mic_stream = sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=CHANNELS,
+                    dtype="int16",
+                    device=mic_dev,
+                    callback=mic_callback,
+                )
+                self._mic_stream.start()
+                self.mic_audio_active = True
+                self.is_recording = True
+                logger.info(
+                    f"LiveAudioRecorder microphone active at T=0. Device: {mic_dev}, Mic muted: {self.is_muted}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to start microphone stream: {e}")
+                self.mic_audio_active = False
+
+            # --- 2. Start System Audio Capture (Speakers, Bluetooth, Audio Jack) ---
             current_os = platform.system().lower()
             if "darwin" in current_os:
                 helper = _find_macos_helper()
@@ -185,23 +224,21 @@ class LiveAudioRecorder:
                             system_started = True
                         else:
                             proc = self._macos_proc
-                            # Stop it first: reading stderr of a live process blocks forever.
                             self._stop_macos_helper()
                             err_msg = ""
                             try:
                                 err_msg = (proc.stderr.read() if proc.stderr else "").strip()
                             except Exception:
                                 pass
-                            logger.warning(
-                                f"macOS audio helper did not confirm READY (output: {ready_line!r}"
+                            logger.info(
+                                f"macOS system speaker helper status: {ready_line!r}"
                                 + (f", stderr: {err_msg!r}" if err_msg else "")
-                                + ")."
                             )
                     except Exception as e:
                         logger.warning(f"Could not launch macOS audio capture helper: {e}")
                         self._macos_proc = None
                 else:
-                    logger.warning("macOS audio capture helper not found; recording microphone only.")
+                    logger.info("macOS audio capture helper not found; recording microphone only.")
 
             elif "windows" in current_os:
                 wasapi_dev = self._find_wasapi_loopback_device()
@@ -247,67 +284,29 @@ class LiveAudioRecorder:
                         logger.warning(f"Failed to start Windows WASAPI loopback: {e}")
                         self._win_system_stream = None
 
-            # --- 2. Start Microphone Stream ---
-            mic_dev = self._find_input_device()
-            try:
-                # If system capture could not start, mic stream will write directly to final output
-                mic_target_path = self._mic_wav_path if system_started else self._output_path
-                self._mic_wav = sf.SoundFile(
-                    mic_target_path,
-                    mode="w",
-                    samplerate=self.sample_rate,
-                    channels=CHANNELS,
-                    subtype="PCM_16",
-                )
-
-                def mic_callback(indata, frames, time_info, status):
-                    if not self.is_recording or not self._mic_wav:
-                        return
-                    if self.is_muted:
-                        # When mic is muted, write silence to mic track so room voices are blocked
-                        zeros = np.zeros_like(indata)
-                        self._mic_wav.write(zeros)
-                    else:
-                        self._mic_wav.write(indata)
-                    self._frames_written += frames
-
-                self._mic_stream = sd.InputStream(
-                    samplerate=self.sample_rate,
-                    channels=CHANNELS,
-                    dtype="int16",
-                    device=mic_dev,
-                    callback=mic_callback,
-                )
-                self._mic_stream.start()
-                self.mic_audio_active = True
-                self.is_recording = True
-                logger.info(
-                    f"LiveAudioRecorder active. System capture: {system_started}, "
-                    f"Mic device: {mic_dev}, Mic muted: {self.is_muted}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to start microphone stream: {e}")
-                self.is_recording = system_started
-            finally:
-                self.system_audio_active = system_started
-                self.warning = self._build_warning()
+            self.system_audio_active = system_started
+            self.is_recording = bool(self.mic_audio_active or self.system_audio_active)
+            self.warning = self._build_warning()
             return self._output_path if self.is_recording else ""
 
     def _build_warning(self) -> str | None:
-        is_mac = "darwin" in platform.system().lower()
-        speaker_fix = (
-            "allow Screen Recording for DeskMate in System Settings > Privacy & Security"
-            if is_mac
-            else "check that a speaker or headset output device is active"
-        )
+        """Return warning only if audio capture is genuinely non-functional or muted."""
+        # If microphone is actively recording, audio capture is healthy and working.
+        if self.mic_audio_active and not self.is_muted:
+            return None
+
         if not self.system_audio_active and not self.mic_audio_active:
-            return f"No audio is being recorded. Allow Microphone access and {speaker_fix}."
-        if not self.system_audio_active:
-            if self.is_muted:
-                return f"Speaker audio could not start and the mic is muted, so this recording will be silent. Unmute the mic, or {speaker_fix}."
-            return f"Speaker audio could not start, so only your microphone is recorded. To capture other attendees, {speaker_fix}."
-        if not self.mic_audio_active:
-            return "Microphone could not start, so only speaker audio is recorded. Allow Microphone access for DeskMate."
+            is_mac = "darwin" in platform.system().lower()
+            perm_fix = (
+                "allow Microphone access for DeskMate in System Settings > Privacy & Security"
+                if is_mac
+                else "check that a microphone input device is active"
+            )
+            return f"No audio is being recorded. Please {perm_fix}."
+
+        if not self.system_audio_active and self.is_muted:
+            return "Microphone is muted and speaker capture is inactive. Unmute the mic to record audio."
+
         return None
 
     def _stop_macos_helper(self) -> None:

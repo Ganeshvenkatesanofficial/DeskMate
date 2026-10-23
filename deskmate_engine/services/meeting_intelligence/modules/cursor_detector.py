@@ -1,12 +1,74 @@
 import cv2
 import numpy as np
+import ctypes
 import logging
-import os
+import sys
 from collections import deque
 from pathlib import Path
 from .. import config
 
 logger = logging.getLogger(__name__)
+
+
+class _CGPoint(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+
+class _CGRect(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double), ("w", ctypes.c_double), ("h", ctypes.c_double)]
+
+
+class _WinPoint(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+def _load_core_graphics():
+    """CoreGraphics bindings, loaded once (None off macOS or if unavailable)."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cg.CGEventCreate.restype = ctypes.c_void_p
+        cg.CGEventCreate.argtypes = [ctypes.c_void_p]
+        cg.CGEventGetLocation.restype = _CGPoint
+        cg.CGEventGetLocation.argtypes = [ctypes.c_void_p]
+        cg.CFRelease.argtypes = [ctypes.c_void_p]
+        cg.CGMainDisplayID.restype = ctypes.c_uint32
+        cg.CGDisplayBounds.restype = _CGRect
+        cg.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        return cg
+    except Exception as e:
+        logger.debug(f"CoreGraphics unavailable for cursor tracking: {e}")
+        return None
+
+
+_CORE_GRAPHICS = _load_core_graphics()
+
+
+def _hardware_cursor_position(frame_shape) -> tuple[int, int] | None:
+    """OS mouse position mapped to frame pixels (primary display), or None."""
+    h, w = frame_shape[:2]
+    try:
+        if _CORE_GRAPHICS is not None:
+            evt = _CORE_GRAPHICS.CGEventCreate(None)
+            if not evt:
+                return None
+            loc = _CORE_GRAPHICS.CGEventGetLocation(evt)
+            _CORE_GRAPHICS.CFRelease(evt)
+            # Mouse is in display points; frames may be captured at a different (Retina) scale.
+            bounds = _CORE_GRAPHICS.CGDisplayBounds(_CORE_GRAPHICS.CGMainDisplayID())
+            scale = w / bounds.w if bounds.w else 1.0
+            x, y = int(loc.x * scale), int(loc.y * scale)
+        elif sys.platform == "win32":
+            pt = _WinPoint()
+            if not ctypes.windll.user32.GetCursorPos(ctypes.byref(pt)):
+                return None
+            x, y = int(pt.x), int(pt.y)
+        else:
+            return None
+    except Exception:
+        return None
+    return (x, y) if 0 <= x < w and 0 <= y < h else None
 
 class CursorDetector:
     """Detects cursor while strictly obeying the Hard Safety Mask."""
@@ -53,6 +115,14 @@ class CursorDetector:
             avg_y = int(np.mean([p[1] for p in self.pos_history]))
             
             return (avg_x, avg_y), best_type
+
+        # Fallback: the OS cursor position (the macOS cursor is often not in screen captures).
+        hw_pos = _hardware_cursor_position(frame_bgr.shape)
+        if hw_pos is not None and (safety_mask is None or safety_mask[hw_pos[1], hw_pos[0]] != 0):
+            self.pos_history.append(hw_pos)
+            avg_x = int(np.mean([p[0] for p in self.pos_history]))
+            avg_y = int(np.mean([p[1] for p in self.pos_history]))
+            return (avg_x, avg_y), "pointer"
             
         if self.pos_history:
             self.pos_history.popleft()

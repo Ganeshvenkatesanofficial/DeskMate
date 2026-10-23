@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+datas = [
+    # Header logo for meeting PDF reports
+    ('services/meeting_intelligence/static/deskmate_logo.png', 'services/meeting_intelligence/static'),
+]
 binaries = []
 hiddenimports = [
     'tiktoken_ext.openai_public',

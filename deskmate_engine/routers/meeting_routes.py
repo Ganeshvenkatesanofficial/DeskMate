@@ -382,7 +382,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 "total_stages": 4,
                 "progress": 0.45,
                 "title": "Voxtral 4B Diarization",
-                "detail": "Transcribing speech and diarizing speaker conversational turns...",
+                "detail": "Transcribing speech and translating it into English...",
             })
             try:
                 extractor = AudioExtractor()
@@ -401,6 +401,11 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 if not has_speech and not transcript_data.get("reason"):
                     transcript_data["status"] = "unavailable"
                     transcript_data["reason"] = "No speech was detected in the recording."
+                if has_speech:
+                    # Any spoken language -> English, so screen, PDF and email all read in English.
+                    transcript_data = await asyncio.to_thread(
+                        summarizer.translate_transcript_to_english, transcript_data, gemini_key
+                    )
             except Exception as audio_err:
                 logger.exception(f"Audio transcription failed for {session_id}: {audio_err}")
                 transcript_data = {

@@ -1177,7 +1177,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         });
         _startPolling();
         if (_audioWarning != null) {
-          _showTopNotification(_audioWarning!, isError: true);
+          // Red only when nothing audible is being recorded; mic-only is just a tip.
+          final isSilent =
+              res['system_audio'] != true &&
+              (res['mic_audio'] != true || _isMicMuted);
+          _showTopNotification(_audioWarning!, isError: isSilent);
         }
       }
     } catch (e) {
@@ -4960,6 +4964,28 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     _showTopNotification('$label copied to clipboard!');
   }
 
+  /// English text plus the original spoken words, so search finds either.
+  static String _segmentSearchText(Map seg) =>
+      '${seg['text'] ?? ''} ${seg['original_text'] ?? ''}';
+
+  /// The words as spoken (e.g. Tamil), shown under the English translation.
+  List<Widget> _buildOriginalSpeech(ThemeData theme, Map seg) {
+    final original = seg['original_text']?.toString().trim() ?? '';
+    if (original.isEmpty) return const [];
+    return [
+      const SizedBox(height: 4),
+      SelectableText(
+        'Original: $original',
+        style: TextStyle(
+          fontSize: 11.5,
+          height: 1.4,
+          fontStyle: FontStyle.italic,
+          color: theme.fgMuted,
+        ),
+      ),
+    ];
+  }
+
   Widget _buildTranscriptInner(ThemeData theme) {
     final segments = (_transcriptData?['segments'] as List?) ?? [];
     final fullTranscript =
@@ -4977,7 +5003,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     final filteredSegments = segments.where((seg) {
       if (seg is! Map) return false;
       final spk = seg['speaker']?.toString() ?? 'Speaker 1';
-      final text = seg['text']?.toString() ?? '';
+      final text = _segmentSearchText(seg);
       if (_selectedSpeakerFilter != null && spk != _selectedSpeakerFilter) {
         return false;
       }
@@ -5353,6 +5379,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                           color: theme.fgDefault,
                         ),
                       ),
+                      ..._buildOriginalSpeech(theme, seg),
                     ],
                   ),
                 );
@@ -5401,7 +5428,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             final filtered = segments.where((seg) {
               if (seg is! Map) return false;
               final spk = seg['speaker']?.toString() ?? 'Speaker 1';
-              final text = seg['text']?.toString() ?? '';
+              final text = _segmentSearchText(seg);
               if (modalSpeaker != null && spk != modalSpeaker) return false;
               if (modalSearch.isNotEmpty &&
                   !text.toLowerCase().contains(modalSearch.toLowerCase())) {
@@ -5694,6 +5721,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                             color: theme.fgDefault,
                                           ),
                                         ),
+                                        ..._buildOriginalSpeech(theme, seg),
                                       ],
                                     ),
                                   );
