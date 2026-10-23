@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 import uuid
@@ -43,6 +42,9 @@ from .screen_capture_service import ScreenCapture
 
 
 logger = logging.getLogger("deskmate.live_pipeline")
+
+# How often an in-progress meeting is saved, so a crash or sleep keeps its data.
+INTERIM_SAVE_SECONDS = 10.0
 
 
 class PipelineState(str, Enum):
@@ -79,6 +81,9 @@ class LivePipeline:
         self._state = self.STATE_IDLE
         self._session_id: str | None = None
         self._session_start: float | None = None
+        self._last_disk_sync = 0.0
+        # Serializes report writes so an interim save can't overwrite the final one.
+        self._save_lock = threading.Lock()
         self._assets_dir: str | None = None
         self._process_thread: threading.Thread | None = None
 
@@ -143,6 +148,10 @@ class LivePipeline:
         self._last_unique_frame_gray = None
         self._change_detector.reset()
         self._step_builder = StepBuilder()
+        self._last_disk_sync = time.time()
+
+        # Immediate initial persistence to guarantee session exists on disk even if interrupted
+        self._save_session_report([], status="recording")
 
         self.screen_capture.start()
         self._state = self.STATE_RECORDING
@@ -265,6 +274,11 @@ class LivePipeline:
 
         if action in ["observed_interaction", "unclassified"] and is_valid:
             action = "ui_interaction"
+        elif is_candidate:
+            # Visual presentation transition / slide advance during meeting
+            action = "screen_presentation"
+            if not final_label or final_label.lower() in ["unknown", "generic_view"]:
+                final_label = "Presentation Milestone"
 
         # Create structured event and add to StepBuilder
         event = self._create_event(action, final_label, cursor_pos, roi_bbox, frame, timestamp, final_score)
@@ -272,6 +286,13 @@ class LivePipeline:
             self._step_builder.add_action(event)
             self.events.append(event)
             self._events_detected += 1
+
+            # Periodically sync progress to disk so crash/sleep never loses meeting data
+            now = time.time()
+            if now - self._last_disk_sync >= INTERIM_SAVE_SECONDS:
+                self._last_disk_sync = now
+                interim_steps = self._step_builder.get_current_steps() if self._step_builder else []
+                self._save_session_report(interim_steps, status="recording")
 
             if self.event_callback:
                 try:
@@ -346,17 +367,26 @@ class LivePipeline:
             "id": event_id,
         }
 
-    def _save_session_report(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
-        """Save complete session report JSON to disk."""
+    def _save_session_report(self, steps: list[dict[str, Any]], status: str = "completed") -> dict[str, Any]:
+        """Save the session report JSON. Interim ("recording") saves are skipped once stopped."""
+        with self._save_lock:
+            if status == "recording" and self._state == self.STATE_STOPPED:
+                return {}
+            return self._write_session_report(steps, status)
+
+    def _write_session_report(self, steps: list[dict[str, Any]], status: str) -> dict[str, Any]:
+        now = time.time()
+        duration = round(now - self._session_start, 1) if self._session_start else 0.0
         report = {
             "session_id": self._session_id,
             "start_time": self._session_start,
-            "end_time": time.time(),
-            "duration_seconds": round(time.time() - self._session_start, 1) if self._session_start else 0.0,
+            "end_time": now if status == "completed" else None,
+            "duration_seconds": duration,
             "total_frames": self._frames_processed,
             "total_steps": len(steps),
             "steps": steps,
             "events": self.events,
+            "status": status,
         }
         report_path = str(Path(self.output_dir) / f"session_{self._session_id}.json")
         try:

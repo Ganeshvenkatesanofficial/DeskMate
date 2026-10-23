@@ -52,24 +52,9 @@ class StepBuilder:
         if not self.current_step_actions:
             return
 
-        primary_action = self.current_step_actions[0]["event"]
-        target = self.current_step_actions[0]["target"]
-        first_ts = self.current_step_actions[0].get("timestamp", "00:00")
-        first_asset = next((a.get("asset_path") for a in self.current_step_actions if a.get("asset_path")), "")
-        
-        step_summary = f"Step {self.current_step_id}: {primary_action.replace('_',' ').capitalize()} on {target}"
-        
-        final_step = {
-            "step_id": self.current_step_id,
-            "timestamp": first_ts,
-            "summary": step_summary,
-            "duration": round(self.current_step_actions[-1]["timestamp_raw"] - self.current_step_actions[0]["timestamp_raw"], 2),
-            "screenshot_path": first_asset,
-            "actions": self.current_step_actions
-        }
-        
+        final_step = self._build_current_step()
         self.steps.append(final_step)
-        logger.info(f"Finalized Robust Step {self.current_step_id}: {step_summary}")
+        logger.info(f"Finalized Robust Step {self.current_step_id}: {final_step['summary']}")
         
         self.current_step_id += 1
         self.current_step_actions = []
@@ -77,6 +62,28 @@ class StepBuilder:
     def get_step_count(self) -> int:
         """Returns non-destructive count of completed + active steps without finalization."""
         return len(self.steps) + (1 if self.current_step_actions else 0)
+
+    def get_current_steps(self) -> List[Dict[str, Any]]:
+        """Return non-destructive snapshot of finalized steps plus current active step."""
+        steps_copy = list(self.steps)
+        if self.current_step_actions:
+            step = self._build_current_step()
+            step["actions"] = list(step["actions"])
+            steps_copy.append(step)
+        return steps_copy
+
+    def _build_current_step(self) -> Dict[str, Any]:
+        actions = self.current_step_actions
+        primary_action = actions[0]["event"]
+        target = actions[0]["target"]
+        return {
+            "step_id": self.current_step_id,
+            "timestamp": actions[0].get("timestamp", "00:00"),
+            "summary": f"Step {self.current_step_id}: {primary_action.replace('_', ' ').capitalize()} on {target}",
+            "duration": round(actions[-1]["timestamp_raw"] - actions[0]["timestamp_raw"], 2),
+            "screenshot_path": next((a.get("asset_path") for a in actions if a.get("asset_path")), ""),
+            "actions": actions,
+        }
 
     def get_all_steps(self) -> List[Dict[str, Any]]:
         self._finalize_step()

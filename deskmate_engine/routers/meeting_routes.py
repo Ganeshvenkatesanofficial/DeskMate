@@ -12,6 +12,9 @@ import json
 import logging
 from pathlib import Path
 import re
+import os
+import sys
+import subprocess
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -99,6 +102,42 @@ class MuteMeetingRequest(BaseModel):
     muted: bool
 
 
+_WIN_ES_CONTINUOUS = 0x80000000
+_WIN_ES_SYSTEM_REQUIRED = 0x00000001
+_WIN_ES_AWAYMODE_REQUIRED = 0x00000040
+
+
+def _prevent_system_sleep() -> None:
+    """Keep the computer awake while a meeting records (a sleep would cut the recording)."""
+    try:
+        if sys.platform == "darwin":
+            # -w ties the assertion to this process, so it also ends if the backend dies.
+            _SESSION_STATE["caffeinate_proc"] = subprocess.Popen(
+                ["/usr/bin/caffeinate", "-ims", "-w", str(os.getpid())],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        elif sys.platform == "win32":
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                _WIN_ES_CONTINUOUS | _WIN_ES_SYSTEM_REQUIRED | _WIN_ES_AWAYMODE_REQUIRED
+            )
+    except Exception as err:
+        logger.warning(f"Could not prevent system sleep during recording: {err}")
+
+
+def _allow_system_sleep() -> None:
+    try:
+        caffeinate = _SESSION_STATE.pop("caffeinate_proc", None)
+        if caffeinate:
+            caffeinate.terminate()
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(_WIN_ES_CONTINUOUS)
+    except Exception as err:
+        logger.debug(f"Could not release sleep prevention: {err}")
+
+
 @router.post("/start")
 async def start_meeting(req: StartMeetingRequest):
     """Start screen capture, live meeting event tracking & background audio recording."""
@@ -156,6 +195,8 @@ async def start_meeting(req: StartMeetingRequest):
         _SESSION_STATE["capture"] = capture
         _SESSION_STATE["pipeline"] = pipeline
         _SESSION_STATE["active_session_id"] = session_id
+
+        _prevent_system_sleep()
 
         return {
             "status": "recording",
@@ -243,6 +284,8 @@ async def stop_meeting():
     except Exception as e:
         logger.exception(f"Error stopping meeting session: {e}")
         raise HTTPException(status_code=500, detail="Stopping the meeting failed")
+    finally:
+        _allow_system_sleep()
 
 
 _MAX_AUDIO_BYTES = 500 * 1024 * 1024  # 500 MB
@@ -290,10 +333,13 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
     session_dir = output_dir / session_id
 
     if not report_file.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="This meeting's screen data was not saved, so it can't be summarized.",
-        )
+        exporter: MeetingExportService = _SESSION_STATE["export_service"]
+        recovered = await asyncio.to_thread(exporter.recover_session_report, session_id)
+        if recovered is None:
+            raise HTTPException(
+                status_code=404,
+                detail="This meeting's data was not found on disk, so it can't be summarized.",
+            )
 
     try:
         report_data = await asyncio.to_thread(

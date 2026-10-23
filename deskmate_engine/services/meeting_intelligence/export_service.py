@@ -30,6 +30,9 @@ from services.meeting_intelligence.email_template import (
 
 logger = logging.getLogger("deskmate.export_service")
 
+# Final mix plus the per-stream files left behind if a recording never finalized.
+_SESSION_AUDIO_FILES = ("audio.wav", "system_audio.wav", "mic_audio.wav", "meeting_audio.wav")
+
 
 def _resolve_logo_path() -> Optional[Path]:
     base = Path(__file__).resolve().parent
@@ -417,6 +420,41 @@ class MeetingExportService:
             logger.exception(f"Failed to delete session {session_id}: {e}")
             return {"status": "error", "message": str(e), "session_id": session_id}
 
+    def recover_session_report(self, session_id: str) -> Optional[dict[str, Any]]:
+        """Rebuild a minimal report for a session folder whose JSON was never written
+        (app crash or sleep mid-meeting), so its audio can still be summarized."""
+        session_id = self._safe_session_id(session_id)
+        if not session_id:
+            return None
+        session_dir = self.output_dir / session_id
+        if not session_dir.is_dir():
+            return None
+        has_audio = any((session_dir / name).exists() for name in _SESSION_AUDIO_FILES)
+        if not has_audio and not (session_dir / "assets").exists():
+            return None
+
+        logger.info(f"Recovering missing session report for {session_id}")
+        mtime = session_dir.stat().st_mtime
+        recovered = {
+            "session_id": session_id,
+            "start_time": mtime,
+            "end_time": mtime,
+            "duration_seconds": 0.0,
+            "total_frames": 0,
+            "total_steps": 0,
+            "steps": [],
+            "events": [],
+            "status": "completed",
+            "recovered": True,
+        }
+        try:
+            (self.output_dir / f"session_{session_id}.json").write_text(
+                json.dumps(recovered, indent=2), encoding="utf-8"
+            )
+        except Exception as err:
+            logger.warning(f"Could not save recovered session report: {err}")
+        return recovered
+
     def get_session_data(self, session_id: str) -> Optional[dict[str, Any]]:
         """
         Retrieves the complete report JSON for a given session.
@@ -426,7 +464,7 @@ class MeetingExportService:
             return None
         json_file = self.output_dir / f"session_{session_id}.json"
         if not json_file.exists():
-            return None
+            return self.recover_session_report(session_id)
 
         try:
             with open(json_file, "r", encoding="utf-8") as f:
@@ -492,7 +530,7 @@ class MeetingExportService:
 
                 session_dir = self.output_dir / sid
                 has_pdf = (session_dir / f"deskmate_report_{sid}.pdf").exists()
-                has_audio = (session_dir / "audio.wav").exists() or (session_dir / "meeting_audio.wav").exists()
+                has_audio = any((session_dir / name).exists() for name in _SESSION_AUDIO_FILES)
 
                 sessions[sid] = {
                     "session_id": sid,
@@ -517,7 +555,7 @@ class MeetingExportService:
                 if sid not in sessions:
                     mtime = item.stat().st_mtime
                     has_pdf = (item / f"deskmate_report_{sid}.pdf").exists()
-                    has_audio = (item / "audio.wav").exists() or (item / "meeting_audio.wav").exists()
+                    has_audio = any((item / name).exists() for name in _SESSION_AUDIO_FILES)
                     sessions[sid] = {
                         "session_id": sid,
                         "title": f"Meeting • {datetime.fromtimestamp(mtime).strftime('%b %d, %Y at %I:%M %p')}",

@@ -184,8 +184,19 @@ class LiveAudioRecorder:
                             logger.info("macOS native system audio capture started successfully.")
                             system_started = True
                         else:
-                            logger.warning(f"macOS audio helper did not confirm READY (output: {ready_line!r}).")
+                            proc = self._macos_proc
+                            # Stop it first: reading stderr of a live process blocks forever.
                             self._stop_macos_helper()
+                            err_msg = ""
+                            try:
+                                err_msg = (proc.stderr.read() if proc.stderr else "").strip()
+                            except Exception:
+                                pass
+                            logger.warning(
+                                f"macOS audio helper did not confirm READY (output: {ready_line!r}"
+                                + (f", stderr: {err_msg!r}" if err_msg else "")
+                                + ")."
+                            )
                     except Exception as e:
                         logger.warning(f"Could not launch macOS audio capture helper: {e}")
                         self._macos_proc = None
@@ -310,6 +321,7 @@ class LiveAudioRecorder:
         except Exception:
             try:
                 proc.kill()
+                proc.wait(timeout=2.0)
             except Exception:
                 pass
 
