@@ -533,6 +533,13 @@ def generate_meeting_email_html(
                               <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top; padding-top:2px;">Details:</td>
                               <td style="color:#334155; font-weight:500; vertical-align:top; padding-top:2px;">Includes screen captures, step chronology, OCR content, and full visual audit trail.</td>
                             </tr>
+                            <tr>
+                              <td colspan="2" style="padding-top:8px;">
+                                <div style="display:inline-block; background-color:#EDE9FE; border:1px solid #DDD6FE; color:#6D28D9; font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:6px;">
+                                  &#128229; Download from the email attachment chip at the bottom of this message
+                                </div>
+                              </td>
+                            </tr>
                           </table>
                         </td>
                       </tr>

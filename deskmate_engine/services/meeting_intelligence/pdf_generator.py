@@ -117,6 +117,12 @@ class MeetingReportPDF(FPDF):
         return super().normalize_text(_to_pdf_text(text))
 
     def header(self):
+        # ─── Solid Pure White Page Canvas ─────────────────────────────
+        # Guarantees opaque white paper background across all PDF viewers,
+        # print drivers, and operating system dark mode themes.
+        self.set_fill_color(*_WHITE)
+        self.rect(0, 0, 210, 297, 'F')
+
         # ─── Sleek minimal header on all pages ────────────────────────
         logo_path = _LOGO_PATH
         if logo_path:
@@ -196,16 +202,28 @@ class MeetingPDFGenerator:
             pdf.add_page()
             pdf.set_auto_page_break(auto=True, margin=22)
 
+            # ─── Extract Meeting Title & Clean Summary ────────────────────
+            title_match = re.search(r"^#\s+(.*?)$", summary_text or "", re.MULTILINE)
+            doc_title = title_match.group(1).strip() if title_match else "Executive Meeting Intelligence Report"
+            clean_summary = re.sub(r"^#\s+.*?\n+", "", summary_text or "", count=1).strip()
+
+            # ─── Hero Title Block ─────────────────────────────────────────
+            pdf.set_y(24)
+            pdf.set_font('Helvetica', 'B', 17)
+            pdf.set_text_color(*_DESKMATE_DARK)
+            pdf.multi_cell(_CONTENT_WIDTH, 7.5, self._make_safe(doc_title))
+            pdf.ln(3)
+
             # ─── Metadata block ──────────────────────────────────────────
             self._render_metadata_block(pdf, session_id, steps, important_step_ids)
 
             # ─── Executive Summary ───────────────────────────────────────
             self._render_section_header(pdf, 'Executive Summary & Analysis')
-            self._render_markdown_body(pdf, summary_text)
-            pdf.ln(6)
+            self._render_markdown_body(pdf, clean_summary)
+            pdf.ln(4)
 
             # ─── Key Visual Moments ──────────────────────────────────────
-            if steps and important_step_ids:
+            if steps:
                 # Force a page break if the header and first screenshot card won't fit on the current page
                 first_card_h = self._get_first_card_height(
                     pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data
@@ -214,7 +232,7 @@ class MeetingPDFGenerator:
                     pdf.add_page()
                 self._render_section_header(pdf, 'Key Visual Interaction Moments')
                 self._render_screenshots(
-                    pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data
+                    pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data, session_id=session_id
                 )
 
             # ─── Dynamic Specific Fields (Custom User Requirements) ──────
@@ -355,32 +373,27 @@ class MeetingPDFGenerator:
 
     def _render_section_header(self, pdf, title):
         """Render a rich section header with DeskMate branding."""
-        pdf.ln(5)
-
+        pdf.ln(4)
         y = pdf.get_y()
+        if y + 16 > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+            y = pdf.get_y()
 
         # Background highlight strip
         pdf.set_fill_color(*_LIGHT_BG)
-        pdf.rect(_LEFT_MARGIN, y, _CONTENT_WIDTH, 10, 'F')
+        pdf.rect(_LEFT_MARGIN, y, _CONTENT_WIDTH, 9, 'F')
 
         # Left accent bar (DeskMate primary purple)
         pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, y, 4, 10, 'F')
+        pdf.rect(_LEFT_MARGIN, y, 3.5, 9, 'F')
 
         # Title text
-        pdf.set_xy(_LEFT_MARGIN + 8, y + 1)
-        pdf.set_font('Helvetica', 'B', 13)
+        pdf.set_xy(_LEFT_MARGIN + 8, y + 1.2)
+        pdf.set_font('Helvetica', 'B', 12)
         pdf.set_text_color(*_DESKMATE_DEEP)
-        pdf.cell(_CONTENT_WIDTH - 12, 8, title, 0, 1)
+        pdf.cell(_CONTENT_WIDTH - 12, 6.5, title, 0, 1)
 
-        pdf.ln(4)
-
-        # Decorative divider — primary purple thin line + subtle divider
-        pdf.set_fill_color(*_DESKMATE_PRIMARY)
-        pdf.rect(_LEFT_MARGIN, pdf.get_y(), 40, 0.6, 'F')
-        pdf.set_fill_color(*_DIVIDER)
-        pdf.rect(_LEFT_MARGIN + 40, pdf.get_y(), _CONTENT_WIDTH - 40, 0.3, 'F')
-        pdf.ln(5)
+        pdf.ln(3)
 
     def _write_formatted_text(self, pdf, text, font_size=9.5, default_bold=False):
         """Write text with support for inline **bold** formatting and correct word wrapping."""
@@ -479,85 +492,84 @@ class MeetingPDFGenerator:
         pdf.set_font('Helvetica', '', 9.5)
         pdf.set_text_color(*_BODY_TEXT)
 
-    def _render_bullet(self, pdf, text, level=1):
-        """Render a styled bullet point with inline bold formatting support."""
-        indent = 6 * level
-        bullet_w = 5
-        text_x = _LEFT_MARGIN + indent + bullet_w
-        text_width = _CONTENT_WIDTH - indent - bullet_w
-
-        # Check height and add page if it doesn't fit on the current page
-        bullet_h = self._get_text_height(pdf, text, font_size=9.5, width=text_width)
-        if pdf.get_y() + bullet_h > _PAGE_BOTTOM_Y:
-            pdf.add_page()
-
-        pdf.set_x(_LEFT_MARGIN + indent)
-        # Choose bullet character based on level
-        bullet_char = chr(149)  # Level 1: round bullet (•)
-        if level == 2:
-            bullet_char = chr(183)  # Level 2: middle dot (·)
-        elif level >= 3:
-            bullet_char = chr(150)  # Level 3: en dash (–)
-
-        pdf.set_font('Helvetica', '', 9.5)
-        pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(bullet_w, 5, bullet_char, 0, 0)
-
-        # Temp change left margin for wrap
-        old_margin = pdf.l_margin
-        pdf.set_left_margin(text_x)
-
-        # Write formatted text
-        self._write_formatted_text(pdf, text, font_size=9.5)
-
-        # Reset margin
-        pdf.set_left_margin(old_margin)
-        pdf.ln(6)
-
-    def _render_numbered_item(self, pdf, number, text, level=1):
-        """Render a numbered list item with branded number and inline bold support."""
-        indent = 6 * level
-        num_w = 8
-        text_x = _LEFT_MARGIN + indent + num_w
-        text_width = _CONTENT_WIDTH - indent - num_w
-
-        # Check height and add page if it doesn't fit on the current page
-        item_h = self._get_text_height(pdf, text, font_size=9.5, width=text_width)
-        if pdf.get_y() + item_h > _PAGE_BOTTOM_Y:
-            pdf.add_page()
-
-        pdf.set_x(_LEFT_MARGIN + indent)
-        # Number in primary purple
-        pdf.set_font('Helvetica', 'B', 9.5)
-        pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(num_w, 5, f"{number}.", 0, 0)
-
-        # Temp change left margin for wrap
-        old_margin = pdf.l_margin
-        pdf.set_left_margin(text_x)
-
-        # Write formatted text
-        self._write_formatted_text(pdf, text, font_size=9.5)
-
-        # Reset margin
-        pdf.set_left_margin(old_margin)
-        pdf.ln(6)
-
     def _render_rich_paragraph(self, pdf, text, font_size=9.5):
-        """Render a paragraph with inline bold formatting support."""
-        # Check height and add page if it doesn't fit on the current page
+        """Render a paragraph with inline bold formatting support using native multi_cell markdown."""
+        if not text:
+            return
         para_h = self._get_text_height(pdf, text, font_size=font_size, width=_CONTENT_WIDTH)
         if pdf.get_y() + para_h > _PAGE_BOTTOM_Y:
             pdf.add_page()
 
+        pdf.set_font('Helvetica', '', font_size)
+        pdf.set_text_color(*_BODY_TEXT)
         pdf.set_x(_LEFT_MARGIN)
-        self._write_formatted_text(pdf, text, font_size=font_size)
-        pdf.ln(7)
+        pdf.multi_cell(_CONTENT_WIDTH, 5.2, self._make_safe(text), markdown=True)
+        pdf.ln(2.5)
+
+    def _render_bullet(self, pdf, text, level=1):
+        """Render a styled bullet point with inline bold formatting and hanging indent."""
+        if not text:
+            return
+        indent = 4 * level
+        bullet_w = 4
+        text_w = _CONTENT_WIDTH - indent - bullet_w
+        text_x = _LEFT_MARGIN + indent + bullet_w
+
+        bullet_h = self._get_text_height(pdf, text, font_size=9.5, width=text_w)
+        if pdf.get_y() + bullet_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+
+        bullet_char = chr(149)  # Level 1: •
+        if level == 2:
+            bullet_char = chr(183)  # Level 2: ·
+        elif level >= 3:
+            bullet_char = chr(150)  # Level 3: –
+
+        pdf.set_xy(_LEFT_MARGIN + indent, pdf.get_y())
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.set_text_color(*_DESKMATE_PRIMARY)
+        pdf.cell(bullet_w, 5.2, bullet_char, 0, 0)
+
+        old_margin = pdf.l_margin
+        pdf.set_left_margin(text_x)
+        pdf.set_xy(text_x, pdf.get_y())
+        pdf.set_font('Helvetica', '', 9.5)
+        pdf.set_text_color(*_BODY_TEXT)
+        pdf.multi_cell(text_w, 5.2, self._make_safe(text), markdown=True)
+        pdf.set_left_margin(old_margin)
+        pdf.ln(2)
+
+    def _render_numbered_item(self, pdf, number, text, level=1):
+        """Render a numbered list item with branded number, hanging indent, and inline bold support."""
+        if not text:
+            return
+        indent = 4 * level
+        num_w = 7
+        text_w = _CONTENT_WIDTH - indent - num_w
+        text_x = _LEFT_MARGIN + indent + num_w
+
+        item_h = self._get_text_height(pdf, text, font_size=9.5, width=text_w)
+        if pdf.get_y() + item_h > _PAGE_BOTTOM_Y:
+            pdf.add_page()
+
+        pdf.set_xy(_LEFT_MARGIN + indent, pdf.get_y())
+        pdf.set_font('Helvetica', 'B', 9.5)
+        pdf.set_text_color(*_DESKMATE_PRIMARY)
+        pdf.cell(num_w, 5.2, f"{number}.", 0, 0)
+
+        old_margin = pdf.l_margin
+        pdf.set_left_margin(text_x)
+        pdf.set_xy(text_x, pdf.get_y())
+        pdf.set_font('Helvetica', '', 9.5)
+        pdf.set_text_color(*_BODY_TEXT)
+        pdf.multi_cell(text_w, 5.2, self._make_safe(text), markdown=True)
+        pdf.set_left_margin(old_margin)
+        pdf.ln(2)
 
     # ── Screenshots section ───────────────────────────────────────────────
 
     def _render_screenshots(
-        self, pdf, steps, important_step_ids, step_descriptions=None, transcript_data=None
+        self, pdf, steps, important_step_ids, step_descriptions=None, transcript_data=None, session_id=""
     ):
         """Render deduplicated screenshots with rich step cards and synchronized spoken dialogue."""
         if step_descriptions is None:
@@ -565,7 +577,7 @@ class MeetingPDFGenerator:
 
         # Normalize step IDs for matching
         normalized_ids = set()
-        for sid in important_step_ids:
+        for sid in (important_step_ids or []):
             match = re.search(r'\d+', str(sid))
             if match:
                 normalized_ids.add(int(match.group()))
@@ -573,9 +585,10 @@ class MeetingPDFGenerator:
         rendered_count = 0
         rendered_hashes = set()
 
+        # Build candidate list of steps to render
+        candidates = []
         for step in steps:
             step_id_val = step.get("step_id", 0)
-
             try:
                 step_num = int(re.search(r'\d+', str(step_id_val)).group())
             except Exception:
@@ -583,11 +596,26 @@ class MeetingPDFGenerator:
 
             is_important = (
                 (step_num is not None and step_num in normalized_ids)
-                or str(step_id_val).lower().strip() in [str(s).lower().strip() for s in important_step_ids]
+                or str(step_id_val).lower().strip() in [str(s).lower().strip() for s in (important_step_ids or [])]
             )
-            if not is_important:
-                continue
+            if is_important and not is_host_ui_step(step):
+                candidates.append(step)
 
+        # Fallback: if fewer than 2 moments selected, backfill with available non-host steps
+        if len(candidates) < 2:
+            candidate_ids = {s.get("step_id") for s in candidates}
+            for step in steps:
+                if step.get("step_id") not in candidate_ids and not is_host_ui_step(step):
+                    candidates.append(step)
+                    if len(candidates) >= 4:
+                        break
+
+        # Emergency fallback: if candidates still empty, include any valid steps
+        if not candidates and steps:
+            candidates = list(steps[:4])
+
+        for step in candidates:
+            step_id_val = step.get("step_id", 0)
             actions = step.get("actions", [])
             asset_rel_path = step.get("screenshot_path") or next(
                 (a.get("asset_path") for a in actions if a.get("asset_path")), None
@@ -595,13 +623,12 @@ class MeetingPDFGenerator:
             if not asset_rel_path:
                 continue
 
-            full_img_path = resolve_screenshot_path(asset_rel_path)
+            full_img_path = resolve_screenshot_path(asset_rel_path, session_id=session_id)
             if not full_img_path or not os.path.exists(full_img_path):
                 continue
 
             # Skip any step showing host DeskMate UI or recording screen
             if is_host_ui_step(step):
-                logger.info(f"Skipping step {step_id_val} because it shows host DeskMate recording screen.")
                 continue
 
             # ── Deduplicate by file hash ──────────────────────────────
@@ -650,6 +677,11 @@ class MeetingPDFGenerator:
 
             step_ts = step.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
             title_w = _CONTENT_WIDTH - badge_w - 38
+
+            # Prevent text from colliding with the timestamp
+            max_title_chars = int(title_w / 2.2)
+            if len(safe_title) > max_title_chars:
+                safe_title = safe_title[:max_title_chars - 3].rstrip() + "..."
 
             pdf.set_x(_LEFT_MARGIN + 7 + badge_w + 4)
             pdf.set_font('Helvetica', 'B', 9.5)

@@ -55,7 +55,7 @@ GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
 MAX_OLLAMA_CANDIDATES = 4
 # The report always shows at least this many key moments when the screen recorded any.
-MIN_KEY_MOMENTS = 2
+MIN_KEY_MOMENTS = 4
 # Evenly spaced moments picked when the model chose too few.
 FALLBACK_KEY_MOMENTS = 4
 # Whole-quote values models use to mean "nobody spoke" (compared after lowercasing and trimming).
@@ -288,7 +288,6 @@ class MeetingSummarizer:
             if has_audio else ""
         )
 
-
         custom_instructions = ""
         custom_delimiters = ""
         if custom_fields:
@@ -403,6 +402,7 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
 
 ===IMPORTANT_STEPS===
 ["step_1", "step_2", "step_3"]
+(IMPORTANT: Output ONLY valid step IDs matching the numbers from SOURCE 1 Visual Event Log, e.g. ["step_1", "step_2"]. NEVER output arbitrary text strings like ["ui_interaction"]).
 
 ===STEP_DESCRIPTIONS===
 {{"step_1": {{"title": "Service Configuration", "description": "User configured the service authentication endpoint and updated the environment variables. [Context Reference: Environment configurations define service endpoints and operational variables across staging and production deployments.]", "audio_transcript": "Speaker 1: 'Let\\'s verify the endpoint configuration before running the integration tests.'"}}}}
@@ -421,14 +421,13 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
                 for m in models_data:
                     name = str(m.get("name") or "")
                     family = str((m.get("details") or {}).get("family") or "").lower()
-                    if "embed" not in name.lower() and "embed" not in family:
-                        compatible.append(name)
-
-                # Prioritize pure text generation models over vision/mllama architectures for text summarization
-                compatible.sort(key=lambda n: 1 if ("vision" in n.lower() or "mllama" in n.lower()) else 0)
+                    # Exclude embedding models and vision-specific architectures (e.g. mllama/vision fail on pure text generation)
+                    if any(term in name.lower() or term in family for term in ["embed", "vision", "mllama", "clip"]):
+                        continue
+                    compatible.append(name)
 
                 # 1. Prioritize user's configured model if explicitly set and text-compatible
-                if self.ollama_model and "vision" not in self.ollama_model.lower():
+                if self.ollama_model and not any(term in self.ollama_model.lower() for term in ["vision", "mllama"]):
                     for m in compatible:
                         if self.ollama_model.lower() in m.lower() or m.lower() in self.ollama_model.lower():
                             candidates.append(m)
@@ -650,13 +649,24 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
                     json={
                         "model": active_model,
                         "prompt": trimmed_prompt,
-                        "stream": False,
+                        "stream": True,
                         "options": {"num_ctx": 4096},
                     },
-                    timeout=180,
+                    stream=True,
+                    timeout=(15, 300),
                 )
                 if res.status_code == 200:
-                    text_resp = res.json().get("response", "")
+                    chunks = []
+                    for line in res.iter_lines():
+                        if line:
+                            try:
+                                data = json.loads(line.decode("utf-8"))
+                                chunks.append(data.get("response", ""))
+                                if data.get("done", False):
+                                    break
+                            except Exception:
+                                pass
+                    text_resp = "".join(chunks)
                     if text_resp and text_resp.strip():
                         logger.info(f"[MODEL SUCCESS] Ollama model '{active_model}' successfully generated summary ({len(text_resp)} chars)")
                         return text_resp
@@ -1176,23 +1186,47 @@ This meeting recording has been archived and processed locally. Key screen captu
         summary = humanize_speaker_tags(summary)
 
         # Extract IMPORTANT_STEPS
+        raw_imp_steps = []
         if "IMPORTANT_STEPS" in blocks:
             steps_block = self._strip_code_fences(blocks["IMPORTANT_STEPS"])
             try:
                 json_match = re.search(r"\[.*\]", steps_block, re.DOTALL)
                 parsed = json.loads(json_match.group(0) if json_match else steps_block)
                 if isinstance(parsed, list):
-                    important_steps = [str(x) for x in parsed]
+                    raw_imp_steps = [str(x) for x in parsed]
             except Exception as e:
                 logger.debug(f"Failed to parse important_steps JSON, trying regex fallback: {e}")
-                important_steps = [f"step_{m}" for m in re.findall(r"(?:step[_\s]*)?(\d+)", steps_block, re.IGNORECASE)]
+                raw_imp_steps = [f"step_{m}" for m in re.findall(r"(?:step[_\s]*)?(\d+)", steps_block, re.IGNORECASE)]
 
         # Recovery: the model described steps but forgot to list them
-        if not important_steps and step_descriptions:
+        if not raw_imp_steps and step_descriptions:
             logger.info("Recovering important_steps from step_descriptions keys.")
-            important_steps = [str(k) for k in step_descriptions]
+            raw_imp_steps = [str(k) for k in step_descriptions]
 
         steps = effective_steps or []
+        avail_step_map = {step_number(s.get("step_id")): s for s in steps}
+
+        # Normalize and validate every important step against real session steps
+        important_steps = []
+        for x in raw_imp_steps:
+            snum = step_number(x)
+            if snum.isdigit() and snum in avail_step_map:
+                sid = f"step_{snum}"
+                if sid not in important_steps:
+                    important_steps.append(sid)
+            else:
+                # If LLM wrote a tag or description keyword like 'ui_interaction', map to matching step
+                query = str(x).lower().replace("step_", "").replace("step", "").strip()
+                matched_num = None
+                for num, s in avail_step_map.items():
+                    s_sum = str(s.get("summary") or "").lower()
+                    if query and (query in s_sum or s_sum in query):
+                        matched_num = num
+                        break
+                if matched_num:
+                    sid = f"step_{matched_num}"
+                    if sid not in important_steps:
+                        important_steps.append(sid)
 
         # Post-filter: drop internal DeskMate or window-switch moments the model picked anyway
         def is_noise(sid: str) -> bool:
@@ -1205,16 +1239,18 @@ This meeting recording has been archived and processed locally. Key screen captu
 
         important_steps = [sid for sid in important_steps if not is_noise(sid)]
 
-        # Fallback: keep at least MIN_KEY_MOMENTS by adding evenly spaced real moments
-        if len(important_steps) < MIN_KEY_MOMENTS and steps:
+        # Fallback: keep at least min(MIN_KEY_MOMENTS, len(steps)) by adding evenly spaced real moments
+        target_count = min(MIN_KEY_MOMENTS, len(steps))
+        if len(important_steps) < target_count and steps:
             chosen = {step_number(sid) for sid in important_steps}
             candidates = [
                 s for s in steps
                 if step_number(s.get("step_id")) not in chosen and not is_host_ui_step(s)
             ]
-            if len(candidates) > FALLBACK_KEY_MOMENTS:
+            needed = target_count - len(important_steps)
+            if len(candidates) > needed:
                 last = len(candidates) - 1
-                picks = sorted({round(i * last / (FALLBACK_KEY_MOMENTS - 1)) for i in range(FALLBACK_KEY_MOMENTS)})
+                picks = sorted({round(i * last / (needed - 1)) for i in range(needed)}) if needed > 1 else [0]
                 candidates = [candidates[i] for i in picks]
             if candidates:
                 logger.info(f"Adding {len(candidates)} representative visual moments as fallback.")

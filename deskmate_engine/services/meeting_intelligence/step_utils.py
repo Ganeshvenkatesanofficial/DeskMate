@@ -22,10 +22,9 @@ HOST_UI_KEYWORDS = (
     "deskmate", "meeting scribe", "start meeting", "end meeting", "stop meeting",
     "recording dashboard", "telemetry", "modal_window", "modal", "runner", "flutter",
     "electron", "save to drive", "download pdf", "email pdf", "email meeting summary",
-    "sync to deskmate", "app switcher", "mission control", "dock", "taskbar",
-    "window switch", "switching window", "meeting initial view", "initial screen presentation",
-    "initial view", "screen presentation on meeting initial view",
-    "interacted with: meeting initial view", "recording in progress",
+    "sync to deskmate", "app switcher", "mission control",
+    "window switch", "switching window",
+    "recording in progress",
 )
 
 # Step summaries that carry no information about what happened on screen.
@@ -88,7 +87,7 @@ def order_step_ids(step_ids: list[Any], steps: list[dict[str, Any]]) -> list[str
     return [unique[num] for num in sorted(unique, key=sort_key)]
 
 
-def resolve_screenshot_path(asset_rel_path: str) -> Optional[str]:
+def resolve_screenshot_path(asset_rel_path: str, session_id: Optional[str] = None) -> Optional[str]:
     """Find a step screenshot across the dev workspace and the per-OS DeskMate data folders."""
     if not asset_rel_path:
         return None
@@ -107,13 +106,24 @@ def resolve_screenshot_path(asset_rel_path: str) -> Optional[str]:
         Path.home() / "Library" / "Application Support" / "DeskMate" / "output" / "sessions" / asset_rel_path,
         Path.home() / "AppData" / "Roaming" / "DeskMate" / asset_rel_path,
         Path.home() / "AppData" / "Roaming" / "DeskMate" / "sessions" / asset_rel_path,
+        Path.home() / "AppData" / "Roaming" / "DeskMate" / "output" / "sessions" / asset_rel_path,
     ]
 
     for prefix in ["output/sessions/", "sessions/", "live_sessions/", "output/"]:
         if asset_rel_path.startswith(prefix):
             stripped = asset_rel_path[len(prefix):]
+            candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "output" / "sessions" / stripped)
             candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / stripped)
             candidates.append(Path(config.OUTPUT_DIR) / stripped)
+            candidates.append(Path("output/sessions") / stripped)
+
+    filename = Path(asset_rel_path).name
+    if session_id:
+        clean_sid = str(session_id).strip()
+        candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "output" / "sessions" / clean_sid / "assets" / filename)
+        candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / clean_sid / "assets" / filename)
+        candidates.append(Path(config.OUTPUT_DIR) / clean_sid / "assets" / filename)
+        candidates.append(Path("output/sessions") / clean_sid / "assets" / filename)
 
     for cand in candidates:
         try:
