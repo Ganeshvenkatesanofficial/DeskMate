@@ -4,7 +4,7 @@
   <img src="../.github/assets/deskmate_hero.png" width="92%" alt="DeskMate Flutter Desktop App" />
 </p>
 
-The official desktop client for **DeskMate**, built with **Flutter Desktop** (macOS and Windows) following the **GitHub Primer** design language.
+The official desktop client for **DeskMate**, built with **Flutter Desktop** (macOS, Windows, and Linux) following the **GitHub Primer** design language.
 
 DeskMate provides an interactive, low-latency interface to communicate with the embedded Python AI backend via bidirectional WebSockets, providing live step-by-step reasoning telemetry, responsive model switching, and local database exploration.
 
@@ -55,7 +55,8 @@ lib/
 
 ### Prerequisites
 * [Flutter SDK](https://docs.flutter.dev/get-started/install) (`>= 3.22.0`)
-* macOS (Xcode installed) or Windows (Visual Studio C++ build tools installed)
+* macOS (Xcode installed), Windows (Visual Studio C++ build tools), or Linux (clang, cmake, ninja, GTK3)
+
 
 ### 1. Install Dependencies
 ```bash

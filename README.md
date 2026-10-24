@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/Ganeshvenkatesanofficial/DeskMate/releases"><img src="https://img.shields.io/github/v/release/Ganeshvenkatesanofficial/DeskMate?include_prereleases&style=flat-square&color=8250DF" alt="Release"></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Flutter-3.22+-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License">
@@ -13,11 +13,13 @@
   <img src=".github/assets/deskmate_hero.png" width="95%" alt="DeskMate Desktop Application Preview" />
 </p>
 
+
 **DeskMate** is a free, privacy-first open-source AI desktop copilot and personal assistant. Built with **Flutter Desktop** (GitHub Primer design system) and an embedded **FastAPI + SmolAgents** backend, DeskMate runs 100% offline and natively on your computer with zero cloud telemetry.
 
 ---
 
 ## ✨ Core Features & Tri-Agent Capabilities
+
 
 <table>
   <tr>
@@ -70,6 +72,35 @@ Choose your operating system below for quick setup instructions:
 
 ---
 
+### 🐧 Linux (Any Distribution)
+
+#### Option 1: 1-Line Terminal Auto-Installer (Recommended)
+Run this command in your Terminal:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/main/.github/scripts/install.sh | bash
+```
+> **What this does**: Automatically installs DeskMate natively to `~/.local/share/DeskMate`, creates application menu entries (`deskmate.desktop`), sets up icons, and launches the app.
+
+#### Option 2: Running Directly from Portable `tar.gz`
+1. Download **`DeskMate-Linux-x64.tar.gz`** from [Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Extract the archive:
+   ```bash
+   tar -xzf DeskMate-Linux-x64.tar.gz
+   cd DeskMate
+   ```
+3. Run natively:
+   ```bash
+   ./run.sh
+   # or run the executable directly:
+   ./DeskMate
+   ```
+4. *(Optional)* Integrate into your desktop application menu:
+   ```bash
+   ./install_linux.sh
+   ```
+
+---
+
 ### 🍏 macOS Installation
 
 #### Option 1: 1-Line Terminal Auto-Installer (Recommended)
@@ -88,28 +119,12 @@ curl -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMate/m
 4. Launch **DeskMate** from `/Applications` or Spotlight (`Cmd + Space`).
 
 #### Option 3: Direct ZIP Archive (`.zip`)
-
-**Step-by-Step Instructions After Downloading:**
-1. **Download the ZIP**:
-   - Download **`DeskMate-macOS.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
-2. **Extract the Archive**:
-   - In Finder, open your `Downloads` folder and **double-click `DeskMate-macOS.zip`** to extract `DeskMate.app`.
-   - *(Or via Terminal)*:
-     ```bash
-     unzip ~/Downloads/DeskMate-macOS.zip -d ~/Downloads/
-     ```
-3. **Move to `/Applications`**:
-   - Drag **`DeskMate.app`** from `Downloads` into the **Applications** folder in your Finder sidebar.
-4. **Bypass macOS Gatekeeper (First Launch Only)**:
-   - Because open-source builds are ad-hoc signed, macOS may display *"DeskMate cannot be opened because the developer cannot be verified"*.
-   - Choose either quick method to allow it:
-     - **Method A (Terminal 1-Liner)**: Run this command in Terminal to strip quarantine flags:
-       ```bash
-       xattr -cr /Applications/DeskMate.app
-       ```
-     - **Method B (Finder)**: **Right-click** (or `Control` + Click) `DeskMate.app` in `/Applications` ➔ Click **Open** ➔ Click **Open** in the confirmation dialog.
-5. **Launch DeskMate**:
-   - Open **DeskMate** directly from `/Applications`, Launchpad, or Spotlight (`Cmd + Space`).
+1. Download **`DeskMate-macOS.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Extract and move `DeskMate.app` into `/Applications`.
+3. If macOS displays developer verification warnings, run:
+   ```bash
+   xattr -cr /Applications/DeskMate.app
+   ```
 
 ---
 
@@ -128,20 +143,10 @@ curl.exe -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMa
 > **What this does**: Automatically downloads the latest release package, installs to `%LOCALAPPDATA%\DeskMate`, creates desktop and Start Menu shortcuts, and launches the app.
 
 #### Option 2: Direct ZIP Archive (`.zip`)
+1. Download **`DeskMate-Windows.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
+2. Extract the archive (e.g. to `C:\Users\<YourUser>\AppData\Local\DeskMate`).
+3. Inside the extracted folder, double-click **`DeskMate.exe`** to run.
 
-**Step-by-Step Instructions After Downloading:**
-1. **Download the ZIP**:
-   - Download **`DeskMate-Windows.zip`** from [Latest Releases](https://github.com/Ganeshvenkatesanofficial/DeskMate/releases).
-2. **Extract the Archive**:
-   - Right-click `DeskMate-Windows.zip` in your Downloads folder ➔ select **Extract All...**
-   - Choose a destination folder (e.g., `C:\Program Files\DeskMate` or `C:\Users\<YourUser>\AppData\Local\DeskMate`) and click **Extract**.
-3. **Handle Windows SmartScreen (First Launch Only)**:
-   - If Windows Defender SmartScreen displays *"Windows protected your PC"* on launch:
-     - Click **More info**.
-     - Click **Run anyway**.
-4. **Launch DeskMate**:
-   - Inside the extracted folder, double-click **`DeskMate.exe`** to run.
-   - *(Tip)* Right-click `DeskMate.exe` ➔ select **Pin to Start** or **Pin to taskbar** for one-click access anytime.
 
 ---
 
@@ -159,12 +164,14 @@ graph TD
         Router -->|Meeting Scribe| MS[Meeting Intelligence Pipeline]
 
         PA <--> LocalDB[(SQLite Vault\nTasks, Notes, Memories)]
-        PA <--> GWorkspace[Google Workspace Tools\nGmail, Calendar, Drive]
+        PA <--> GWorkspace[Google Workspace Tools\nGmail, Calendar, Drive, Docs]
+
 
         FC <--> LocalFiles[(Local Filesystem\nPDF, Code, Docs, TXT)]
         FC <--> Qdrant[(Qdrant Vector DB\nRAG Semantic Search)]
 
         MS --> Screen[ScreenCapture - MSS 2.0 FPS]
+
         MS --> CV8[8-Stage CV Detection & LocateAnything-3B]
         MS --> Vox[Voxtral 4B Diarized Speech - Zero Whisper]
         MS --> Sum[Multimodal Gemini 2.5 Flash / Ollama]
@@ -200,6 +207,7 @@ DeskMate is built upon world-class open-source projects, models, and libraries. 
 
 ---
 
+
 ## 🛠️ Local Development
 
 ### 1. Python Backend
@@ -214,12 +222,14 @@ python backend.py --port 8080
 ```bash
 cd deskmate_app
 flutter pub get
-flutter run -d macos   # or: flutter run -d windows
+flutter run -d linux   # or: flutter run -d macos / windows
+
 ```
 
 ---
 
 ## 📖 User Guide & Model Architecture
+
 
 ### 🧠 Dynamic Model Selection & Capabilities
 DeskMate automatically discovers all models installed in your local Ollama instance (`http://127.0.0.1:11434`) and dynamically identifies their specialized capabilities:
@@ -285,3 +295,4 @@ Contributions are welcome! Please check out [CONTRIBUTING.md](.github/CONTRIBUTI
 
 ## 📄 License
 This project is open-source under the [MIT License](LICENSE).
+
