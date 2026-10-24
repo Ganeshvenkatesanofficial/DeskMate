@@ -10,9 +10,17 @@ Detects available acceleration devices for NVIDIA LocateAnything-3B & Voxtral 4B
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Tuple
 
 logger = logging.getLogger("deskmate.hardware")
+
+_mps_lock = threading.Lock()
+
+
+def get_mps_lock() -> threading.Lock:
+    """Global lock to prevent concurrent command encoder allocation on Apple Metal / MPS."""
+    return _mps_lock
 
 
 def get_inference_device() -> Tuple[str, str]:

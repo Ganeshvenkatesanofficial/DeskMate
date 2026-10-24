@@ -218,10 +218,12 @@ def purge_user_google_tokens(user_data_dir) -> bool:
 @router.post("/api/personal/credentials")
 def save_personal_credentials(request: GoogleCredentialsRequest):
     """Validate, replace, and persist Google OAuth credentials in credentials.json and .env."""
+    logger.info("[START] Received request to save Google OAuth credentials")
     client_id = request.client_id.strip()
     client_secret = request.client_secret.strip()
 
     if not client_id or not client_secret:
+        logger.warning("[FAILED] Client ID or Client Secret was empty")
         raise HTTPException(
             status_code=400,
             detail="Client ID and Client Secret cannot be empty.",
@@ -229,12 +231,14 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
 
     # Format validation for Google OAuth Desktop client
     if not client_id.endswith(".apps.googleusercontent.com") or len(client_id) < 25:
+        logger.warning(f"[FAILED] Invalid Client ID format: {client_id}")
         raise HTTPException(
             status_code=422,
             detail="Invalid Google Client ID. It must end with '.apps.googleusercontent.com' (e.g. 123456789-xxxx.apps.googleusercontent.com).",
         )
 
     if len(client_secret) < 8:
+        logger.warning("[FAILED] Client Secret length is too short (< 8 chars)")
         raise HTTPException(
             status_code=422,
             detail="Invalid Google Client Secret. The secret key must be at least 8 characters long.",
@@ -258,7 +262,7 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
     if existing_id and existing_id != client_id:
         tokens_purged = purge_user_google_tokens(user_data_dir)
         if tokens_purged:
-            logger.info("Purged previous Google OAuth tokens due to client credential rotation.")
+            logger.info("[ACTION] Purged previous Google OAuth tokens due to client credential rotation.")
 
     # Write formatted credentials.json for google-auth-oauthlib
     creds_data = {
@@ -284,7 +288,7 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
         "GOOGLE_CLIENT_SECRET": client_secret,
     })
 
-    logger.info(f"Google credentials successfully saved and activated at {target_path}")
+    logger.info(f"[SUCCESS] Google credentials saved and activated at {target_path}")
 
     return {
         "status": "ok",
@@ -300,21 +304,26 @@ def save_personal_credentials(request: GoogleCredentialsRequest):
 @router.post("/api/personal/google/connect")
 def connect_google():
     """Open ONE Google consent screen for Gmail, Calendar, Drive and Tasks (blocks until done)."""
+    logger.info("[START] Initiating Google Workspace OAuth flow...")
     try:
         connect_google_account()
     except FileNotFoundError as exc:
+        logger.warning(f"[FAILED] Google OAuth failed: missing credentials file: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        logger.warning(f"Google connect failed: {exc}")
+        logger.error(f"[FAILED] Google OAuth connect failed: {exc}")
         raise HTTPException(status_code=400, detail=friendly_agent_error(exc))
     tokens = google_connection_status()
     missing = [api for api, ok in tokens.items() if not ok]
-    return {"status": "partial" if missing else "connected", "tokens": tokens, "missing": missing}
+    status_str = "partial" if missing else "connected"
+    logger.info(f"[SUCCESS] Google Workspace OAuth completed (status: {status_str}, tokens: {tokens})")
+    return {"status": status_str, "tokens": tokens, "missing": missing}
 
 
 @router.post("/api/reset/{conversation_id}")
 def reset_conversation(conversation_id: str):
     """Clear in-memory conversation history."""
+    logger.info(f"[ACTION] Resetting in-memory conversation history for: {conversation_id}")
     if conversation_id in _CONVERSATIONS:
         del _CONVERSATIONS[conversation_id]
     return {"status": "ok", "message": f"Conversation {conversation_id} reset"}
@@ -327,6 +336,9 @@ def _handle_rest_chat(
 ) -> ChatResponse:
     """Shared helper for synchronous REST chat execution and session history management."""
     conv_id = request.conversation_id or generate_conversation_id()
+    msg_preview = request.message.replace("\n", " ")[:80]
+    logger.info(f"[START] REST {endpoint_name}: '{msg_preview}' (conv_id={conv_id})")
+
     if conv_id not in _CONVERSATIONS and len(_CONVERSATIONS) >= _MAX_CONVERSATIONS:
         oldest_key = next(iter(_CONVERSATIONS))
         del _CONVERSATIONS[oldest_key]
@@ -340,8 +352,9 @@ def _handle_rest_chat(
             api_key=request.api_key,
             model_id=request.model,
         )
+        logger.info(f"[SUCCESS] REST {endpoint_name} completed successfully for conv_id={conv_id}")
     except Exception as exc:
-        logger.error(f"Error in REST {endpoint_name}: {exc}", exc_info=True)
+        logger.error(f"[FAILED] Error in REST {endpoint_name}: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=friendly_agent_error(exc))
 
     history.append(ChatMessage(role="user", content=request.message))

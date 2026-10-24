@@ -12,6 +12,7 @@ Generates responsive, branded HTML & Plain-Text emails for meeting reports with:
 from __future__ import annotations
 
 import html
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -20,6 +21,8 @@ from typing import Any, Optional
 
 from services.meeting_intelligence.step_utils import humanize_speaker_tags
 from services.meeting_intelligence.summarizer import extract_meeting_title
+
+logger = logging.getLogger("deskmate.meeting.email_template")
 
 
 LINKEDIN_PROFILE_URL = "https://www.linkedin.com/in/ganesh-venkatesan-3a4516256/"
@@ -167,8 +170,6 @@ def parse_meeting_summary(
                 current_section = "decisions"
             elif "action" in sec_title or "next step" in sec_title or "todo" in sec_title:
                 current_section = "actions"
-            elif any(k in sec_title for k in ("highlight", "parameter", "technical", "domain", "architecture", "config", "security", "metric", "command")):
-                current_section = "highlights"
             else:
                 current_section = "highlights"
             continue
@@ -251,6 +252,11 @@ def parse_meeting_summary(
 
     title = meeting_title if meeting_title else f"Executive Meeting Intelligence Brief — {date_str}"
 
+    logger.info(
+        f"[TEMPLATE] Parsed meeting content: title='{title}', "
+        f"{len(clean_decisions)} decisions, {len(clean_actions)} actions, {len(clean_highlights)} highlights."
+    )
+
     return StructuredMeetingContent(
         title=title,
         overview=overview_text,
@@ -319,18 +325,35 @@ def generate_meeting_email_html(
     Builds a high-end, responsive HTML email template for DeskMate with dynamic
     meeting debrief, author designation, creator branding, and proper PDF attachment.
     """
+    logger.info(
+        f"[TEMPLATE] Generating HTML email template for session {session_id} "
+        f"(Author: '{user_name}', Title: '{content.title}', PDF: '{pdf_filename}')"
+    )
     display_user = html.escape(user_name or "DeskMate User")
     display_email = html.escape(user_email or "")
-    display_designation = html.escape((designation or "Lead Analyst & Contributor").strip())
     display_date = html.escape(content.date_str)
-    # content.time_str = exact time the PDF was generated (from pdf_generated_at or file mtime)
     display_time = html.escape(content.time_str)
     display_pdf_name = html.escape(pdf_filename)
-
     user_initial = (display_user[0] if display_user else "D").upper()
-
     display_title = html.escape(content.title or "Executive Meeting Intelligence Brief")
     display_brief = html.escape(content.brief or content.overview or NO_SUMMARY_TEXT)
+
+    designation_html = (
+        f"""<tr>
+                              <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top; padding-top:2px;">Designation:</td>
+                              <td style="color:#334155; font-weight:500; vertical-align:top; padding-top:2px;">{html.escape(designation.strip())}</td>
+                            </tr>"""
+        if designation and designation.strip()
+        else ""
+    )
+    email_html = (
+        f"""<tr>
+                              <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top; padding-top:2px;">Email:</td>
+                              <td style="color:#334155; font-weight:500; vertical-align:top; padding-top:2px;">{display_email}</td>
+                            </tr>"""
+        if display_email
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -474,14 +497,8 @@ def generate_meeting_email_html(
                               <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top;">Sender:</td>
                               <td style="color:#0F172A; font-weight:700; vertical-align:top;">{display_user}</td>
                             </tr>
-                            <tr>
-                              <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top; padding-top:2px;">Designation:</td>
-                              <td style="color:#334155; font-weight:500; vertical-align:top; padding-top:2px;">{display_designation}</td>
-                            </tr>
-                            {f'''<tr>
-                              <td style="color:#64748B; font-weight:600; padding-right:10px; white-space:nowrap; vertical-align:top; padding-top:2px;">Email:</td>
-                              <td style="color:#334155; font-weight:500; vertical-align:top; padding-top:2px;">{display_email}</td>
-                            </tr>''' if display_email else ''}
+                            {designation_html}
+                            {email_html}
                           </table>
                         </td>
                       </tr>
@@ -598,10 +615,12 @@ def generate_meeting_email_text(
     Builds a clean, beautifully aligned plain-text version of the email containing only
     the short overall meeting summary.
     """
+    logger.info(f"[TEMPLATE] Generating plain-text email fallback for session {session_id}")
     summary_text = (content.brief or content.overview or NO_SUMMARY_TEXT).strip()
     date_display = content.date_str
     time_display = content.time_str
     email_line = f"\nEmail:       {user_email}" if user_email else ""
+    designation_line = f"\nDesignation: {designation.strip()}" if designation and designation.strip() else ""
 
     return f"""============================================================
 DESKMATE AI — EXECUTIVE MEETING REPORT
@@ -619,8 +638,7 @@ OVERALL MEETING SUMMARY
 ============================================================
 DISPATCH DETAILS
 ============================================================
-Sender:      {user_name or 'DeskMate User'}
-Designation: {designation or 'Lead Analyst & Contributor'}{email_line}
+Sender:      {user_name or 'DeskMate User'}{designation_line}{email_line}
 Dispatched automatically via DeskMate AI Meeting Scribe.
 
 ============================================================

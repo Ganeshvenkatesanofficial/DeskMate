@@ -79,7 +79,9 @@ def _filter_vision_models(raw_models: list[dict[str, Any]]) -> list[str]:
 def get_installed_chat_models() -> list[str]:
     """Retrieve list of chat-capable models installed in Ollama on this machine."""
     is_online, raw_models = _fetch_ollama_raw_models()
-    return _filter_chat_models(raw_models) if is_online else []
+    chat_models = _filter_chat_models(raw_models) if is_online else []
+    logger.debug(f"[MODEL DISCOVERY] Detected {len(chat_models)} chat model(s) in Ollama: {chat_models}")
+    return chat_models
 
 
 def get_default_model() -> str:
@@ -91,7 +93,9 @@ def get_default_model() -> str:
 def get_installed_vision_models() -> list[str]:
     """Retrieve list of vision-capable models (e.g. llama3.2-vision, llava) installed in Ollama."""
     is_online, raw_models = _fetch_ollama_raw_models()
-    return _filter_vision_models(raw_models) if is_online else []
+    vision_models = _filter_vision_models(raw_models) if is_online else []
+    logger.debug(f"[MODEL DISCOVERY] Detected {len(vision_models)} vision model(s) in Ollama: {vision_models}")
+    return vision_models
 
 
 def check_local_llm_status() -> dict[str, Any]:
@@ -138,10 +142,12 @@ def chat_local_llm(
     """Send message history to local Ollama chat API and return response message dict."""
     selected_model = model or get_default_model()
     if not selected_model:
+        logger.error("[MODEL FAILED] No local LLM model found in Ollama! Please install a model or configure Gemini.")
         raise RuntimeError(
             "No local LLM model found in Ollama. Please install a model (e.g. `ollama pull llama3`) or configure a Gemini API key."
         )
     should_stream = stream or (on_reasoning_chunk is not None)
+    logger.info(f"[MODEL INFERENCE] Invoking local model '{selected_model}' ({len(messages)} messages, stream={should_stream})")
     payload: dict[str, Any] = {
         "model": selected_model,
         "messages": messages,
@@ -415,6 +421,7 @@ class LocalLiteLLMModel(Model):
     def __init__(self, model_id: str | None = None, **kwargs):
         super().__init__(model_id=model_id, **kwargs)
         self.model_id = model_id or get_default_model()
+        logger.info(f"[MODEL LOAD] Initialized LocalLiteLLMModel engine with model: '{self.model_id}'")
         self.on_reasoning_chunk: Optional[Callable[[str], None]] = None
 
     def set_reasoning_callback(self, callback: Optional[Callable[[str], None]]) -> None:
@@ -604,5 +611,8 @@ def get_model(api_key: Optional[str] = None, model_id: Optional[str] = None) -> 
     otherwise returns LocalLiteLLMModel using detected or chosen Ollama model.
     """
     if api_key and api_key.strip():
+        logger.info(f"[MODEL SELECT] User interaction resolved Cloud Model: '{DEFAULT_GEMINI_MODEL}' (Gemini API Key provided)")
         return LiteLLMModel(model_id=DEFAULT_GEMINI_MODEL, api_key=api_key.strip())
-    return LocalLiteLLMModel(model_id=model_id or get_default_model())
+    resolved = model_id or get_default_model()
+    logger.info(f"[MODEL SELECT] User interaction resolved Local Model: '{resolved}'")
+    return LocalLiteLLMModel(model_id=resolved)

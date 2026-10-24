@@ -9,7 +9,7 @@ import cv2
 import logging
 from PIL import Image
 
-from ..utils.hardware_check import get_inference_device
+from ..utils.hardware_check import get_inference_device, get_mps_lock
 
 logger = logging.getLogger("deskmate.locate_anything")
 
@@ -85,7 +85,13 @@ class LocateAnythingDetector:
                 import torch
                 inputs = self._processor(images=image, text=prompt, return_tensors="pt").to(self.device)
                 with torch.no_grad():
-                    outputs = self._model.generate(**inputs, max_new_tokens=128)
+                    if str(self.device).startswith("mps"):
+                        with get_mps_lock():
+                            outputs = self._model.generate(**inputs, max_new_tokens=128)
+                            if hasattr(torch, "mps") and hasattr(torch.mps, "synchronize"):
+                                torch.mps.synchronize()
+                    else:
+                        outputs = self._model.generate(**inputs, max_new_tokens=128)
                     decoded = self._processor.batch_decode(outputs, skip_special_tokens=True)
                     if decoded:
                         logger.debug(f"LocateAnything text output: {decoded[0][:60]}")

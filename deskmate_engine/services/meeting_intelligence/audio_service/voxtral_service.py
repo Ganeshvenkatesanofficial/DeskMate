@@ -61,7 +61,7 @@ class VoxtralSpeechEngine:
                 - language: str
         """
         if not Path(audio_path).exists():
-            logger.error(f"Audio file not found: {audio_path}")
+            logger.error(f"[AUDIO FAILED] Audio file not found: {audio_path}")
             return {
                 "full_transcript": "",
                 "segments": [],
@@ -70,22 +70,24 @@ class VoxtralSpeechEngine:
             }
 
         start_time = time.time()
-        logger.info(f"Voxtral 4B transcribing: {audio_path}...")
+        logger.info(f"[AUDIO START] Voxtral 4B processing audio file: {audio_path}")
 
         # Run transcription in thread to ensure zero UI event-loop blockage
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._transcribe_sync, audio_path)
 
         elapsed = round(time.time() - start_time, 2)
-        logger.info(f"Voxtral transcription completed in {elapsed}s (Segments: {len(result.get('segments', []))})")
+        logger.info(f"[AUDIO SUCCESS] Voxtral transcription completed in {elapsed}s (Segments: {len(result.get('segments', []))})")
         return result
 
     def _transcribe_sync(self, audio_path: str) -> dict[str, Any]:
         """Synchronous audio processing pipeline for Voxtral."""
         # 1. Check if user configured Mistral Cloud Audio API
         if self.api_key:
+            logger.info("[AUDIO STAGE] Calling Mistral Cloud Audio API for transcription...")
             cloud_res = self._transcribe_via_mistral_api(audio_path)
             if cloud_res:
+                logger.info(f"[AUDIO SUCCESS] Mistral Cloud API transcribed {len(cloud_res.get('segments', []))} segments")
                 return cloud_res
 
         # 2. Local Voxtral Realtime via Transformers (needs mistral-common and cached weights)
@@ -94,7 +96,7 @@ class VoxtralSpeechEngine:
             from transformers import AutoProcessor, VoxtralRealtimeForConditionalGeneration
 
             if not self._initialized:
-                logger.info(f"Loading local Voxtral model: {self.model_name}...")
+                logger.info(f"[AUDIO LOAD] Initializing local Voxtral model: {self.model_name}...")
                 from ..utils.hardware_check import get_inference_device
                 device, _ = get_inference_device()
                 dtype = torch.bfloat16 if device in ("cuda", "mps") else torch.float32
@@ -113,17 +115,18 @@ class VoxtralSpeechEngine:
                     ).to(device)
                     self._model.eval()
                     self._initialized = True
-                    logger.info(f"Local Voxtral 4B loaded on {device}.")
+                    logger.info(f"[AUDIO SUCCESS] Local Voxtral 4B loaded on device '{device}'.")
                 except Exception as load_err:
-                    logger.warning(f"Local Voxtral could not be loaded: {load_err}")
+                    logger.warning(f"[AUDIO WARNING] Local Voxtral cached weights not available: {load_err}")
 
             if self._initialized and self._model is not None:
                 return self._run_local_voxtral_inference(audio_path)
 
         except ImportError as import_err:
-            logger.warning(f"Local Voxtral unavailable (missing package): {import_err}")
+            logger.warning(f"[AUDIO WARNING] Local Voxtral unavailable (missing package): {import_err}")
 
         # 3. Native audio inspection fallback
+        logger.info("[AUDIO STAGE] Falling back to acoustic timeline analysis (audio unavailable or not configured)")
         return self._generate_audio_analysis_fallback(audio_path)
 
     def _transcribe_via_mistral_api(self, audio_path: str) -> dict[str, Any] | None:
@@ -191,8 +194,16 @@ class VoxtralSpeechEngine:
                     continue
                 inputs = self._processor(chunk, return_tensors="pt")
                 inputs = inputs.to(self._model.device, dtype=self._model.dtype)
+                is_mps = str(self._model.device).startswith("mps")
                 with torch.no_grad():
-                    outputs = self._model.generate(**inputs, max_new_tokens=LOCAL_MAX_NEW_TOKENS)
+                    if is_mps:
+                        from ..utils.hardware_check import get_mps_lock
+                        with get_mps_lock():
+                            outputs = self._model.generate(**inputs, max_new_tokens=LOCAL_MAX_NEW_TOKENS)
+                            if hasattr(torch, "mps") and hasattr(torch.mps, "synchronize"):
+                                torch.mps.synchronize()
+                    else:
+                        outputs = self._model.generate(**inputs, max_new_tokens=LOCAL_MAX_NEW_TOKENS)
                 text = self._processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
                 if text:
                     start = offset / float(sample_rate)

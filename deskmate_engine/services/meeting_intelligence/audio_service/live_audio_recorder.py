@@ -195,10 +195,10 @@ class LiveAudioRecorder:
                 self.mic_audio_active = True
                 self.is_recording = True
                 logger.info(
-                    f"LiveAudioRecorder microphone active at T=0. Device: {mic_dev}, Mic muted: {self.is_muted}"
+                    f"[AUDIO START] Microphone capture active at T=0. Device: {mic_dev}, Mic muted: {self.is_muted}"
                 )
             except Exception as e:
-                logger.error(f"Failed to start microphone stream: {e}")
+                logger.error(f"[AUDIO FAILED] Failed to start microphone stream: {e}")
                 self.mic_audio_active = False
 
             # --- 2. Start System Audio Capture (Speakers, Bluetooth, Audio Jack) ---
@@ -220,7 +220,7 @@ class LiveAudioRecorder:
                                 self._macos_proc.stdout, HELPER_READY_TIMEOUT_SECONDS
                             )
                         if ready_line and "READY" in ready_line:
-                            logger.info("macOS native system audio capture started successfully.")
+                            logger.info("[AUDIO START] macOS native ScreenCaptureKit system audio capture started.")
                             system_started = True
                         else:
                             proc = self._macos_proc
@@ -338,6 +338,7 @@ class LiveAudioRecorder:
                 return self._output_path
 
             self.is_recording = False
+            logger.info(f"[AUDIO STAGE] Stopping audio capture and mixing audio streams -> {self._output_path}")
 
             # 1. Stop macOS system audio capture helper
             if self._macos_proc:
@@ -393,7 +394,7 @@ class LiveAudioRecorder:
             self._finalize_mixed_audio()
 
             duration = round(time.time() - self._start_time, 2) if self._start_time else 0.0
-            logger.info(f"LiveAudioRecorder finalized: {self._output_path} ({duration}s)")
+            logger.info(f"[AUDIO SUCCESS] Audio recording finalized and mixed: {self._output_path} ({duration}s)")
             return self._output_path
 
     def _resample(self, data: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:

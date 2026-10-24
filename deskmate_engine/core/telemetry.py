@@ -632,6 +632,7 @@ def stream_agent_steps(
                     if ans.strip():
                         final_output = ans.strip()
 
+                    logger.info(f"[STAGE] Step {current_step_num[0]}: Synthesizing final response...")
                     synth_evt = {
                         "type": "status",
                         "phase": "synthesizing",
@@ -644,6 +645,10 @@ def stream_agent_steps(
                 else:
                     last_tool_name = tool_name
                     tool_start_time = time.time()
+                    args_summary = str(tool_args)
+                    if len(args_summary) > 120:
+                        args_summary = f"{args_summary[:120]}..."
+                    logger.info(f"[TOOL START] Step {current_step_num[0]}: Executing tool '{tool_name}' with args: {args_summary}")
                     step_entry = {
                         "step": current_step_num[0],
                         "phase": "tool_call",
@@ -664,6 +669,10 @@ def stream_agent_steps(
                 raw_out = getattr(item, "output", "")
                 summary = summarize_observation(raw_out)
                 duration_ms = int((time.time() - tool_start_time) * 1000) if tool_start_time else None
+                summary_preview = summary.replace("\n", " ")[:120] if summary else ""
+                logger.info(
+                    f"[TOOL SUCCESS] Step {current_step_num[0]}: Tool '{last_tool_name or 'tool'}' completed in {duration_ms}ms | Result: {summary_preview}"
+                )
 
                 step_entry = {
                     "step": current_step_num[0],
@@ -707,6 +716,8 @@ def stream_agent_steps(
                         step_reasoning_emitted[step_num] = True
                         step_duration = getattr(item, "duration", None)
                         reason_duration_ms = int(step_duration * 1000) if step_duration else None
+                        th_preview = th.replace("\n", " ")[:120]
+                        logger.info(f"[REASONING] Step {step_num}: {th_preview}...")
 
                         step_entry = {
                             "step": step_num,
@@ -732,9 +743,10 @@ def stream_agent_steps(
                 out = str(getattr(item, "output", "") or "").strip()
                 if out:
                     final_output = out
+                    logger.info(f"[SUCCESS] Step {current_step_num[0]}: Final answer emitted ({len(out)} chars).")
 
     except Exception as exc:
-        logger.error(f"Error during agent streaming execution: {exc}", exc_info=True)
+        logger.error(f"[FAILED] Agent streaming execution failed at step {current_step_num[0]}: {exc}", exc_info=True)
         err_evt = {
             "type": "error",
             "error": friendly_agent_error(exc),
@@ -761,6 +773,7 @@ def stream_agent_steps(
     # Clean and deliver final result
     cleaned = clean_final_answer(final_output or "Task completed.")
     total_duration_ms = int((time.time() - start_time) * 1000)
+    logger.info(f"[SUCCESS] Agent turn completed successfully in {total_duration_ms}ms (conv_id={active_conv_id}).")
 
     done_evt = {
         "type": "done",

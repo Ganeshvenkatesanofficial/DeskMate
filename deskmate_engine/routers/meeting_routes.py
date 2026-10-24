@@ -15,6 +15,7 @@ import re
 import os
 import sys
 import subprocess
+import time
 from datetime import datetime
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
@@ -199,6 +200,12 @@ async def start_meeting(req: StartMeetingRequest):
 
         _prevent_system_sleep()
 
+        logger.info(
+            f"[START] Meeting session recording started: {session_id} "
+            f"(Monitor: {req.monitor}, Target FPS: {req.fps}, Mic Muted: {req.start_muted}, "
+            f"Mic Stream: {audio_rec.mic_audio_active}, System Audio Stream: {audio_rec.system_audio_active})"
+        )
+
         return {
             "status": "recording",
             "session_id": session_id,
@@ -213,7 +220,7 @@ async def start_meeting(req: StartMeetingRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Failed to start meeting session: {e}")
+        logger.exception(f"[FAILED] Failed to start meeting session: {e}")
         raise HTTPException(
             status_code=500,
             detail="Meeting start failed. Check that DeskMate has Screen Recording and Microphone permission in System Settings > Privacy & Security, then try again.",
@@ -253,6 +260,7 @@ async def toggle_mic_mute(req: MuteMeetingRequest):
     audio_rec: Optional[LiveAudioRecorder] = _SESSION_STATE.get("audio_recorder")
     if audio_rec and audio_rec.is_recording:
         res_muted = audio_rec.set_muted(req.muted)
+        logger.info(f"[ACTION] Microphone mute state toggled -> Muted: {res_muted}")
         return {"status": "ok", "muted": res_muted}
     return {"status": "no_active_recorder", "muted": req.muted}
 
@@ -262,11 +270,13 @@ async def stop_meeting():
     """Stop active meeting recording, finalize screen steps, and finalize audio recording."""
     pipeline = _SESSION_STATE.get("pipeline")
     if not pipeline or pipeline.state != LivePipeline.STATE_RECORDING:
+        logger.warning("[WARNING] Stop meeting called but pipeline is not recording.")
         return {"status": "not_recording", "session_id": None}
 
+    session_id = _SESSION_STATE.get("active_session_id", "unknown")
+    logger.info(f"[START] Stopping meeting session: {session_id}...")
     try:
         report = pipeline.stop()
-        session_id = _SESSION_STATE["active_session_id"]
 
         # Finalize automated background audio recording
         audio_rec: Optional[LiveAudioRecorder] = _SESSION_STATE.get("audio_recorder")
@@ -274,16 +284,23 @@ async def stop_meeting():
             try:
                 audio_rec.stop_recording()
             except Exception as e:
-                logger.error(f"Error finalizing audio recording: {e}")
+                logger.error(f"[WARNING] Error finalizing audio recording for {session_id}: {e}")
+
+        steps_count = len(report.get("steps", []))
+        duration = report.get("duration_seconds", 0.0)
+        logger.info(
+            f"[SUCCESS] Meeting session {session_id} stopped successfully: "
+            f"{steps_count} visual steps captured across {duration:.1f}s."
+        )
 
         return {
             "status": "completed",
             "session_id": session_id,
-            "steps_count": len(report.get("steps", [])),
-            "duration_seconds": report.get("duration_seconds", 0.0),
+            "steps_count": steps_count,
+            "duration_seconds": duration,
         }
     except Exception as e:
-        logger.exception(f"Error stopping meeting session: {e}")
+        logger.exception(f"[FAILED] Error stopping meeting session {session_id}: {e}")
         raise HTTPException(status_code=500, detail="Stopping the meeting failed")
     finally:
         _allow_system_sleep()
@@ -342,12 +359,16 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 detail="This meeting's data was not found on disk, so it can't be summarized.",
             )
 
+    t_start = time.time()
+    logger.info(f"[START] Summarization requested for session: {session_id}")
+
     try:
         report_data = await asyncio.to_thread(
             lambda: json.loads(report_file.read_text(encoding="utf-8"))
         )
 
         steps = report_data.get("steps", [])
+        logger.info(f"[STAGE 1/4] Session {session_id} data loaded: {len(steps)} visual steps found.")
 
         # Stage 1: Audio Prep & Normalization Telemetry
         await meeting_ws_manager.broadcast({
@@ -374,6 +395,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 
         transcript_data: Optional[dict[str, Any]] = None
         if audio_path and Path(audio_path).exists():
+            logger.info(f"[STAGE 1/4] Audio recording detected ({Path(audio_path).name}). Normalizing and transcribing...")
             # Stage 2: Voxtral 4B Diarization Telemetry
             await meeting_ws_manager.broadcast({
                 "type": "post_processing_telemetry",
@@ -386,13 +408,16 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 "detail": "Transcribing speech and translating it into English...",
             })
             try:
+                t_trans = time.time()
                 extractor = AudioExtractor()
                 normalized_path = await asyncio.to_thread(extractor.extract_and_normalize, audio_path)
+                logger.info(f"[STAGE 1/4] Audio normalized to 16kHz -> {normalized_path}")
                 voxtral: VoxtralSpeechEngine = _SESSION_STATE["voxtral"]
                 chunker = ChunkedTranscriber(voxtral)
                 transcript_data = await chunker.transcribe_long_file(normalized_path)
                 has_speech = bool(transcript_data.get("segments") or transcript_data.get("full_transcript"))
                 if not has_speech and gemini_key:
+                    logger.info("[STAGE 1/4] Local speech engine yielded no segments; attempting Gemini cloud transcription fallback...")
                     gemini_transcript = await asyncio.to_thread(
                         summarizer.transcribe_audio_with_gemini, normalized_path, gemini_key
                     )
@@ -407,8 +432,15 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                     transcript_data = await asyncio.to_thread(
                         summarizer.translate_transcript_to_english, transcript_data, gemini_key
                     )
+                    segments_count = len(transcript_data.get("segments", []))
+                    logger.info(
+                        f"[STAGE 1/4] Speech transcription & translation complete in {time.time() - t_trans:.1f}s "
+                        f"({segments_count} segments)."
+                    )
+                else:
+                    logger.warning(f"[STAGE 1/4 WARNING] Audio processed but no speech detected: {transcript_data.get('reason')}")
             except Exception as audio_err:
-                logger.exception(f"Audio transcription failed for {session_id}: {audio_err}")
+                logger.exception(f"[STAGE 1/4 FAILED] Audio transcription failed for {session_id}: {audio_err}")
                 transcript_data = {
                     "full_transcript": "",
                     "segments": [],
@@ -416,6 +448,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                     "reason": "Audio could not be processed, so the report uses screen activity only.",
                 }
         else:
+            logger.info(f"[STAGE 1/4] No audio file present for session {session_id}. Synthesizing from visual steps only.")
             transcript_data = {
                 "full_transcript": "",
                 "segments": [],
@@ -424,11 +457,18 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             }
 
         # Stage 3: Multimodal Reasoning & Visual Synthesis Telemetry
-        active_engine = (
-            f"Gemini ({summarizer.gemini_model})"
-            if gemini_key
-            else f"Ollama ({await asyncio.to_thread(summarizer._resolve_available_ollama_model)})"
-        )
+        try:
+            if gemini_key:
+                active_engine = f"Gemini ({summarizer.gemini_model})"
+            else:
+                resolved_model = await asyncio.to_thread(summarizer._resolve_available_ollama_model)
+                active_engine = f"Ollama ({resolved_model})"
+        except Exception:
+            active_engine = "Local AI"
+
+        logger.info(f"[STAGE 2/4] Multimodal reasoning synthesis starting via {active_engine}...")
+        t_synth = time.time()
+
         await meeting_ws_manager.broadcast({
             "type": "post_processing_telemetry",
             "session_id": session_id,
@@ -450,8 +490,17 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 gemini_api_key=gemini_key,
             ),
         )
+        synth_elapsed = time.time() - t_synth
+        logger.info(
+            f"[STAGE 2/4] Multimodal reasoning synthesis complete in {synth_elapsed:.1f}s "
+            f"(Important Steps: {len(important_steps)}, Custom Fields: {len(custom_fields_res)})."
+        )
 
         # Stage 4: PDF Report Compilation Telemetry
+        pdf_path = str(session_dir / f"deskmate_report_{session_id}.pdf")
+        logger.info(f"[STAGE 3/4] Compiling executive PDF report -> {pdf_path}...")
+        t_pdf = time.time()
+
         await meeting_ws_manager.broadcast({
             "type": "post_processing_telemetry",
             "session_id": session_id,
@@ -463,7 +512,6 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             "detail": "Rendering high-resolution vector PDF report with redacted host UI...",
         })
 
-        pdf_path = str(session_dir / f"deskmate_report_{session_id}.pdf")
         pdf_gen: MeetingPDFGenerator = _SESSION_STATE["pdf_generator"]
         pdf_ok = await loop.run_in_executor(
             None,
@@ -479,6 +527,12 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
                 transcript_data=transcript_data,
             ),
         )
+
+        if pdf_ok and Path(pdf_path).exists():
+            pdf_size_kb = Path(pdf_path).stat().st_size / 1024
+            logger.info(f"[STAGE 3/4] Executive PDF report compiled successfully in {time.time() - t_pdf:.1f}s ({pdf_size_kb:.1f} KB).")
+        else:
+            logger.warning("[STAGE 3/4 WARNING] PDF generator reported failure or output file missing.")
 
         # Stage 5: Completed Telemetry
         await meeting_ws_manager.broadcast({
@@ -508,6 +562,7 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         if pdf_ok:
             report_data["pdf_generated_at"] = datetime.now().astimezone().isoformat()
 
+        logger.info(f"[STAGE 4/4] Saving finalized meeting metadata to {report_file.name}...")
         await asyncio.to_thread(
             lambda: report_file.write_text(json.dumps(report_data, indent=2, default=str), encoding="utf-8")
         )
@@ -516,9 +571,16 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         if req.purge_raw_assets_after:
             exporter: MeetingExportService = _SESSION_STATE["export_service"]
             await asyncio.to_thread(exporter.purge_raw_assets, session_id)
+            logger.info(f"[ACTION] Purged raw screenshot assets for session {session_id} to conserve disk space.")
 
-        # Auto-clean older sessions beyond 15
+        # Auto-clean older sessions beyond 10
         await asyncio.to_thread(_SESSION_STATE["export_service"].cleanup_old_sessions, max_keep=MAX_RETAINED_SESSIONS)
+
+        total_elapsed = time.time() - t_start
+        logger.info(
+            f"[SUCCESS] Summarization pipeline completed for session {session_id} in {total_elapsed:.1f}s! "
+            f"Title: \"{meeting_title or 'Untitled'}\" | Important Steps: {len(important_steps)} | PDF: {'Yes' if pdf_ok else 'No'}"
+        )
 
         return {
             "session_id": session_id,
@@ -533,11 +595,13 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
             "pdf_url": f"/api/meeting/pdf/{session_id}" if pdf_ok else None,
         }
     except NothingToSummarizeError as e:
+        logger.warning(f"[FAILED] Summarization impossible for session {session_id}: {e}")
         raise HTTPException(status_code=422, detail=str(e))
     except SummarizationUnavailableError as e:
+        logger.error(f"[FAILED] AI Summarization unavailable for session {session_id}: {e}")
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.exception(f"Summarization error: {e}")
+        logger.exception(f"[FAILED] Summarization pipeline failed for session {session_id}: {e}")
         raise HTTPException(
             status_code=500,
             detail="Summarization failed. Your recording is saved, so you can retry from this screen.",
@@ -560,9 +624,9 @@ async def get_session_asset(session_id: str, filename: str):
     raise HTTPException(status_code=404, detail="Asset not found")
 
 
-@router.get("/pdf/{session_id}")
+@router.api_route("/pdf/{session_id}", methods=["GET", "HEAD"])
 async def download_meeting_pdf(session_id: str):
-    """Stream DeskMate-branded executive PDF report."""
+    """Stream DeskMate-branded executive PDF report for inline preview or download."""
     if "/" in session_id or "\\" in session_id or ".." in session_id:
         raise HTTPException(status_code=400, detail="Invalid session ID")
     output_dir = Path(_SESSION_STATE["output_dir"])
@@ -571,6 +635,7 @@ async def download_meeting_pdf(session_id: str):
         return FileResponse(
             str(pdf_path),
             media_type="application/pdf",
+            content_disposition_type="inline",
             filename=f"DeskMate_Meeting_Report_{session_id}.pdf",
         )
     raise HTTPException(status_code=404, detail="Meeting PDF not found. Please summarize first.")
@@ -579,6 +644,7 @@ async def download_meeting_pdf(session_id: str):
 @router.post("/export-drive")
 async def export_meeting_to_drive(req: ExportDriveRequest):
     """Upload generated meeting PDF to Google Drive."""
+    logger.info(f"[START] Exporting meeting report to Google Drive for session {req.session_id} (Folder: '{req.folder_name}')")
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
@@ -588,13 +654,17 @@ async def export_meeting_to_drive(req: ExportDriveRequest):
         req.folder_name,
     )
     if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("message", "Upload failed"))
+        err_msg = result.get("message", "Upload failed")
+        logger.error(f"[FAILED] Google Drive export failed for session {req.session_id}: {err_msg}")
+        raise HTTPException(status_code=500, detail=err_msg)
+    logger.info(f"[SUCCESS] Meeting report exported to Google Drive for session {req.session_id} -> File ID: {result.get('file_id')}")
     return result
 
 
 @router.post("/send-email")
 async def send_meeting_email(req: SendEmailRequest):
     """Email executive meeting summary and attached PDF via Gmail."""
+    logger.info(f"[START] Sending meeting email for session {req.session_id} to '{req.to_email}' (Subject: '{req.subject}')")
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
@@ -612,13 +682,17 @@ async def send_meeting_email(req: SendEmailRequest):
         ),
     )
     if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("message", "Email failed"))
+        err_msg = result.get("message", "Email failed")
+        logger.error(f"[FAILED] Email delivery failed for session {req.session_id}: {err_msg}")
+        raise HTTPException(status_code=500, detail=err_msg)
+    logger.info(f"[SUCCESS] Email delivered successfully for session {req.session_id} to '{req.to_email}'.")
     return result
 
 
 @router.post("/cleanup")
 async def cleanup_sessions(req: CleanupSessionsRequest):
     """Perform disk cleanup and enforce session retention."""
+    logger.info(f"[ACTION] Manual session cleanup requested (max_keep: {req.max_keep})")
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
     result = await asyncio.to_thread(exporter.cleanup_old_sessions, max_keep=req.max_keep)
     return result
@@ -627,6 +701,8 @@ async def cleanup_sessions(req: CleanupSessionsRequest):
 @router.post("/sync-tasks")
 async def sync_action_items_to_tasks(req: SyncTasksRequest):
     """Save extracted meeting action items into DeskMate's SQLite tasks database."""
+    items_count = len(req.action_items)
+    logger.info(f"[START] Syncing {items_count} action items to tasks database for session {req.session_id}")
     try:
         saved_count = 0
         for item in req.action_items:
@@ -642,9 +718,10 @@ async def sync_action_items_to_tasks(req: SyncTasksRequest):
                 if res and (res.get("id") or res.get("status") == "success"):
                     saved_count += 1
 
+        logger.info(f"[SUCCESS] Created {saved_count}/{items_count} SQLite tasks for session {req.session_id}.")
         return {"status": "synced", "tasks_created": saved_count}
     except Exception as e:
-        logger.exception(f"Failed to sync action items to tasks: {e}")
+        logger.exception(f"[FAILED] Failed to sync action items to tasks: {e}")
         raise HTTPException(status_code=500, detail="Task sync failed")
 
 
@@ -673,10 +750,13 @@ async def delete_saved_session(session_id: str):
     """Permanently delete a meeting session and all its disk files."""
     if "/" in session_id or "\\" in session_id or ".." in session_id:
         raise HTTPException(status_code=400, detail="Invalid session ID")
+    logger.info(f"[START] Deleting session {session_id} and all on-disk artifacts...")
     exporter: MeetingExportService = _SESSION_STATE["export_service"]
     res = await asyncio.to_thread(exporter.delete_session, session_id)
     if res.get("status") == "error":
+        logger.error(f"[FAILED] Failed to delete session {session_id}: {res.get('message')}")
         raise HTTPException(status_code=500, detail="Deletion failed")
+    logger.info(f"[SUCCESS] Session {session_id} deleted successfully.")
     return res
 
 

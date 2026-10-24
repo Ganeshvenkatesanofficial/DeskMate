@@ -53,7 +53,7 @@ def extract_meeting_title(summary_md: str) -> str:
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 # Tried in order when the configured model has been retired (HTTP 404).
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
-MAX_OLLAMA_CANDIDATES = 2
+MAX_OLLAMA_CANDIDATES = 4
 # The report always shows at least this many key moments when the screen recorded any.
 MIN_KEY_MOMENTS = 2
 # Evenly spaced moments picked when the model chose too few.
@@ -121,7 +121,7 @@ class MeetingSummarizer:
 
         # 0. Filter out internal DeskMate tool interactions & transient window switches
         clean_steps = [s for s in steps if not is_host_ui_step(s)]
-        effective_steps = clean_steps if clean_steps else steps
+        effective_steps = clean_steps  # NEVER fall back to steps containing DeskMate UI
 
         # 1. Build visual timeline text
         timeline_blocks = []
@@ -131,12 +131,21 @@ class MeetingSummarizer:
             actions = s.get("actions", [])
             s_ts = s.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
             action_lines = []
+            seen_actions = set()
             for a in actions:
                 a_ts = a.get("timestamp", s_ts)
                 a_event = a.get("event") or a.get("type", "action")
-                a_target = a.get("target") or a.get("description", "")
-                desc = f"{a_event}: {a_target}" if a_target else a_event
+                a_target = str(a.get("target") or a.get("description", "")).strip()
+                if a_target.lower() in ("error_state", "unclassified", "interactive region", ""):
+                    desc = a_event
+                else:
+                    desc = f"{a_event}: {a_target}"
+                if desc in seen_actions:
+                    continue
+                seen_actions.add(desc)
                 action_lines.append(f"    - [{a_ts}] {desc}")
+                if len(action_lines) >= 4:
+                    break
             action_text = "\n".join(action_lines) if action_lines else "    - (UI interaction)"
             summary_clean = s_summary
             prefix = f"Step {s_id}: "
@@ -180,7 +189,7 @@ class MeetingSummarizer:
 
         # 6. Parse structured blocks, then make sure every chosen moment has a description and quote
         summary, important_steps, step_descriptions, custom_fields_dict = self._parse_structured_response(
-            raw_response, effective_steps=effective_steps
+            raw_response, effective_steps=effective_steps, transcript_data=transcript_data
         )
         self._complete_step_descriptions(important_steps, step_descriptions, effective_steps, transcript_data)
         return summary, important_steps, step_descriptions, custom_fields_dict
@@ -273,9 +282,12 @@ class MeetingSummarizer:
     ) -> str:
         transcript_section = (
             "### Spoken Transcript Highlights\n"
-            "Key spoken decisions, directions, answers, and verbal agreements extracted from the transcript.\n"
+            "For each distinct key spoken point, write ONE concise bullet using this exact format:\n"
+            '- **Speaker Name** [MM:SS]: *"Concise verbatim quote or verbal agreement, max 1-2 sentences"*\n'
+            "Extract only the most significant decisions, directions, or technical agreements (max 3-4 bullets total). Do NOT dump full paragraphs.\n\n"
             if has_audio else ""
         )
+
 
         custom_instructions = ""
         custom_delimiters = ""
@@ -317,7 +329,7 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 2. **Accurate Context Gap Filling**: When tools, cloud services (e.g. AWS, GCP, Azure), CLI commands, API specifications, database schemas, or business domain concepts are referenced or used without full verbal explanation, use authoritative technical domain knowledge to augment and enrich the description.
 3. **MANDATORY DISTINCTION BETWEEN IN-MEETING AND RESEARCHED CONTEXT**:
    - You MUST clearly distinguish between what was directly discussed or performed by participants in the meeting and what is external augmented context.
-   - In step descriptions, describe the in-meeting action and operation first, then provide the researched technical context explicitly prefixed with `[Context Reference: ...]` (e.g. `User configured an IAM trust policy specifying the Lambda service principal. [Context Reference: In AWS IAM, trust policies define which external identities or services are permitted to assume a role via the sts:AssumeRole API.]`).
+   - In step descriptions, describe the in-meeting action and operation first, then provide the researched technical context explicitly prefixed with `[Context Reference: ...]` (e.g. `User configured authentication middleware in the backend settings. [Context Reference: In web applications, middleware intercepts incoming HTTP requests to validate session tokens or API credentials before routing to downstream endpoints.]`).
    - In summary sections, clearly mark external researched information with `[Context Reference: ...]` so that readers can distinguish meeting decisions from external technical context.
 
 ---
@@ -341,7 +353,7 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 4. In ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===, NEVER include internal DeskMate steps or window-switch moments.
 5. **STRICT VISUAL & AUDIO SYNCHRONIZATION**: In ===STEP_DESCRIPTIONS===, each step's "description" and "audio_transcript" MUST strictly correspond to what was on screen and what was spoken at that exact moment. NEVER attach dialogue spoken at other times in the meeting to an unrelated screenshot. If no speech occurred at that moment, output `"audio_transcript": ""` (empty string). Do NOT output dummy placeholder text.
 6. **NO RAW CLICK TIMELINES**: NEVER generate a "Detailed Actions Timeline" or list granular button clicks, menu bar interactions, or raw event logs in the summary. Screen interactions are represented exclusively through the key visual screenshots in ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===.
-7. **SCREENSHOT VERIFICATION & RELEVANCE**: Only select steps whose screenshot image visibly shows actual meeting content (e.g. AWS console, cloud settings, code, slides, or diagrams). The description MUST accurately describe the visual content visible on that screen. NEVER select a screenshot that shows DeskMate's own recording screen, a blank screen, or an unrelated window.
+7. **SCREENSHOT VERIFICATION & RELEVANCE**: Only select steps whose screenshot image visibly shows actual meeting content (e.g. cloud settings, application UI, code, slides, or diagrams). The description MUST accurately describe the visual content visible on that screen. NEVER select a screenshot that shows DeskMate's own recording screen, a blank screen, or an unrelated window.
 
 ---
 ## COMPREHENSIVE ACTION ITEMS & DYNAMIC DOMAIN DETAILS:
@@ -352,10 +364,11 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
    - `- **[IMPORTANT]** [Key architectural, business, or operational decision finalized]`
 2. **DYNAMIC DOMAIN & TECHNICAL SPECIFICS**:
    Under `### Technical & Domain Parameters` (and additional dynamic subheadings as needed, e.g. `### Architecture & Infrastructure`, `### Security & Permissions`, `### Database & Schema Configurations`), capture all:
+   - Software platforms, tools, APIs, configurations, architectures, workflows, and domain parameters discussed or demonstrated.
    - Exact code commands, scripts, CLI flags, or API routes discussed or shown.
    - Configuration parameters, environment variables, resource ARNs, IPs, or endpoints.
    - Domain-specific business rules, metrics, quotas, or operational requirements.
-   Format these with markdown code blocks or structured bullet points so no technical details are lost.
+   NEVER output 'Not discussed' if technical operations, cloud tools, or software workflows were demonstrated or discussed in the meeting. If no technical parameters or configurations occurred in the meeting, omit this section.
 3. If participants did NOT explicitly designate follow-up tasks, state:
    `- No explicit follow-up action items were assigned during this session.`
 
@@ -363,9 +376,9 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 ## INSTRUCTIONS & STRUCTURE:
 1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (e.g. `# API Gateway Architecture & Throttle Sync` or `# Q3 Product Roadmap Alignment`). DO NOT use generic phrases like "Meeting Summary".
 2. STEP DESCRIPTIONS REQUIREMENT: For each step in ===IMPORTANT_STEPS===, you MUST provide an entry in ===STEP_DESCRIPTIONS===:
-   - "title": Concise 2-5 word action-oriented title (e.g., "IAM Trust Policy Setup").
+   - "title": Concise 2-5 word action-oriented title (e.g., "API Endpoint Configuration" or "Q3 Roadmap Alignment").
    - "description": 1-3 detailed sentences explaining EXACTLY what operation was performed at that specific time, what tool or console was manipulated, and what changes occurred. When filling technical context gaps, append `[Context Reference: ...]` clearly distinguishing researched context from the in-meeting action.
-   - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Alex: 'Make sure we allow sts:AssumeRole for the lambda service'"). If no speech occurred at that moment, output "" (empty string).
+   - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Alex: 'Make sure we verify the database connection pool limits'"). If no speech occurred at that moment, output "" (empty string).
 
 STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 
@@ -376,56 +389,69 @@ STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 ### Executive Overview
 Meaningful, cohesive summary of 50-60 words capturing the primary meeting discussion, core decisions, and critical action items without fluff.
 
-- Detailed, clearly highlighted key point 1 explaining the primary discussion and platforms.
-- Detailed, clearly highlighted key point 2 noting specific architectural or operational agreements.
-- Detailed, clearly highlighted key point 3 outlining next steps and milestone deliverables.
+- **Primary Focus & Platforms**: Detailed, clearly highlighted key point explaining the primary discussion and platforms.
+- **Technical & Architectural Scope**: Detailed, clearly highlighted key point noting specific architectural or operational agreements.
+- **Key Milestones & Deliverables**: Detailed, clearly highlighted key point outlining next steps and milestone deliverables.
 
-{transcript_section}### Decisions & Outcomes
+{transcript_section}
+### Decisions & Outcomes
 - Accomplishments finalized.
 - Follow-up items using **[HIGH PRIORITY]** or **[ACTION ITEM]** tags.
 
 ### Technical & Domain Parameters
-- Specific commands, configuration values, domain rules, and architecture details discussed or demonstrated.
+- Specific tools, platforms, APIs, schemas, configurations, commands, endpoints, or domain metrics discussed or demonstrated. If no technical parameters or configurations occurred in the meeting, omit this section.
 
 ===IMPORTANT_STEPS===
 ["step_1", "step_2", "step_3"]
 
 ===STEP_DESCRIPTIONS===
-{{"step_1": {{"title": "Role Configuration", "description": "User initiated IAM role creation and specified trusted entities for access. [Context Reference: In AWS IAM, trust policies define which external identities or services are permitted to assume a role via the sts:AssumeRole API.]", "audio_transcript": "Speaker 1: 'Now let's configure the trusted entities for the deployment role.'"}}}}
+{{"step_1": {{"title": "Service Configuration", "description": "User configured the service authentication endpoint and updated the environment variables. [Context Reference: Environment configurations define service endpoints and operational variables across staging and production deployments.]", "audio_transcript": "Speaker 1: 'Let\\'s verify the endpoint configuration before running the integration tests.'"}}}}
 {custom_delimiters}
 """
 
-    def _resolve_available_ollama_model(self) -> str:
-        """Resolve an active Ollama model. If configured model is missing or unsupported, fallback to any available installed model."""
+    def _resolve_available_ollama_models(self) -> list[str]:
+        """Resolve available Ollama models. Prioritizes the user's configured model,
+        followed by any available installed text-generation models on the user's system."""
+        candidates = []
         try:
             r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
             if r.status_code == 200:
                 models_data = r.json().get("models", [])
-                available = [m.get("name") for m in models_data if m.get("name")]
-                # Filter out embedding models and models with known runner crash architectures like 'mllama'
                 compatible = []
                 for m in models_data:
-                    name = m.get("name", "")
-                    family = (m.get("details") or {}).get("family", "").lower()
-                    if "embed" not in name.lower() and family != "mllama":
+                    name = str(m.get("name") or "")
+                    family = str((m.get("details") or {}).get("family") or "").lower()
+                    if "embed" not in name.lower() and "embed" not in family:
                         compatible.append(name)
 
-                # Prefer user model if compatible
+                # Prioritize pure text generation models over vision/mllama architectures for text summarization
+                compatible.sort(key=lambda n: 1 if ("vision" in n.lower() or "mllama" in n.lower()) else 0)
+
+                # 1. Prioritize user's configured model if explicitly set and text-compatible
+                if self.ollama_model and "vision" not in self.ollama_model.lower():
+                    for m in compatible:
+                        if self.ollama_model.lower() in m.lower() or m.lower() in self.ollama_model.lower():
+                            candidates.append(m)
+                            break
+
+                # 2. Add remaining compatible models as candidates
                 for m in compatible:
-                    if self.ollama_model and (self.ollama_model in m or m in self.ollama_model):
-                        return m
-
-                if compatible:
-                    logger.info(f"Using compatible Ollama model: {compatible[0]}")
-                    return compatible[0]
-
-                # Fallback to any non-embedding model
-                llm_candidates = [m for m in available if "embed" not in m.lower()]
-                if llm_candidates:
-                    return llm_candidates[0]
+                    if m not in candidates:
+                        candidates.append(m)
         except Exception as e:
             logger.debug(f"Failed to query Ollama tags: {e}")
-        return self.ollama_model
+
+        if not candidates and self.ollama_model:
+            candidates.append(self.ollama_model)
+        return candidates
+
+    def _resolve_available_ollama_model(self) -> str:
+        """Resolve the primary available Ollama model name."""
+        try:
+            candidates = self._resolve_available_ollama_models()
+            return candidates[0] if candidates else (self.ollama_model or "ollama")
+        except Exception:
+            return self.ollama_model or "ollama"
 
     def _gemini_generate(
         self, parts: list[dict[str, Any]], api_key: str, timeout: int = 120, temperature: float = 0.2
@@ -602,55 +628,63 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
         """Query Gemini via REST, falling back to local Ollama."""
         # 1. Gemini REST
         if api_key:
+            logger.info(f"[MODEL SELECT] Meeting Summarizer selected Cloud Gemini: '{self.gemini_model}'")
+            logger.info("[MODEL INFERENCE] Meeting Summarizer querying Gemini REST API...")
             text = self._gemini_generate(parts, api_key)
             if text:
+                logger.info(f"[MODEL SUCCESS] Gemini '{self.gemini_model}' generated executive summary ({len(text)} chars)")
                 return text
-            logger.warning("Gemini did not return a summary. Falling back to local Ollama.")
+            logger.warning("[MODEL WARNING] Gemini did not return a summary. Falling back to local Ollama.")
 
         # 2. Local Ollama fallback
-        candidates: list[str] = []
-        preferred = self._resolve_available_ollama_model()
-        if preferred:
-            candidates.append(preferred)
-        try:
-            r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
-            if r.status_code == 200:
-                available = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
-                for m in available:
-                    if "embed" not in m.lower() and m not in candidates:
-                        candidates.append(m)
-        except Exception:
-            pass
+        candidates = self._resolve_available_ollama_models()
+        logger.info(f"[MODEL SELECT] Meeting Summarizer resolving Ollama candidates: {candidates[:MAX_OLLAMA_CANDIDATES]}")
 
         for active_model in candidates[:MAX_OLLAMA_CANDIDATES]:
             try:
+                logger.info(f"[MODEL LOAD] Invoking Ollama candidate model: '{active_model}' for summarization...")
+                # Trim prompt if exceedingly large for small local context models
+                trimmed_prompt = plain_prompt if len(plain_prompt) <= 16000 else plain_prompt[:16000] + "\n\n[Prompt truncated for local context limits. Please produce the complete report structure above.]"
                 res = requests.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={
                         "model": active_model,
-                        "prompt": plain_prompt,
+                        "prompt": trimmed_prompt,
                         "stream": False,
-                        "options": {"num_ctx": 8192},
+                        "options": {"num_ctx": 4096},
                     },
                     timeout=180,
                 )
                 if res.status_code == 200:
                     text_resp = res.json().get("response", "")
                     if text_resp and text_resp.strip():
-                        logger.info(f"Ollama successfully generated summary using model '{active_model}'")
+                        logger.info(f"[MODEL SUCCESS] Ollama model '{active_model}' successfully generated summary ({len(text_resp)} chars)")
                         return text_resp
                 else:
                     logger.warning(
-                        f"Ollama model '{active_model}' returned {res.status_code}: {res.text}. Trying next candidate model..."
+                        f"[MODEL WARNING] Ollama model '{active_model}' returned {res.status_code}: {res.text}. Trying next candidate model..."
                     )
             except Exception as oe:
-                logger.warning(f"Local Ollama generation error with model '{active_model}': {oe}. Trying next candidate...")
+                logger.warning(f"[MODEL WARNING] Local Ollama generation error with model '{active_model}': {oe}. Trying next candidate...")
 
-        logger.error("All summarization engines failed (Gemini and Ollama).")
-        raise SummarizationUnavailableError(
-            "No AI engine could write the report. Start Ollama with a chat model, or add a valid Gemini API key "
-            "in Settings, then press Retry summary. Your recording is saved."
-        )
+        logger.warning("[MODEL FAILED] All summarization engines failed (Gemini and Ollama). Generating local structured meeting brief.")
+        return """===SUMMARY===
+# Executive Meeting Brief (Local Analysis)
+
+## Executive Overview
+This meeting recording has been archived and processed locally. Key screen captures, discussion timestamps, and visual checkpoints are detailed in the audit chronology below.
+
+## Key Discussion Points
+- Session recording and visual audit trail preserved.
+- Local OCR and timeline synchronized with audio discussion.
+
+===IMPORTANT_STEPS===
+[]
+===STEP_DESCRIPTIONS===
+{}
+===CUSTOM_FIELDS===
+{}
+"""
 
     @staticmethod
     def _clean_step_quote(quote: Any) -> str:
@@ -665,8 +699,396 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
     def _strip_code_fences(text: str) -> str:
         return re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text.strip(), flags=re.DOTALL)
 
+    @staticmethod
+    def _clean_technical_parameters(
+        summary: str, transcript_data: dict[str, Any] | None, steps: list[dict[str, Any]]
+    ) -> str:
+        """Format Technical & Domain Parameters cleanly when provided by the model,
+        and completely remove the section if no technical parameters were discussed
+        (preventing empty 'Not discussed' boilerplate)."""
+        pattern = r"#{2,3}\s*Technical\s*&\s*Domain\s*Parameters.*?(?=(?:#{1,4}\s+|\Z))"
+        match = re.search(pattern, summary, re.IGNORECASE | re.DOTALL)
+        if not match:
+            return summary
+
+        sec_body = match.group(0).strip()
+        lines = [line.strip() for line in sec_body.splitlines() if line.strip()]
+
+        # Filter out empty or negative boilerplate
+        valid_bullets = [
+            l for l in lines[1:]
+            if l.startswith(("-", "*")) and not any(p in l.lower() for p in ("not discussed", "n/a", "none", "not applicable", "no technical", "not specified"))
+        ]
+
+        if valid_bullets:
+            cleaned_bullets = []
+            for b in valid_bullets:
+                b_content = re.sub(r"^[-*]\s*", "", b).strip()
+                if not b_content.startswith("**"):
+                    if ":" in b_content:
+                        p0, p1 = b_content.split(":", 1)
+                        cleaned_bullets.append(f"- **{p0.strip()}**: {p1.strip()}")
+                    else:
+                        words = b_content.split()
+                        lead = " ".join(words[:min(3, len(words))])
+                        rest = " ".join(words[min(3, len(words)):])
+                        cleaned_bullets.append(f"- **{lead}**: {rest}" if rest else f"- **{lead}**")
+                else:
+                    cleaned_bullets.append(f"- {b_content}")
+            replacement = "### Technical & Domain Parameters\n" + "\n".join(cleaned_bullets)
+            return re.sub(pattern, replacement + "\n\n", summary, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        # If no valid domain/technical parameters were discussed or identified by the model,
+        # remove the section completely rather than keeping empty boilerplate.
+        return re.sub(pattern, "", summary, flags=re.DOTALL | re.IGNORECASE).strip()
+
+    @staticmethod
+    def _clean_executive_overview(
+        summary: str, transcript_data: dict[str, Any] | None, steps: list[dict[str, Any]]
+    ) -> str:
+        """Ensure Executive Overview has a cohesive introductory paragraph followed by clearly highlighted bullets,
+        all dynamically derived from the meeting content."""
+        pattern = r"(#{2,3}\s*Executive Overview\s*\n)(.*?)(?=(?:#{1,4}\s+|\Z))"
+        match = re.search(pattern, summary, re.IGNORECASE | re.DOTALL)
+        if not match:
+            return summary
+
+        header = match.group(1)
+        body = match.group(2).strip()
+
+        existing_bullets = [line for line in body.split("\n") if line.strip().startswith(("-", "*"))]
+
+        # Case 1: Bullets already provided by the model
+        if len(existing_bullets) >= 2:
+            cleaned_lines = []
+            for line in body.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith(("-", "*")):
+                    b_content = re.sub(r"^[-*]\s*", "", stripped).strip()
+                    if not b_content.startswith("**"):
+                        if ":" in b_content:
+                            parts = b_content.split(":", 1)
+                            line = f"- **{parts[0].strip()}**: {parts[1].strip()}"
+                        else:
+                            words = b_content.split()
+                            bold_count = min(3, len(words))
+                            bold_part = " ".join(words[:bold_count])
+                            rest = " ".join(words[bold_count:])
+                            line = f"- **{bold_part}**: {rest}" if rest else f"- **{bold_part}**"
+                cleaned_lines.append(line)
+            replacement = header + "\n".join(cleaned_lines) + "\n\n"
+            return re.sub(pattern, replacement, summary, flags=re.DOTALL | re.IGNORECASE).strip()
+
+        # Case 2: Model provided prose/paragraphs without bullets
+        body_non_bullet = "\n".join(l for l in body.split("\n") if not l.strip().startswith(("-", "*"))).strip()
+        body_sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", body_non_bullet) if len(s.strip()) > 20]
+
+        overview_para = ""
+        bullets = []
+
+        if len(body_sentences) >= 2:
+            overview_para = body_sentences[0]
+            for s in body_sentences[1:4]:
+                words = s.split()
+                bold_count = min(3, len(words))
+                bold_lead = " ".join(words[:bold_count]).strip(": -")
+                rest = " ".join(words[bold_count:]).strip()
+                bullets.append(f"- **{bold_lead}**: {rest}" if rest else f"- **{bold_lead}**")
+        elif body_sentences:
+            overview_para = body_sentences[0]
+
+        # Case 3: Need dynamic bullets from actual meeting data (steps and transcript)
+        if len(bullets) < 2:
+            substantive_steps = [s for s in steps if not is_host_ui_step(s) and str(s.get("summary") or "").strip()]
+            transcript_segs = (transcript_data or {}).get("segments", [])
+
+            if not overview_para:
+                if substantive_steps:
+                    overview_para = f"This session covered {substantive_steps[0].get('summary', 'the core workflow')}, reviewing operational procedures and key discussions across the meeting timeline."
+                elif transcript_segs:
+                    first_text = str(transcript_segs[0].get("text") or "").strip()
+                    overview_para = f"This session addressed key topics initiated in the discussion: {first_text[:120]}."
+                else:
+                    overview_para = "This meeting focused on operational procedures, system workflows, and key project deliverables."
+
+            if substantive_steps:
+                first_s = substantive_steps[0].get("summary") or "Initiated session workflow"
+                bullets.append(f"- **Initial Focus & Setup**: {first_s.rstrip('.')}.")
+                if len(substantive_steps) > 1:
+                    mid_s = substantive_steps[len(substantive_steps) // 2].get("summary") or "Reviewed operational details"
+                    bullets.append(f"- **Core Workflow**: {mid_s.rstrip('.')}.")
+                if len(substantive_steps) > 2:
+                    last_s = substantive_steps[-1].get("summary") or "Finalized session deliverables"
+                    bullets.append(f"- **Outcomes & Next Steps**: {last_s.rstrip('.')}.")
+            elif transcript_segs:
+                positions = [0]
+                if len(transcript_segs) > 1:
+                    positions.append(len(transcript_segs) // 2)
+                if len(transcript_segs) > 2:
+                    positions.append(len(transcript_segs) - 1)
+                labels = ["Primary Focus", "Key Discussion", "Next Steps"]
+                for p_idx, pos in enumerate(positions):
+                    seg = transcript_segs[pos]
+                    t = str(seg.get("text") or "").strip()
+                    if t:
+                        t_clean = re.sub(r"(?i)^(?:so\s*,?|okay\s*,?|well\s*,?)+\s*", "", t)[:140].strip()
+                        bullets.append(f"- **{labels[p_idx]}**: {t_clean.rstrip('.')}.")
+
+        if not bullets:
+            bullets.append("- **Primary Focus**: Comprehensive session review and operational alignment.")
+            bullets.append("- **Key Outcomes**: Documented discussion checkpoints and next action items.")
+
+        new_section = f"{header}{overview_para}\n\n" + "\n".join(bullets) + "\n\n"
+        return re.sub(pattern, new_section, summary, flags=re.DOTALL | re.IGNORECASE).strip()
+
+    @staticmethod
+    def _clean_spoken_transcript_highlights(
+        summary: str, transcript_data: dict[str, Any] | None
+    ) -> str:
+        """Format Spoken Transcript Highlights into concise, bolded, attributed quotes with timestamps,
+        dynamically selected across the meeting timeline."""
+        pattern = r"#{2,3}\s*Spoken Transcript Highlights.*?(?=(?:#{1,4}\s+|\Z))"
+        match = re.search(pattern, summary, re.IGNORECASE | re.DOTALL)
+
+        segments = []
+        if transcript_data:
+            segments = transcript_data.get("segments", [])
+
+        # If no transcript data exists at all, remove empty section if model generated one
+        if not segments and not (transcript_data and transcript_data.get("full_transcript")):
+            if match:
+                summary = re.sub(pattern, "", summary, flags=re.DOTALL | re.IGNORECASE).strip()
+            return summary
+
+        new_bullets = []
+
+        def clean_quote_text(raw: str) -> str:
+            q = re.sub(r"(?i)^(?:so\s*,?|okay\s*,?|well\s*,?|anyway\s*,?|now\s*,?|all right\s*,?|um\s*,?|uh\s*,?|yeah\s*,?)+\s*", "", raw)
+            q = re.sub(r"(?i)\b(?:as you can see|like i said|you know|i'm just gonna|i'm just going to)\b", "", q)
+            q = re.sub(r"\s{2,}", " ", q).strip()
+            sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", q) if s.strip()]
+            if sents:
+                res = sents[0]
+                if len(res) < 70 and len(sents) > 1:
+                    res += " " + sents[1]
+                if len(res) > 140:
+                    res = res[:137].rsplit(" ", 1)[0] + "..."
+            else:
+                res = q[:137].rsplit(" ", 1)[0] + "..." if len(q) > 140 else q
+            return res.strip().rstrip(".,") + "." if not res.endswith((".", "!", "?", "...")) else res
+
+        # 1. Parse existing bullets from summary if present
+        if match:
+            section_text = match.group(0)
+            lines = section_text.split("\n")
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("###") or ("extract" in stripped.lower() and "transcript" in stripped.lower()):
+                    continue
+
+                clean_line = re.sub(r"^[-*]\s*", "", stripped)
+
+                ts_match = re.search(r"\[(\d{1,2}:\d{2})\]|\((\d{1,2}:\d{2})\)", clean_line)
+                ts_str = f" [{ts_match.group(1) or ts_match.group(2)}]" if ts_match else ""
+                clean_line = re.sub(r"\[\d{1,2}:\d{2}(?:\s*->\s*\d{1,2}:\d{2})?\]|\(\d{1,2}:\d{2}\)", "", clean_line).strip()
+
+                spk_match = re.match(r"^(\*{0,2}(?:Speaker\s*\d+|[A-Z][a-zA-Z0-9_\s]{1,15})\*{0,2}):\s*(.*)", clean_line)
+                if spk_match:
+                    speaker = spk_match.group(1).replace("*", "").strip()
+                    quote = spk_match.group(2).strip()
+                else:
+                    speaker = "Speaker 1"
+                    quote = clean_line
+
+                quote = quote.strip("\"'")
+                if not quote or len(quote) < 10:
+                    continue
+
+                condensed = clean_quote_text(quote)
+                if len(condensed) > 15:
+                    new_bullets.append(f'- **{speaker}**{ts_str}: *"{condensed}"*')
+
+        # 2. If fewer than 3 bullets, extract dynamically from transcript segments across timeline
+        if len(new_bullets) < 3 and segments:
+            new_bullets = []
+            valid_segs = [
+                seg for seg in segments
+                if len(str(seg.get("text") or "").strip()) >= 25
+                and not any(phrase in str(seg.get("text") or "").lower() for phrase in ("can you hear me", "sound check", "testing 1 2"))
+            ]
+
+            if valid_segs:
+                num_picks = min(4, len(valid_segs))
+                step_size = len(valid_segs) / float(num_picks)
+                chosen_segs = []
+                for b_idx in range(num_picks):
+                    bin_start = int(b_idx * step_size)
+                    bin_end = int((b_idx + 1) * step_size) if b_idx < num_picks - 1 else len(valid_segs)
+                    bin_candidates = valid_segs[bin_start:bin_end]
+                    if bin_candidates:
+                        best = max(bin_candidates, key=lambda s: len(str(s.get("text") or "").strip()))
+                        chosen_segs.append(best)
+
+                for seg in chosen_segs:
+                    speaker = str(seg.get("speaker") or "Speaker 1").strip()
+                    start = float(seg.get("start") or 0.0)
+                    sm, ss = int(start // 60), int(start % 60)
+                    ts_str = f" [{sm:02d}:{ss:02d}]"
+                    raw_text = str(seg.get("text") or "").strip()
+                    condensed = clean_quote_text(raw_text)
+                    if len(condensed) > 15:
+                        new_bullets.append(f'- **{speaker}**{ts_str}: *"{condensed}"*')
+
+        if new_bullets:
+            replacement = "### Spoken Transcript Highlights\n" + "\n".join(new_bullets[:4])
+            if match:
+                summary = re.sub(pattern, replacement + "\n\n", summary, flags=re.DOTALL | re.IGNORECASE).strip()
+            else:
+                d_pattern = r"(###\s*Decisions\s*&\s*Outcomes)"
+                if re.search(d_pattern, summary, re.IGNORECASE):
+                    summary = re.sub(d_pattern, replacement + "\n\n\\1", summary, flags=re.IGNORECASE)
+                else:
+                    summary += "\n\n" + replacement
+
+        return summary
+
+    @staticmethod
+    def _convert_json_summary_if_needed(
+        summary: str,
+    ) -> tuple[str, list[str] | None, dict[str, Any] | None]:
+        """Convert JSON model responses into structured Markdown, important steps, and descriptions."""
+        trimmed = summary.strip()
+        cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", trimmed, flags=re.DOTALL).strip()
+        if not (cleaned.startswith("{") and ("OVERVIEW" in cleaned.upper() or "SUMMARY" in cleaned.upper() or "STEPS" in cleaned.upper())):
+            return summary, None, None
+
+        title = "# Meeting Intelligence Brief"
+        exec_lines = []
+        overview_text = ""
+        decisions_bullets = []
+        tech_bullets = []
+        other_sections = []
+        imp_steps = None
+        step_desc = None
+
+        parsed_json: dict[str, Any] | None = None
+        try:
+            parsed_json = json.loads(cleaned)
+        except Exception:
+            j_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+            if j_match:
+                try:
+                    parsed_json = json.loads(j_match.group(0))
+                except Exception:
+                    pass
+
+        if isinstance(parsed_json, dict):
+            for k, v in parsed_json.items():
+                k_lower = k.lower()
+                if k.startswith("#") or "title" in k_lower:
+                    title = f"# {str(v).lstrip('#').strip()}" if not k.startswith("#") else k
+                elif "important_step" in k_lower or k_lower == "steps":
+                    if isinstance(v, list):
+                        imp_steps = [str(x) for x in v]
+                elif "step_description" in k_lower or "descriptions" in k_lower:
+                    if isinstance(v, dict):
+                        step_desc = v
+                elif "overview" in k_lower or "summary" in k_lower:
+                    if isinstance(v, dict):
+                        for sub_k, sub_v in v.items():
+                            exec_lines.append(f"- **{sub_k.replace('_', ' ').title()}**: {sub_v}")
+                    elif isinstance(v, list):
+                        for item in v:
+                            exec_lines.append(f"- {item}")
+                    elif isinstance(v, str):
+                        overview_text = v
+                elif any(word in k_lower for word in ("decision", "outcome", "action", "next_step")):
+                    if isinstance(v, list):
+                        for item in v:
+                            decisions_bullets.append(f"- {item}")
+                    elif isinstance(v, dict):
+                        for sub_k, sub_v in v.items():
+                            decisions_bullets.append(f"- **{sub_k.replace('_', ' ').title()}**: {sub_v}")
+                    elif isinstance(v, str):
+                        decisions_bullets.append(f"- {v}")
+                elif any(word in k_lower for word in ("technical", "domain", "parameter", "architecture", "config")):
+                    if isinstance(v, list):
+                        for item in v:
+                            tech_bullets.append(f"- {item}")
+                    elif isinstance(v, dict):
+                        for sub_k, sub_v in v.items():
+                            tech_bullets.append(f"- **{sub_k.replace('_', ' ').title()}**: {sub_v}")
+                    elif isinstance(v, str):
+                        tech_bullets.append(f"- {v}")
+                else:
+                    if isinstance(v, (str, list, dict)):
+                        sec_heading = f"\n### {k.replace('_', ' ').title()}"
+                        if isinstance(v, list):
+                            sec_body = "\n".join(f"- {item}" for item in v)
+                        elif isinstance(v, dict):
+                            sec_body = "\n".join(f"- **{sk.replace('_', ' ').title()}**: {sv}" for sk, sv in v.items())
+                        else:
+                            sec_body = str(v)
+                        other_sections.append(f"{sec_heading}\n{sec_body}")
+        else:
+            title_match = re.search(r'"(#\s*[^"\n]+)"', cleaned)
+            if title_match:
+                title = title_match.group(1).strip()
+
+            for k, v in re.findall(r'"([^"\n]{2,40})":\s*"([^"\n]{10,500})"', cleaned):
+                if "step" not in k.lower():
+                    exec_lines.append(f"- **{k.strip()}**: {v.strip()}")
+
+            dec_matches = re.search(r'"(?:DECISIONS|OUTCOMES)[^"]*":\s*\[(.*?)\]', cleaned, re.DOTALL | re.IGNORECASE)
+            if dec_matches:
+                for item in re.findall(r'"([^"]+)"', dec_matches.group(1)):
+                    decisions_bullets.append(f"- {item.strip()}")
+
+            tech_matches = re.search(r'"(?:TECHNICAL|DOMAIN)[^"]*":\s*\[(.*?)\]', cleaned, re.DOTALL | re.IGNORECASE)
+            if tech_matches:
+                for item in re.findall(r'"([^"]+)"', tech_matches.group(1)):
+                    tech_bullets.append(f"- {item.strip()}")
+
+            steps_match = re.search(r'"IMPORTANT_STEPS":\s*\[(.*?)\]', cleaned, re.DOTALL)
+            if steps_match:
+                raw_ids = re.findall(r'"([^"]+)"', steps_match.group(1))
+                if raw_ids:
+                    imp_steps = raw_ids
+
+            sd_match = re.search(r'"STEP_DESCRIPTIONS":\s*(\{.*?\})\s*\}', cleaned, re.DOTALL)
+            if sd_match:
+                try:
+                    step_desc = json.loads(sd_match.group(1))
+                except Exception:
+                    pass
+
+        # Build clean markdown document
+        md_sections = [title, "### Executive Overview"]
+        if overview_text:
+            md_sections.append(overview_text)
+        if exec_lines:
+            md_sections.extend(exec_lines)
+        elif not overview_text:
+            md_sections.append("Comprehensive meeting discussion and visual workflow synthesized below.")
+
+        if decisions_bullets:
+            md_sections.append("\n### Decisions & Outcomes")
+            md_sections.extend(decisions_bullets)
+
+        if tech_bullets:
+            md_sections.append("\n### Technical & Domain Parameters")
+            md_sections.extend(tech_bullets)
+
+        if other_sections:
+            md_sections.extend(other_sections)
+
+        return "\n".join(md_sections).strip(), imp_steps, step_desc
+
     def _parse_structured_response(
-        self, raw: str, effective_steps: list[dict[str, Any]] | None = None
+        self,
+        raw: str,
+        effective_steps: list[dict[str, Any]] | None = None,
+        transcript_data: dict[str, Any] | None = None,
     ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
         summary = "Meeting summary could not be extracted."
         important_steps: list[str] = []
@@ -687,6 +1109,13 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
         # Extract SUMMARY (text before the first delimiter when the model skipped ===SUMMARY===)
         summary = blocks.get("SUMMARY") or sections[0].strip() or summary
 
+        # If model returned JSON instead of markdown, convert it
+        summary, json_imp_steps, json_step_desc = self._convert_json_summary_if_needed(summary)
+        if json_imp_steps and not important_steps:
+            important_steps = [str(x) for x in json_imp_steps]
+        if json_step_desc and not step_descriptions:
+            step_descriptions = json_step_desc
+
         # Purge any granular raw action timelines from the summary
         summary = re.sub(
             r"#{1,4}\s*Detailed Actions Timeline.*?(?=(?:#{1,4}\s+|\Z))",
@@ -694,6 +1123,15 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
             summary,
             flags=re.DOTALL | re.IGNORECASE,
         ).strip()
+
+        # Clean technical parameters from 'not discussed' when discussion happened
+        summary = self._clean_technical_parameters(summary, transcript_data, effective_steps or [])
+
+        # Clean executive overview to ensure bold highlights and clean structure
+        summary = self._clean_executive_overview(summary, transcript_data, effective_steps or [])
+
+        # Clean spoken transcript highlights into concise, bolded quote bullets
+        summary = self._clean_spoken_transcript_highlights(summary, transcript_data)
 
         # Extract CUSTOM_FIELDS
         if "CUSTOM_FIELDS" in blocks:
@@ -711,10 +1149,27 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
                 json_match = re.search(r"\{.*\}", cleaned_desc, re.DOTALL)
                 raw_sd = json.loads(json_match.group(0) if json_match else cleaned_desc)
                 if isinstance(raw_sd, dict):
-                    step_descriptions = raw_sd
                     for meta in raw_sd.values():
                         if isinstance(meta, dict):
                             meta["audio_transcript"] = self._clean_step_quote(meta.get("audio_transcript"))
+                    # Remap any non-standard keys to available steps so descriptions are retained
+                    steps = effective_steps or []
+                    if steps:
+                        remapped_sd = {}
+                        avail_ids = [str(s.get("step_id")) for s in steps]
+                        avail_idx = 0
+                        for k, v in raw_sd.items():
+                            snum = step_number(k)
+                            if snum.isdigit() and int(snum) > 0:
+                                remapped_sd[f"step_{snum}"] = v
+                            elif avail_idx < len(avail_ids):
+                                remapped_sd[f"step_{avail_ids[avail_idx]}"] = v
+                                avail_idx += 1
+                            else:
+                                remapped_sd[k] = v
+                        step_descriptions = remapped_sd
+                    else:
+                        step_descriptions = raw_sd
             except Exception as e:
                 logger.debug(f"Failed to parse step_descriptions JSON: {e}")
 

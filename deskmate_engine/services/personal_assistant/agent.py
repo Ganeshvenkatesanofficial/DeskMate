@@ -119,6 +119,7 @@ def get_personal_assistant_agent(
     model_id: Optional[str] = None,
 ) -> ToolCallingAgent:
     """Build and return a Personal Assistant ToolCallingAgent instance."""
+    logger.info(f"[TOOL] Loading {len(ALL_PERSONAL_TOOLS)} personal tools for agent (Model: {model_id or 'default'})...")
     model = get_model(api_key=api_key, model_id=model_id)
 
     agent = ToolCallingAgent(
@@ -176,9 +177,13 @@ def stream_personal_assistant(
         yield done_event
         return
 
+    t_start = time.time()
+    preview = user_input.replace("\n", " ")[:60]
+    logger.info(f"[START] Personal Assistant turn started: '{preview}' (Conv: {conversation_id or 'new'})")
     prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_personal_assistant_agent(api_key=api_key, model_id=model_id)
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id, on_event=on_event)
+    logger.info(f"[SUCCESS] Personal Assistant turn completed in {time.time() - t_start:.2f}s.")
 
 
 def is_genuine_credential(val: Optional[str]) -> bool:

@@ -38,6 +38,8 @@ def _run_generator_in_thread(
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
     try:
+        preview = user_input.replace("\n", " ")[:80]
+        logger.info(f"[{agent_name.upper()} START] Background worker running prompt: '{preview}' (conv_id={conversation_id})")
         for _ in stream_fn(
             user_input=user_input,
             history=history,
@@ -47,8 +49,9 @@ def _run_generator_in_thread(
             on_event=emit,
         ):
             pass
+        logger.info(f"[{agent_name.upper()} SUCCESS] Background worker finished execution for conv_id={conversation_id}")
     except Exception as exc:
-        logger.error(f"Error in {agent_name} execution thread: {exc}", exc_info=True)
+        logger.error(f"[{agent_name.upper()} FAILED] Error in execution thread: {exc}", exc_info=True)
         loop.call_soon_threadsafe(
             queue.put_nowait,
             {"type": "error", "error": friendly_agent_error(exc)},
@@ -67,7 +70,7 @@ async def handle_agent_websocket(
     Handles message framing, keep-alive pings, and thread-safe telemetry queues.
     """
     await websocket.accept()
-    logger.info(f"Client connected to {agent_name} WebSocket")
+    logger.info(f"[WS CONNECT] Client connected to {agent_name} WebSocket")
 
     try:
         while True:
@@ -95,6 +98,9 @@ async def handle_agent_websocket(
             if not conversation_id or not str(conversation_id).strip():
                 conversation_id = generate_conversation_id()
 
+            msg_preview = user_message.replace("\n", " ")[:80]
+            logger.info(f"[{agent_name.upper()} QUERY] New query: '{msg_preview}' (conv_id={conversation_id})")
+
             # Setup async queue and dispatch background execution
             queue: asyncio.Queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
@@ -121,6 +127,6 @@ async def handle_agent_websocket(
                 await websocket.send_json(event)
 
     except WebSocketDisconnect:
-        logger.info(f"Client disconnected from {agent_name} WebSocket")
+        logger.info(f"[WS DISCONNECT] Client disconnected from {agent_name} WebSocket")
     except Exception as exc:
         logger.error(f"Unexpected error in {agent_name} WebSocket: {exc}", exc_info=True)

@@ -39,6 +39,7 @@ from .modules.action_inference import CursorInformedActionInference
 from .modules.step_builder import StepBuilder
 from .modules.locate_anything import LocateAnythingDetector
 from .screen_capture_service import ScreenCapture
+from .step_utils import check_deskmate_recording_frame
 
 
 logger = logging.getLogger("deskmate.live_pipeline")
@@ -234,6 +235,11 @@ class LivePipeline:
         if self._session_start and (time.time() - self._session_start < mi_config.STARTUP_GRACE_SECONDS):
             return
 
+        # Skip any frame that shows DeskMate's own recording screen (red record circle + End Meeting pill)
+        if check_deskmate_recording_frame(frame):
+            self._frames_skipped += 1
+            return
+
         # Stage 1: Spatial Awareness & Safety Mask
         self._spatial_analyzer.detect_sidebar(frame)
         safety_mask = self._spatial_analyzer.get_safety_mask(*frame.shape[:2])
@@ -241,13 +247,13 @@ class LivePipeline:
         # Stage 4: Cursor Detection & Tracking
         cursor_pos, _ = self._cursor_detector.detect(frame, safety_mask)
 
-        # Baseline Frame: Capture initial meeting view right after grace period
+        # Baseline Frame: Capture initial presentation frame once user is on real meeting content
         if not self._has_initial_baseline:
             self._has_initial_baseline = True
             self._last_milestone_time = timestamp
             self._frames_processed += 1
             _, roi_bbox = self._roi_extractor.extract_relevant_roi(frame, cursor_pos, None, safety_mask)
-            event = self._create_event("screen_presentation", "Meeting Initial View", cursor_pos, roi_bbox, frame, timestamp, 1.0)
+            event = self._create_event("screen_presentation", "Presentation Initial View", cursor_pos, roi_bbox, frame, timestamp, 1.0)
             if self._record_event(event):
                 logger.info(f"Captured initial baseline meeting step at {timestamp:.1f}s")
             return

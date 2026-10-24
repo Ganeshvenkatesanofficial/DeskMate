@@ -24,7 +24,8 @@ HOST_UI_KEYWORDS = (
     "electron", "save to drive", "download pdf", "email pdf", "email meeting summary",
     "sync to deskmate", "app switcher", "mission control", "dock", "taskbar",
     "window switch", "switching window", "meeting initial view", "initial screen presentation",
-    "recording in progress",
+    "initial view", "screen presentation on meeting initial view",
+    "interacted with: meeting initial view", "recording in progress",
 )
 
 # Step summaries that carry no information about what happened on screen.
@@ -132,14 +133,10 @@ def step_screenshot_path(step: dict[str, Any]) -> Optional[str]:
     return resolve_screenshot_path(rel)
 
 
-@lru_cache(maxsize=512)
-def shows_deskmate_recording_screen(image_path: Optional[str]) -> bool:
-    """True when the screenshot shows DeskMate's recording screen: a red record circle with
+def check_deskmate_recording_frame(img: np.ndarray | None) -> bool:
+    """True when the BGR image frame shows DeskMate's recording screen: a red record circle with
     the red 'End Meeting' pill below it. A red slide, banner or logo alone does not match."""
-    if not image_path:
-        return False
-    img = cv2.imread(image_path)
-    if img is None:
+    if img is None or not isinstance(img, np.ndarray) or img.size == 0:
         return False
 
     blue, green, red = cv2.split(img)
@@ -164,6 +161,16 @@ def shows_deskmate_recording_screen(image_path: Optional[str]) -> bool:
         for cx, cy, diameter in circles
         for px, py in pills
     )
+
+
+@lru_cache(maxsize=512)
+def shows_deskmate_recording_screen(image_path: Optional[str]) -> bool:
+    """True when the screenshot shows DeskMate's recording screen: a red record circle with
+    the red 'End Meeting' pill below it. A red slide, banner or logo alone does not match."""
+    if not image_path:
+        return False
+    img = cv2.imread(image_path)
+    return check_deskmate_recording_frame(img)
 
 
 def is_host_ui_step(step: dict[str, Any]) -> bool:

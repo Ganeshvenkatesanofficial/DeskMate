@@ -2096,6 +2096,20 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   void _openPdf() {
     if (_pdfUrl == null) return;
+    if (Platform.isMacOS && _currentSessionId != null) {
+      final home = Platform.environment['HOME'] ?? '';
+      final candidatePaths = [
+        '$home/Library/Application Support/DeskMate/output/sessions/$_currentSessionId/deskmate_report_$_currentSessionId.pdf',
+        '$home/Library/Application Support/DeskMate/sessions/$_currentSessionId/deskmate_report_$_currentSessionId.pdf',
+        'output/sessions/$_currentSessionId/deskmate_report_$_currentSessionId.pdf',
+      ];
+      for (final p in candidatePaths) {
+        if (File(p).existsSync()) {
+          openExternal(p);
+          return;
+        }
+      }
+    }
     openExternal(_pdfUrl!);
   }
 
@@ -4156,6 +4170,13 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       'switch to',
       'dock',
       'taskbar',
+      'meeting initial view',
+      'initial view',
+      'initial screen presentation',
+      'screen presentation on meeting initial view',
+      'interacted with: meeting initial view',
+      'presentation initial view',
+      'recording in progress',
     ];
     return noiseKeywords.any((kw) => combined.contains(kw));
   }

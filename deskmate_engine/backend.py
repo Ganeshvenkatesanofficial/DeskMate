@@ -12,22 +12,32 @@ import logging
 import os
 import socket
 import sys
+import warnings
+
+# Suppress early third-party warnings & set environment filters before heavy module imports
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from core.config import setup_stdio_logging, start_parent_watchdog
+from core.config import setup_stdio_logging, start_parent_watchdog, setup_clean_logging, get_uvicorn_log_config
 from settings import APP_VERSION, PORT as DEFAULT_PORT, HOST as DEFAULT_HOST
+
+# Initialize system standard I/O redirection, clean logging, and watchdog
+setup_stdio_logging()
+setup_clean_logging()
+start_parent_watchdog()
+
 from routers.api_routes import router as api_router
 from routers.ws_file_agent import router as ws_file_router
 from routers.ws_personal_agent import router as ws_personal_router
 from routers.meeting_routes import router as meeting_router
 from routers.ws_meeting_agent import router as ws_meeting_router
-
-# Initialize system standard I/O redirection and watchdog
-setup_stdio_logging()
-start_parent_watchdog()
 
 # Configure logging
 logging.basicConfig(
@@ -39,9 +49,12 @@ logger = logging.getLogger("deskmate-server")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("DeskMate Backend Server starting up...")
+    setup_clean_logging()
+    logger.info(f"[STARTUP] DeskMate AI Server v{APP_VERSION} initialized successfully.")
+    logger.info("[INIT] Services active: Meeting Intelligence, Personal Assistant, File Copilot.")
+    logger.info("[READY] Server accepting incoming WebSocket and REST connections.")
     yield
-    logger.info("DeskMate Backend Server shutting down...")
+    logger.info("[SHUTDOWN] DeskMate Backend Server shutting down cleanly...")
 
 
 app = FastAPI(
@@ -73,6 +86,7 @@ app.include_router(ws_personal_router)
 app.include_router(ws_meeting_router)
 app.include_router(api_router)
 app.include_router(meeting_router)
+logger.info("[INIT] Mounted 5 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API.")
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -110,9 +124,10 @@ if __name__ == "__main__":
     # Signal port to parent process (Flutter Desktop Runner)
     print(f"DESKMATE_BACKEND_PORT={port}", flush=True)
 
+    log_cfg = get_uvicorn_log_config()
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen or not args.reload:
-        uvicorn.run(app, host=host, port=port)
+        uvicorn.run(app, host=host, port=port, log_config=log_cfg)
     else:
         root_dir = os.path.dirname(os.path.abspath(__file__))
         uvicorn.run(
@@ -122,4 +137,5 @@ if __name__ == "__main__":
             reload=True,
             reload_dirs=[root_dir],
             reload_excludes=[".venv*", "output*", "__pycache__*", "*.db", "assets*"],
+            log_config=log_cfg,
         )

@@ -7,6 +7,8 @@ and supports synchronous and streaming telemetry execution.
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Callable, Dict, Generator, List, Optional
 from smolagents import ToolCallingAgent
 
@@ -15,6 +17,7 @@ from core.telemetry import stream_agent_steps, clean_final_answer, build_chat_pr
 from services.file_copilot.tools import read_file, list_directory, search_files
 from services.file_copilot.rag_tools import index_document, search_qdrant
 
+logger = logging.getLogger("deskmate.file_copilot.agent")
 
 FILE_COPILOT_TOOLS = [read_file, list_directory, search_files, index_document, search_qdrant]
 
@@ -24,6 +27,7 @@ def get_file_copilot_agent(
     model_id: Optional[str] = None,
 ) -> ToolCallingAgent:
     """Build and return a File Copilot ToolCallingAgent instance."""
+    logger.info(f"[TOOL] Loading {len(FILE_COPILOT_TOOLS)} filesystem & RAG tools for File Copilot (Model: {model_id or 'default'})...")
     model = get_model(api_key=api_key, model_id=model_id)
 
     agent = ToolCallingAgent(
@@ -122,9 +126,13 @@ def stream_file_copilot(
     on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Generator[Dict[str, Any], None, None]:
     """Streaming execution of File Copilot yielding real-time telemetry steps."""
+    t_start = time.time()
+    preview = user_input.replace("\n", " ")[:60]
+    logger.info(f"[START] File Copilot turn started: '{preview}' (Conv: {conversation_id or 'new'})")
     prompt = build_chat_prompt(user_input, history, api_key=api_key, model_id=model_id)
     agent = get_file_copilot_agent(api_key=api_key, model_id=model_id)
     yield from stream_agent_steps(agent, prompt, conversation_id=conversation_id, on_event=on_event)
+    logger.info(f"[SUCCESS] File Copilot turn completed in {time.time() - t_start:.2f}s.")
 
 
 def check_file_copilot_health() -> Dict[str, Any]:
