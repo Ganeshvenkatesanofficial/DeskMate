@@ -277,11 +277,11 @@ class LiveAudioRecorder:
                         self._win_system_stream.start()
                         system_started = True
                         logger.info(
-                            f"Windows WASAPI loopback audio capture started successfully "
+                            f"[AUDIO START] Windows WASAPI loopback system audio capture started "
                             f"({loopback_sr}Hz, {loopback_channels}ch)."
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to start Windows WASAPI loopback: {e}")
+                        logger.warning(f"[AUDIO WARNING] Failed to start Windows WASAPI loopback: {e}")
                         self._win_system_stream = None
 
             self.system_audio_active = system_started
