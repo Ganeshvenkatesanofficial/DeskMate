@@ -15,6 +15,7 @@ import re
 import os
 import sys
 import subprocess
+from datetime import datetime
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -502,6 +503,10 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         report_data["custom_fields"] = custom_fields_res
         report_data["transcript"] = transcript_data
         report_data["pdf_path"] = pdf_path if pdf_ok else None
+
+        # Stamp the exact time the PDF was generated so the email can reflect it accurately
+        if pdf_ok:
+            report_data["pdf_generated_at"] = datetime.now().astimezone().isoformat()
 
         await asyncio.to_thread(
             lambda: report_file.write_text(json.dumps(report_data, indent=2, default=str), encoding="utf-8")

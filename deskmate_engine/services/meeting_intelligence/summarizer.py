@@ -16,11 +16,22 @@ import io
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Any
 import requests
 import cv2
-from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL, USER_DATA_DIR
+from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL
+from services.meeting_intelligence.step_utils import (
+    HOST_UI_KEYWORDS,
+    fallback_step_description,
+    find_step,
+    humanize_speaker_tags,
+    is_host_ui_step,
+    order_step_ids,
+    readable_step_title,
+    spoken_quotes_near,
+    step_number,
+    step_screenshot_path,
+)
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
@@ -38,10 +49,22 @@ def extract_meeting_title(summary_md: str) -> str:
             return title
     return ""
 
+
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 # Tried in order when the configured model has been retired (HTTP 404).
 GEMINI_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-flash-latest")
 MAX_OLLAMA_CANDIDATES = 2
+# The report always shows at least this many key moments when the screen recorded any.
+MIN_KEY_MOMENTS = 2
+# Evenly spaced moments picked when the model chose too few.
+FALLBACK_KEY_MOMENTS = 4
+# Whole-quote values models use to mean "nobody spoke" (compared after lowercasing and trimming).
+_SILENT_QUOTES = {
+    "", "none", "n/a", "na", "silent", "silence", "no speech", "no audio", "no spoken dialogue",
+    "no speech during this moment", "no speech at this moment", "no speech during this clip moment",
+}
+# Prompt-template text a model may echo back instead of a real quote.
+_QUOTE_PLACEHOLDERS = ("quote exact spoken words", "key spoken dialogue", "or 'no speech", "clip moment")
 GEMINI_AUDIO_CHUNK_SECONDS = 240
 # Transcript segments sent per translation request (keeps prompts small for local models).
 TRANSLATE_BATCH_SIZE = 40
@@ -67,48 +90,6 @@ class MeetingSummarizer:
         self.gemini_api_key = gemini_api_key or GEMINI_API_KEY
         self.gemini_model = gemini_model
         self.ollama_model = ollama_model
-
-    INTERNAL_NOISE_KEYWORDS = {
-        "deskmate",
-        "meeting scribe",
-        "start meeting",
-        "end meeting",
-        "stop meeting",
-        "recording dashboard",
-        "telemetry",
-        "deskmate live",
-        "deskmate ai",
-        "modal_window",
-        "modal",
-        "runner",
-        "flutter",
-        "electron",
-        "deskmate_app",
-        "save to drive",
-        "download pdf",
-        "email pdf",
-        "email meeting summary",
-        "sync to deskmate",
-        "app switcher",
-        "mission control",
-        "dock",
-        "taskbar",
-        "window switch",
-        "switching window",
-        "switch to",
-    }
-
-    def _is_noise_step(self, step: dict[str, Any]) -> bool:
-        summary = (step.get("summary") or "").lower()
-        actions = step.get("actions", [])
-        combined = summary + " " + " ".join([
-            (a.get("target") or a.get("description") or a.get("event") or "").lower()
-            for a in actions
-        ])
-        for kw in self.INTERNAL_NOISE_KEYWORDS:
-            if kw in combined:
-                return True
-        return False
 
     def summarize_meeting(
         self,
@@ -139,7 +120,7 @@ class MeetingSummarizer:
             )
 
         # 0. Filter out internal DeskMate tool interactions & transient window switches
-        clean_steps = [s for s in steps if not self._is_noise_step(s)]
+        clean_steps = [s for s in steps if not is_host_ui_step(s)]
         effective_steps = clean_steps if clean_steps else steps
 
         # 1. Build visual timeline text
@@ -178,25 +159,7 @@ class MeetingSummarizer:
         parts = [{"text": prompt}]
         for step in effective_steps:
             s_id = step.get("step_id", "?")
-            img_path = step.get("screenshot_path", "")
-            if not img_path:
-                actions = step.get("actions", [])
-                img_path = next((a.get("asset_path") for a in actions if a.get("asset_path")), "")
-
-            full_img_path = None
-            if img_path:
-                cand_p = Path(img_path)
-                search_candidates = [
-                    cand_p,
-                    cand_p.resolve(),
-                    Path.cwd() / img_path,
-                    USER_DATA_DIR / img_path,
-                ]
-                for cand in search_candidates:
-                    if cand.exists() and cand.is_file():
-                        full_img_path = str(cand)
-                        break
-
+            full_img_path = step_screenshot_path(step)
             if full_img_path:
                 try:
                     img = cv2.imread(full_img_path)
@@ -215,8 +178,64 @@ class MeetingSummarizer:
         # 5. Query Gemini (or fall back to local Ollama)
         raw_response = self._query_llm(parts, prompt, gemini_api_key or self.gemini_api_key)
 
-        # 6. Parse structured blocks
-        return self._parse_structured_response(raw_response)
+        # 6. Parse structured blocks, then make sure every chosen moment has a description and quote
+        summary, important_steps, step_descriptions, custom_fields_dict = self._parse_structured_response(
+            raw_response, effective_steps=effective_steps
+        )
+        self._complete_step_descriptions(important_steps, step_descriptions, effective_steps, transcript_data)
+        return summary, important_steps, step_descriptions, custom_fields_dict
+
+    @staticmethod
+    def _complete_step_descriptions(
+        important_steps: list[str],
+        step_descriptions: dict[str, Any],
+        steps: list[dict[str, Any]],
+        transcript_data: dict[str, Any] | None,
+    ) -> None:
+        """Fill a title, description and spoken quote for every important step the model left blank,
+        so the app and the PDF show the same text."""
+        for sid in important_steps:
+            step = find_step(steps, sid)
+            if step is None:
+                continue
+            key = next((k for k in step_descriptions if step_number(k) == step_number(sid)), sid)
+            meta = step_descriptions.get(key)
+            if not isinstance(meta, dict):
+                meta = {}
+                step_descriptions[key] = meta
+            if not str(meta.get("title") or "").strip():
+                meta["title"] = readable_step_title(str(step.get("summary") or ""))
+            if not str(meta.get("description") or "").strip():
+                meta["description"] = fallback_step_description(step)
+            if not str(meta.get("audio_transcript") or "").strip():
+                meta["audio_transcript"] = spoken_quotes_near(transcript_data, step)
+
+    @staticmethod
+    def _normalize_speakers_in_segments(segments: list[dict[str, Any]]) -> None:
+        """Normalize raw machine tags (e.g. SPEAKER_00, SPEAKER_01) to clean human names or Speaker 1, Speaker 2."""
+        speaker_mapping: dict[str, str] = {}
+        speaker_counter = 0
+        for seg in segments:
+            raw_spk = str(seg.get("speaker") or "").strip()
+            if not raw_spk:
+                raw_spk = "Speaker"
+
+            # Check for machine diarization patterns like SPEAKER_00, SPEAKER_01, speaker_0
+            match = re.match(r"^SPEAKER_0*(\d+)$", raw_spk, re.IGNORECASE)
+            if match:
+                if raw_spk not in speaker_mapping:
+                    # 0-indexed to 1-indexed (e.g. SPEAKER_00 -> Speaker 1)
+                    idx = int(match.group(1)) + 1
+                    speaker_mapping[raw_spk] = f"Speaker {idx}"
+                seg["speaker"] = speaker_mapping[raw_spk]
+            elif raw_spk.lower() in ("speaker", "unknown", "spk", "user"):
+                if raw_spk not in speaker_mapping:
+                    speaker_counter += 1
+                    speaker_mapping[raw_spk] = f"Speaker {speaker_counter}"
+                seg["speaker"] = speaker_mapping[raw_spk]
+            else:
+                # Keep identified human name (e.g. "Ganesh", "Alex", "Speaker 1")
+                speaker_mapping[raw_spk] = raw_spk
 
     def _format_transcript(self, transcript_data: dict[str, Any] | None) -> str:
         if not transcript_data:
@@ -227,11 +246,14 @@ class MeetingSummarizer:
             full = transcript_data.get("full_transcript", "")
             return f"AUDIO TRANSCRIPT:\n{full}" if full else "AUDIO STATUS: No speech detected."
 
+        # Normalize speaker labels across segments
+        self._normalize_speakers_in_segments(segments)
+
         lines = ["--- Voxtral Diarized Transcript ---"]
         for seg in segments:
             start = seg.get("start", 0.0)
             end = seg.get("end", 0.0)
-            speaker = seg.get("speaker", "Speaker")
+            speaker = seg.get("speaker", "Speaker 1")
             text = seg.get("text", "").strip()
             if text:
                 start_m, start_s = int(start // 60), int(start % 60)
@@ -284,14 +306,31 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 {custom_instructions}
 
 ---
-## GROUNDING RULE (MANDATORY):
-You MUST derive every claim, name, deadline, decision, and action item SOLELY from the provided visual timeline, screenshot OCR text, and audio transcript above. If a piece of information is not present in any source, DO NOT infer, assume, or fabricate it. Write "Not discussed" or omit the item entirely rather than guessing.
+## DYNAMIC CONTENT & RELEVANCE (MANDATORY):
+1. **Dynamic Handling**: Only content genuinely relevant to the actual meeting must be captured and displayed. Absolutely nothing should be hardcoded, assumed, or forcibly included. The system must adapt dynamically to the meeting content.
+2. **Adaptive Subheadings**: Adapt sections, subheadings, and topics to match what was actually discussed (e.g. `### Architecture & Infrastructure`, `### Security & Compliance`, `### Sales & GTM Strategy`). Do not include boilerplate or empty sections if they were not discussed.
+3. **Strict Authenticity**: Derive all participant statements, decisions, and action items strictly from what was spoken or presented in the meeting.
+
+---
+## CONTEXT AWARENESS & EXTERNAL RESEARCH AUGMENTATION (MANDATORY):
+1. **Organized, Detailed Steps**: Descriptions and steps must be clearly organized, detailed, and augmented with the available context.
+2. **Accurate Context Gap Filling**: When tools, cloud services (e.g. AWS, GCP, Azure), CLI commands, API specifications, database schemas, or business domain concepts are referenced or used without full verbal explanation, use authoritative technical domain knowledge to augment and enrich the description.
+3. **MANDATORY DISTINCTION BETWEEN IN-MEETING AND RESEARCHED CONTEXT**:
+   - You MUST clearly distinguish between what was directly discussed or performed by participants in the meeting and what is external augmented context.
+   - In step descriptions, describe the in-meeting action and operation first, then provide the researched technical context explicitly prefixed with `[Context Reference: ...]` (e.g. `User configured an IAM trust policy specifying the Lambda service principal. [Context Reference: In AWS IAM, trust policies define which external identities or services are permitted to assume a role via the sts:AssumeRole API.]`).
+   - In summary sections, clearly mark external researched information with `[Context Reference: ...]` so that readers can distinguish meeting decisions from external technical context.
+
+---
+## SPEAKER IDENTIFICATION (MANDATORY):
+1. **Identify Names When Available**: Actively cross-reference dialogue cues (e.g. "Hi Ganesh", "This is Alex speaking", "Thanks Priya", "Over to you Sarah") and screen visuals (e.g. video meeting participant names, active user profiles, email/Slack headers, terminal username). Whenever a speaker's actual personal name can be identified, ALWAYS attribute their statements and actions to their real name throughout the entire report (e.g. "Ganesh:", "Alex:").
+2. **Standard Fallback for Unnamed Speakers**: If a speaker's personal name is not explicitly mentioned or verifiable, consistently identify them as "Speaker 1", "Speaker 2", "Speaker 3", etc.
+3. **NEVER use raw machine tags**: Completely eliminate machine tags like "SPEAKER_00", "SPEAKER_01", or "speaker_0" from your entire output. Replace them with the identified person's name or "Speaker 1", "Speaker 2".
 
 ---
 ## MULTILINGUAL & TRANSLATION REQUIREMENT (MANDATORY):
 1. The spoken meeting dialogue, transcript, or on-screen text may be in Tamil, Tanglish (Tamil-English blend/code-switching), Hindi, or other regional languages.
 2. Regardless of the spoken language or mix of languages used in the meeting, you MUST synthesize, translate, and express the ENTIRE report in CLEAN, FLUENT, GRAMMATICALLY ACCURATE, PROFESSIONAL ENGLISH.
-3. Every section—Executive Overview, Detailed Actions Timeline, Decisions & Outcomes, Technical Parameters, Action Items, Step Titles, and Step Descriptions—MUST be written strictly in professional English.
+3. Every section—Executive Overview, Decisions & Outcomes, Technical & Domain Parameters, Action Items, Step Titles, and Step Descriptions—MUST be written strictly in professional English.
 4. DO NOT output Tanglish, phonetic transliterations (e.g. "pannalam", "mudichitom"), or untranslated regional phrases. Accurately translate their core meaning into polished, professional business English.
 
 ---
@@ -300,23 +339,34 @@ You MUST derive every claim, name, deadline, decision, and action item SOLELY fr
 2. NEVER describe transient window switching, Alt-Tab/Cmd-Tab, Dock clicks, or minimizing/maximizing windows to switch into or out of the meeting.
 3. FOCUS EXCLUSIVELY on the substantive content presented: slides, web pages, software tools, code, diagrams, and spoken discussion.
 4. In ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===, NEVER include internal DeskMate steps or window-switch moments.
-5. **STRICT VISUAL & AUDIO SYNCHRONIZATION**: In ===STEP_DESCRIPTIONS===, each step's "description" and "audio_transcript" MUST strictly correspond to what was on screen and what was spoken at that exact moment. NEVER attach dialogue spoken at other times in the meeting to an unrelated screenshot. If no speech occurred at that moment, output `"audio_transcript": "No speech during this moment"`.
+5. **STRICT VISUAL & AUDIO SYNCHRONIZATION**: In ===STEP_DESCRIPTIONS===, each step's "description" and "audio_transcript" MUST strictly correspond to what was on screen and what was spoken at that exact moment. NEVER attach dialogue spoken at other times in the meeting to an unrelated screenshot. If no speech occurred at that moment, output `"audio_transcript": ""` (empty string). Do NOT output dummy placeholder text.
+6. **NO RAW CLICK TIMELINES**: NEVER generate a "Detailed Actions Timeline" or list granular button clicks, menu bar interactions, or raw event logs in the summary. Screen interactions are represented exclusively through the key visual screenshots in ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS===.
+7. **SCREENSHOT VERIFICATION & RELEVANCE**: Only select steps whose screenshot image visibly shows actual meeting content (e.g. AWS console, cloud settings, code, slides, or diagrams). The description MUST accurately describe the visual content visible on that screen. NEVER select a screenshot that shows DeskMate's own recording screen, a blank screen, or an unrelated window.
 
 ---
-## ACTION ITEM & DECISION RULES (STRICT NON-HALLUCINATION POLICY):
-1. **HIGH-IMPACT DELIVERABLES ONLY**: You MUST only tag an item with `**[ACTION ITEM]**` or `**[HIGH PRIORITY]**` if it represents a CONCRETE, EXPLICIT, SIGNIFICANT TASK, ASSIGNMENT, OR MILESTONE explicitly agreed upon by participants.
-2. **ZERO CONVERSATIONAL FILLER**: NEVER generate action items from passive chatter, greetings, rhetorical questions, routine software navigation, or casual comments (e.g. DO NOT create items like "Check microphone", "Click on browser", "Review presentation", "Look at screen").
-3. **DO NOT FABRICATE ACTION ITEMS**: If participants did NOT explicitly designate follow-up tasks or future commitments during the session, DO NOT invent them. In that case, write:
+## COMPREHENSIVE ACTION ITEMS & DYNAMIC DOMAIN DETAILS:
+1. **CAPTURE ALL HIGH-PRIORITY & ACTION ITEMS**: Never omit critical deliverables, urgent tasks, blockers, or assigned action items mentioned in speech or shown on screen.
+   Tag them clearly:
+   - `- **[HIGH PRIORITY]** [Assignee / Team if stated]: [Critical task, blocker, security concern, or urgent deadline]`
+   - `- **[ACTION ITEM]** [Assignee / Team if stated]: [Concrete deliverable, next step, or follow-up commitment]`
+   - `- **[IMPORTANT]** [Key architectural, business, or operational decision finalized]`
+2. **DYNAMIC DOMAIN & TECHNICAL SPECIFICS**:
+   Under `### Technical & Domain Parameters` (and additional dynamic subheadings as needed, e.g. `### Architecture & Infrastructure`, `### Security & Permissions`, `### Database & Schema Configurations`), capture all:
+   - Exact code commands, scripts, CLI flags, or API routes discussed or shown.
+   - Configuration parameters, environment variables, resource ARNs, IPs, or endpoints.
+   - Domain-specific business rules, metrics, quotas, or operational requirements.
+   Format these with markdown code blocks or structured bullet points so no technical details are lost.
+3. If participants did NOT explicitly designate follow-up tasks, state:
    `- No explicit follow-up action items were assigned during this session.`
-4. **FORMAT OF TRUE ACTION ITEMS**:
-   Every genuine action item MUST be concise and state:
-   `- **[ACTION ITEM]** [Assignee / Team if stated]: [Specific deliverable] (Due/Next Step: [Milestone if stated])`
-   `- **[HIGH PRIORITY]** [Critical blocker, security patch, or urgent deadline explicitly flagged as urgent]`
-   `- **[IMPORTANT]** [Key architectural, business, or operational decision finalized]`
 
 ---
-## INSTRUCTIONS:
+## INSTRUCTIONS & STRUCTURE:
 1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (e.g. `# API Gateway Architecture & Throttle Sync` or `# Q3 Product Roadmap Alignment`). DO NOT use generic phrases like "Meeting Summary".
+2. STEP DESCRIPTIONS REQUIREMENT: For each step in ===IMPORTANT_STEPS===, you MUST provide an entry in ===STEP_DESCRIPTIONS===:
+   - "title": Concise 2-5 word action-oriented title (e.g., "IAM Trust Policy Setup").
+   - "description": 1-3 detailed sentences explaining EXACTLY what operation was performed at that specific time, what tool or console was manipulated, and what changes occurred. When filling technical context gaps, append `[Context Reference: ...]` clearly distinguishing researched context from the in-meeting action.
+   - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Alex: 'Make sure we allow sts:AssumeRole for the lambda service'"). If no speech occurred at that moment, output "" (empty string).
+
 STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 
 ===SUMMARY===
@@ -324,23 +374,24 @@ STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 # [Specific 3-7 Word Meeting Title Based on Core Topic]
 
 ### Executive Overview
-Concise 3-5 sentence summary of the meeting's core purpose, platforms used, and primary outcome.
+Meaningful, cohesive summary of 50-60 words capturing the primary meeting discussion, core decisions, and critical action items without fluff.
 
-### Detailed Actions Timeline
-Chronological narrative combining visual on-screen actions, screenshot text/OCR details, and spoken statements. Explain the purpose of each significant action.
+- Detailed, clearly highlighted key point 1 explaining the primary discussion and platforms.
+- Detailed, clearly highlighted key point 2 noting specific architectural or operational agreements.
+- Detailed, clearly highlighted key point 3 outlining next steps and milestone deliverables.
 
 {transcript_section}### Decisions & Outcomes
 - Accomplishments finalized.
-- Items designated for follow-up (use **[ACTION ITEM]** or **[HIGH PRIORITY]** strictly according to the rules above).
+- Follow-up items using **[HIGH PRIORITY]** or **[ACTION ITEM]** tags.
 
 ### Technical & Domain Parameters
-Relevant code commands, configuration flags, client requests, or operational parameters.
+- Specific commands, configuration values, domain rules, and architecture details discussed or demonstrated.
 
 ===IMPORTANT_STEPS===
-["step_1", "step_3"]
+["step_1", "step_2", "step_3"]
 
 ===STEP_DESCRIPTIONS===
-{{"step_1": {{"title": "Descriptive Action Name", "description": "2-3 sentences explaining visual screen actions, parameters, or outcomes.", "audio_transcript": "Key spoken dialogue or discussion from the audio transcript during this clip moment (or 'No speech during this moment' if silent)."}}}}
+{{"step_1": {{"title": "Role Configuration", "description": "User initiated IAM role creation and specified trusted entities for access. [Context Reference: In AWS IAM, trust policies define which external identities or services are permitted to assume a role via the sts:AssumeRole API.]", "audio_transcript": "Speaker 1: 'Now let's configure the trusted entities for the deployment role.'"}}}}
 {custom_delimiters}
 """
 
@@ -602,57 +653,118 @@ Relevant code commands, configuration flags, client requests, or operational par
         )
 
     @staticmethod
+    def _clean_step_quote(quote: Any) -> str:
+        """The model's spoken quote with speaker tags humanized, or '' when it means silence."""
+        text = str(quote or "").strip()
+        lowered = text.lower().strip(" .\"'()")
+        if lowered in _SILENT_QUOTES or any(ph in lowered for ph in _QUOTE_PLACEHOLDERS):
+            return ""
+        return humanize_speaker_tags(text)
+
+    @staticmethod
     def _strip_code_fences(text: str) -> str:
         return re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text.strip(), flags=re.DOTALL)
 
     def _parse_structured_response(
-        self, raw: str
+        self, raw: str, effective_steps: list[dict[str, Any]] | None = None
     ) -> tuple[str, list[str], dict[str, Any], dict[str, Any]]:
         summary = "Meeting summary could not be extracted."
         important_steps: list[str] = []
         step_descriptions: dict[str, Any] = {}
         custom_fields_dict: dict[str, Any] = {}
 
-        # 1. Extract CUSTOM_FIELDS independently
-        if "===CUSTOM_FIELDS===" in raw:
-            raw, cf_block = raw.split("===CUSTOM_FIELDS===", 1)
+        # 1. Parse delimited blocks order-independently
+        sections = re.split(r"===([A-Z_]+)===", raw)
+        blocks: dict[str, str] = {}
+        if len(sections) > 1:
+            for i in range(1, len(sections), 2):
+                h = sections[i].strip()
+                c = sections[i + 1].strip()
+                blocks[h] = c
+        else:
+            blocks["SUMMARY"] = raw.strip()
+
+        # Extract SUMMARY (text before the first delimiter when the model skipped ===SUMMARY===)
+        summary = blocks.get("SUMMARY") or sections[0].strip() or summary
+
+        # Purge any granular raw action timelines from the summary
+        summary = re.sub(
+            r"#{1,4}\s*Detailed Actions Timeline.*?(?=(?:#{1,4}\s+|\Z))",
+            "",
+            summary,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).strip()
+
+        # Extract CUSTOM_FIELDS
+        if "CUSTOM_FIELDS" in blocks:
             try:
-                custom_fields_dict = json.loads(self._strip_code_fences(cf_block))
+                cleaned_cf = self._strip_code_fences(blocks["CUSTOM_FIELDS"])
+                json_match = re.search(r"\{.*\}", cleaned_cf, re.DOTALL)
+                custom_fields_dict = json.loads(json_match.group(0) if json_match else cleaned_cf)
             except Exception as cfe:
                 logger.debug(f"Failed to parse custom fields JSON: {cfe}")
 
-        # 2. Extract STEP_DESCRIPTIONS independently
-        if "===STEP_DESCRIPTIONS===" in raw:
-            raw, desc_block = raw.split("===STEP_DESCRIPTIONS===", 1)
+        # Extract STEP_DESCRIPTIONS
+        if "STEP_DESCRIPTIONS" in blocks:
             try:
-                step_descriptions = json.loads(self._strip_code_fences(desc_block))
+                cleaned_desc = self._strip_code_fences(blocks["STEP_DESCRIPTIONS"])
+                json_match = re.search(r"\{.*\}", cleaned_desc, re.DOTALL)
+                raw_sd = json.loads(json_match.group(0) if json_match else cleaned_desc)
+                if isinstance(raw_sd, dict):
+                    step_descriptions = raw_sd
+                    for meta in raw_sd.values():
+                        if isinstance(meta, dict):
+                            meta["audio_transcript"] = self._clean_step_quote(meta.get("audio_transcript"))
             except Exception as e:
                 logger.debug(f"Failed to parse step_descriptions JSON: {e}")
 
-        # 3. Extract IMPORTANT_STEPS independently
-        if "===IMPORTANT_STEPS===" in raw:
-            raw, steps_block = raw.split("===IMPORTANT_STEPS===", 1)
+        summary = humanize_speaker_tags(summary)
+
+        # Extract IMPORTANT_STEPS
+        if "IMPORTANT_STEPS" in blocks:
+            steps_block = self._strip_code_fences(blocks["IMPORTANT_STEPS"])
             try:
-                important_steps = json.loads(self._strip_code_fences(steps_block))
+                json_match = re.search(r"\[.*\]", steps_block, re.DOTALL)
+                parsed = json.loads(json_match.group(0) if json_match else steps_block)
+                if isinstance(parsed, list):
+                    important_steps = [str(x) for x in parsed]
             except Exception as e:
-                logger.debug(f"Failed to parse important_steps JSON: {e}")
+                logger.debug(f"Failed to parse important_steps JSON, trying regex fallback: {e}")
+                important_steps = [f"step_{m}" for m in re.findall(r"(?:step[_\s]*)?(\d+)", steps_block, re.IGNORECASE)]
 
-        # 4. Extract SUMMARY (everything after the delimiter, now that later blocks are removed)
-        if "===SUMMARY===" in raw:
-            summary = raw.split("===SUMMARY===", 1)[1].strip()
-        elif raw.strip():
-            summary = re.sub(r"===[A-Z_]+=== *", "", raw).strip()
+        # Recovery: the model described steps but forgot to list them
+        if not important_steps and step_descriptions:
+            logger.info("Recovering important_steps from step_descriptions keys.")
+            important_steps = [str(k) for k in step_descriptions]
 
-        # Post-filter: purge any internal DeskMate or window-switch steps returned by the model
-        clean_important = []
-        for sid in important_steps:
-            sid_str = str(sid).lower()
-            desc_meta = step_descriptions.get(sid) or step_descriptions.get(sid_str) or {}
-            title = (desc_meta.get("title") if isinstance(desc_meta, dict) else "").lower()
-            desc = (desc_meta.get("description") if isinstance(desc_meta, dict) else "").lower()
-            if any(kw in f"{title} {desc} {sid_str}" for kw in self.INTERNAL_NOISE_KEYWORDS):
-                continue
-            clean_important.append(sid)
-        important_steps = clean_important
+        steps = effective_steps or []
+
+        # Post-filter: drop internal DeskMate or window-switch moments the model picked anyway
+        def is_noise(sid: str) -> bool:
+            meta = step_descriptions.get(sid) or step_descriptions.get(sid.lower())
+            meta_text = f"{meta.get('title') or ''} {meta.get('description') or ''}" if isinstance(meta, dict) else ""
+            if any(kw in f"{meta_text} {sid}".lower() for kw in HOST_UI_KEYWORDS):
+                return True
+            step = find_step(steps, sid)
+            return step is not None and is_host_ui_step(step)
+
+        important_steps = [sid for sid in important_steps if not is_noise(sid)]
+
+        # Fallback: keep at least MIN_KEY_MOMENTS by adding evenly spaced real moments
+        if len(important_steps) < MIN_KEY_MOMENTS and steps:
+            chosen = {step_number(sid) for sid in important_steps}
+            candidates = [
+                s for s in steps
+                if step_number(s.get("step_id")) not in chosen and not is_host_ui_step(s)
+            ]
+            if len(candidates) > FALLBACK_KEY_MOMENTS:
+                last = len(candidates) - 1
+                picks = sorted({round(i * last / (FALLBACK_KEY_MOMENTS - 1)) for i in range(FALLBACK_KEY_MOMENTS)})
+                candidates = [candidates[i] for i in picks]
+            if candidates:
+                logger.info(f"Adding {len(candidates)} representative visual moments as fallback.")
+            important_steps += [f"step_{s.get('step_id')}" for s in candidates]
+
+        important_steps = order_step_ids(important_steps, steps)
 
         return summary, important_steps, step_descriptions, custom_fields_dict

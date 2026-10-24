@@ -15,7 +15,14 @@ from pathlib import Path
 from typing import Optional, Any
 from fpdf import FPDF
 
-from services.meeting_intelligence import config
+from services.meeting_intelligence.step_utils import (
+    GENERIC_STEP_SUMMARIES,
+    fallback_step_description,
+    is_host_ui_step,
+    readable_step_title,
+    resolve_screenshot_path,
+    spoken_quotes_near,
+)
 
 logger = logging.getLogger("deskmate.pdf_generator")
 
@@ -31,6 +38,7 @@ _CARD_BG = (249, 250, 251)              # #F9FAFB — Clean Neutral Card Backgro
 _DIVIDER = (226, 232, 240)              # #E2E8F0 — Subtle Divider
 _WARNING = (217, 119, 6)                # #D97706 — Amber / Important Note
 _URGENT = (220, 38, 38)                 # #DC2626 — Critical / High Priority Red
+_CONTEXT_ACCENT = (14, 116, 144)        # #0E7490 — Informational Teal for Context References
 
 # ── Page Constants ────────────────────────────────────────────────────────────
 _LEFT_MARGIN = 15
@@ -89,47 +97,16 @@ def _to_pdf_text(text: Any) -> str:
 
 # Lowest y (mm) content may reach before a manual page break.
 _PAGE_BOTTOM_Y = 270
-# Steps whose title/description mention these are DeskMate's own UI, not meeting content.
-_HOST_APP_TERMS = (
-    "deskmate", "deskmate live", "meeting scribe", "recording dashboard",
-    "start meeting", "stop meeting", "end meeting", "mission control", "app switcher",
+# How the summarizer marks researched context inside a step description (see the prompt).
+_CONTEXT_KINDS = r"(?:Context Reference|Domain Context|Technical Context)"
+_CONTEXT_PATTERNS = (
+    re.compile(r"\[" + _CONTEXT_KINDS + r":\s*(.*?)\]", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\*\*\[" + _CONTEXT_KINDS + r"\]\*\*:\s*(.*)", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\*\(" + _CONTEXT_KINDS + r":\s*(.*?)\)\*", re.IGNORECASE | re.DOTALL),
 )
-
-
-def _resolve_screenshot_path(asset_rel_path: str) -> Optional[str]:
-    """Robust screenshot resolution across dev workspace and macOS Application Support."""
-    if not asset_rel_path:
-        return None
-
-    p = Path(asset_rel_path)
-    if p.is_absolute() and p.exists():
-        return str(p)
-
-    candidates = [
-        Path(config.OUTPUT_DIR) / asset_rel_path,
-        Path(config.OUTPUT_DIR) / "live_sessions" / asset_rel_path,
-        Path(asset_rel_path),
-        Path.cwd() / asset_rel_path,
-        Path.home() / "Library" / "Application Support" / "DeskMate" / asset_rel_path,
-        Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / asset_rel_path,
-        Path.home() / "Library" / "Application Support" / "DeskMate" / "output" / "sessions" / asset_rel_path,
-        Path.home() / "AppData" / "Roaming" / "DeskMate" / asset_rel_path,
-        Path.home() / "AppData" / "Roaming" / "DeskMate" / "sessions" / asset_rel_path,
-    ]
-
-    for prefix in ["output/sessions/", "sessions/", "live_sessions/", "output/"]:
-        if asset_rel_path.startswith(prefix):
-            stripped = asset_rel_path[len(prefix):]
-            candidates.append(Path.home() / "Library" / "Application Support" / "DeskMate" / "sessions" / stripped)
-            candidates.append(Path(config.OUTPUT_DIR) / stripped)
-
-    for cand in candidates:
-        try:
-            if cand.exists() and cand.is_file():
-                return str(cand.resolve())
-        except Exception:
-            pass
-    return None
+_CONTEXT_LABELS = ("CONTEXT REFERENCE", "TECHNICAL CONTEXT", "DOMAIN CONTEXT", "EXTERNAL CONTEXT")
+# Top and bottom padding (mm) inside the description card under each screenshot.
+_DESC_BOX_PADDING = 4.0
 
 
 class MeetingReportPDF(FPDF):
@@ -212,17 +189,6 @@ class MeetingPDFGenerator:
             specific_fields = [f for f in (specific_fields or []) if isinstance(f, dict)]
             specific_fields_analysis = specific_fields_analysis if isinstance(specific_fields_analysis, dict) else {}
 
-            # Drop steps that show DeskMate's own recording UI
-            filtered_important_step_ids = []
-            for sid in [str(x) for x in (important_step_ids or [])]:
-                desc = self._find_step_description(sid, step_descriptions).lower()
-                title = self._find_step_title(sid, step_descriptions, "").lower()
-                if any(term in desc or term in title for term in _HOST_APP_TERMS):
-                    logger.info(f"Programmatically filtering out step {sid} because it refers to host app UI.")
-                    continue
-                filtered_important_step_ids.append(sid)
-            important_step_ids = filtered_important_step_ids
-
             pdf = MeetingReportPDF()
             pdf.alias_nb_pages()
             pdf.set_left_margin(_LEFT_MARGIN)
@@ -241,11 +207,15 @@ class MeetingPDFGenerator:
             # ─── Key Visual Moments ──────────────────────────────────────
             if steps and important_step_ids:
                 # Force a page break if the header and first screenshot card won't fit on the current page
-                first_card_h = self._get_first_card_height(pdf, steps, important_step_ids, step_descriptions)
+                first_card_h = self._get_first_card_height(
+                    pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data
+                )
                 if pdf.get_y() + 25 + first_card_h > _PAGE_BOTTOM_Y:
                     pdf.add_page()
                 self._render_section_header(pdf, 'Key Visual Interaction Moments')
-                self._render_screenshots(pdf, steps, important_step_ids, step_descriptions)
+                self._render_screenshots(
+                    pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data
+                )
 
             # ─── Dynamic Specific Fields (Custom User Requirements) ──────
             if specific_fields and specific_fields_analysis:
@@ -306,7 +276,9 @@ class MeetingPDFGenerator:
 
                         if has_screenshots:
                             # Force a page break if the header and first screenshot card won't fit together
-                            first_card_h = self._get_first_card_height(pdf, steps, str_relevant_steps, step_descriptions)
+                            first_card_h = self._get_first_card_height(
+                                pdf, steps, str_relevant_steps, step_descriptions, transcript_data=transcript_data
+                            )
                             if pdf.get_y() + 14 + first_card_h > _PAGE_BOTTOM_Y:
                                 pdf.add_page()
 
@@ -317,7 +289,9 @@ class MeetingPDFGenerator:
                             pdf.cell(_CONTENT_WIDTH, 6, "Relevant Visual Evidence", 0, 1)
                             pdf.ln(4)
 
-                            self._render_screenshots(pdf, steps, str_relevant_steps, step_descriptions)
+                            self._render_screenshots(
+                                pdf, steps, str_relevant_steps, step_descriptions, transcript_data=transcript_data
+                            )
 
             # Ensure parent output directory exists and save PDF
             Path(output_pdf_path).parent.mkdir(parents=True, exist_ok=True)
@@ -422,6 +396,8 @@ class MeetingPDFGenerator:
                     pdf.set_text_color(*_DESKMATE_PRIMARY)   # DeskMate primary purple for action items
                 elif "IMPORTANT" in part_upper:
                     pdf.set_text_color(*_WARNING)           # Amber for key points
+                elif any(kw in part_upper for kw in _CONTEXT_LABELS):
+                    pdf.set_text_color(*_CONTEXT_ACCENT)     # Informational teal for context references
                 else:
                     pdf.set_text_color(*_DESKMATE_DARK)
             else:
@@ -580,8 +556,10 @@ class MeetingPDFGenerator:
 
     # ── Screenshots section ───────────────────────────────────────────────
 
-    def _render_screenshots(self, pdf, steps, important_step_ids, step_descriptions=None):
-        """Render deduplicated screenshots with rich step cards."""
+    def _render_screenshots(
+        self, pdf, steps, important_step_ids, step_descriptions=None, transcript_data=None
+    ):
+        """Render deduplicated screenshots with rich step cards and synchronized spoken dialogue."""
         if step_descriptions is None:
             step_descriptions = {}
 
@@ -617,8 +595,13 @@ class MeetingPDFGenerator:
             if not asset_rel_path:
                 continue
 
-            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            full_img_path = resolve_screenshot_path(asset_rel_path)
             if not full_img_path or not os.path.exists(full_img_path):
+                continue
+
+            # Skip any step showing host DeskMate UI or recording screen
+            if is_host_ui_step(step):
+                logger.info(f"Skipping step {step_id_val} because it shows host DeskMate recording screen.")
                 continue
 
             # ── Deduplicate by file hash ──────────────────────────────
@@ -632,7 +615,9 @@ class MeetingPDFGenerator:
                 pass
 
             # Calculate the total height of the current card
-            card_height = self._calculate_step_card_height(pdf, step, step_descriptions)
+            card_height = self._calculate_step_card_height(
+                pdf, step, step_descriptions, transcript_data=transcript_data
+            )
             if pdf.get_y() + card_height > _PAGE_BOTTOM_Y:
                 pdf.add_page()
 
@@ -647,11 +632,12 @@ class MeetingPDFGenerator:
             pdf.set_fill_color(*_DESKMATE_PRIMARY)
             pdf.rect(_LEFT_MARGIN, card_y, 3, 12, 'F')
 
-            # Step badge (pill)
+            # Step badge (pill) with sequential Moment 1..N numbering
+            moment_index = rendered_count + 1
             pdf.set_y(card_y + 3)
             pdf.set_x(_LEFT_MARGIN + 7)
             pdf.set_fill_color(*_DESKMATE_PRIMARY)
-            badge_text = f" Moment {step_id_val} "
+            badge_text = f" Moment {moment_index} "
             badge_w = pdf.get_string_width(badge_text) + 8
             pdf.set_font('Helvetica', 'B', 8.5)
             pdf.set_text_color(*_WHITE)
@@ -695,10 +681,11 @@ class MeetingPDFGenerator:
                 logger.error(f"Failed to embed screenshot {full_img_path}: {img_err}")
                 continue
 
-            # ── Description below screenshot ──────────────────────────
-            description = self._find_step_description(step_id_val, step_descriptions)
-            if description:
-                self._render_step_description(pdf, description, timestamp_str=step_ts)
+            # ── Description & Audio Transcript below screenshot ──────────
+            description, audio_transcript = self._step_card_texts(step, step_descriptions, transcript_data)
+            self._render_step_description(
+                pdf, description, timestamp_str=step_ts, audio_transcript=audio_transcript
+            )
 
             pdf.ln(10)
 
@@ -736,18 +723,36 @@ class MeetingPDFGenerator:
         meta = self._lookup_step_meta(step_id_val, step_descriptions)
         if isinstance(meta, dict) and meta.get("title"):
             return str(meta["title"])
-        return self._clean_fallback_title(default_summary)
+        return readable_step_title(default_summary)
 
-    def _clean_fallback_title(self, summary: str) -> str:
-        """Clean raw technical step summary text into a user-friendly generic title."""
-        if not summary:
-            return "Screen Presentation"
-        if "unclassified" in summary.lower() or "ui_interaction" in summary.lower() or "observed_interaction" in summary.lower():
-            return "Screen Interaction"
-        return re.sub(r'^Step\s+\d+:\s*', '', summary)
+    def _step_card_texts(
+        self, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None
+    ) -> tuple[str, str]:
+        """(description, spoken quote) for a step card. The summarizer fills both for key moments;
+        this also covers steps it did not describe, such as custom-field evidence."""
+        step_id_val = step.get("step_id", 0)
+        description = self._find_step_description(step_id_val, step_descriptions).strip()
+        if not description or description.lower() in GENERIC_STEP_SUMMARIES:
+            description = fallback_step_description(step)
+        meta = self._lookup_step_meta(step_id_val, step_descriptions)
+        quote = str(meta.get("audio_transcript") or "").strip() if isinstance(meta, dict) else ""
+        return description, quote or spoken_quotes_near(transcript_data, step)
 
-    def _calculate_step_card_height(self, pdf, step: dict, step_descriptions: dict) -> float:
-        """Calculate the total height (in mm) required to render a step card (header, image, description)."""
+    @staticmethod
+    def _split_action_and_context(description: str) -> tuple[str, str]:
+        """(in-meeting action, researched context) — the model marks context as
+        [Context Reference: ...], **[Context Reference]**: ... or *(Context Reference: ...)*."""
+        text = (description or "").strip()
+        for pattern in _CONTEXT_PATTERNS:
+            contexts = [m.group(1).strip() for m in pattern.finditer(text)]
+            if contexts:
+                return pattern.sub("", text).strip(), " ".join(contexts)
+        return text, ""
+
+    def _calculate_step_card_height(
+        self, pdf, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None
+    ) -> float:
+        """Calculate the total height (in mm) required to render a step card (header, image, description, audio)."""
         header_h = 12
         spacing_h = 14 + 3 + 10
 
@@ -759,7 +764,7 @@ class MeetingPDFGenerator:
         rendered_img_h = 95.6  # Default 16:9 aspect ratio height for 170mm width
 
         if asset_rel_path:
-            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            full_img_path = resolve_screenshot_path(asset_rel_path)
             if full_img_path and os.path.exists(full_img_path):
                 try:
                     import cv2
@@ -770,36 +775,20 @@ class MeetingPDFGenerator:
                 except Exception:
                     pass
 
-        # Description box height
-        step_id_val = step.get("step_id", 0)
-        description = self._find_step_description(step_id_val, step_descriptions)
-        box_height = 0
-        if description:
-            safe_desc = self._make_safe(description)
-            text_for_height = safe_desc.replace('**', '')
-
-            current_font = pdf.font_family
-            current_style = pdf.font_style
-            current_size = pdf.font_size_pt
-
-            pdf.set_font('Helvetica', '', 8.5)
-            try:
-                text_height = pdf.multi_cell(
-                    w=_IMG_WIDTH - 14,
-                    h=4.5,
-                    text=text_for_height,
-                    dry_run=True,
-                    output='HEIGHT'
-                )
-                box_height = 5 + text_height + 8
-            except Exception:
-                box_height = 30
-
-            pdf.set_font(current_font, current_style, current_size)
+        description, audio_transcript = self._step_card_texts(step, step_descriptions, transcript_data)
+        action_text, context_text = self._split_action_and_context(description)
+        box_height = self._description_box_height(pdf, action_text, context_text, audio_transcript)
 
         return header_h + rendered_img_h + box_height + spacing_h
 
-    def _get_first_card_height(self, pdf, steps: list, important_step_ids: list, step_descriptions: dict) -> float:
+    def _get_first_card_height(
+        self,
+        pdf,
+        steps: list,
+        important_step_ids: list,
+        step_descriptions: dict,
+        transcript_data: Optional[dict] = None
+    ) -> float:
         """Find the height of the first step card that will actually be rendered."""
         if not steps or not important_step_ids:
             return 0.0
@@ -831,33 +820,49 @@ class MeetingPDFGenerator:
             if not asset_rel_path:
                 continue
 
-            full_img_path = _resolve_screenshot_path(asset_rel_path)
+            full_img_path = resolve_screenshot_path(asset_rel_path)
             if full_img_path and os.path.exists(full_img_path):
-                return self._calculate_step_card_height(pdf, step, step_descriptions)
+                return self._calculate_step_card_height(
+                    pdf, step, step_descriptions, transcript_data=transcript_data
+                )
 
         return 0.0
 
-    def _render_step_description(self, pdf, description: str, timestamp_str: str = ""):
-        """Render a premium description card below a screenshot with inline bold support."""
+    @staticmethod
+    def _description_box_height(pdf, action_text: str, context_text: str, audio_text: str) -> float:
+        """Height (mm) of the card under a screenshot; used to plan page breaks and to draw it."""
+        saved_font = (pdf.font_family, pdf.font_style, pdf.font_size_pt)
+
+        def text_height(text: str, style: str, size: float, line_h: float) -> float:
+            pdf.set_font('Helvetica', style, size)
+            try:
+                return pdf.multi_cell(
+                    w=_IMG_WIDTH - 14, h=line_h, text=text.replace('**', ''), dry_run=True, output='HEIGHT'
+                )
+            except Exception:
+                return 3 * line_h
+
+        height = 2 * _DESC_BOX_PADDING
+        if action_text:
+            height += 5.0 + text_height(action_text, '', 8.5, 4.8)
+        if context_text:
+            height += 8.0 + text_height(context_text, 'I', 8.0, 4.2)
+        if audio_text:
+            height += 8.0 + text_height(audio_text, 'I', 8.0, 4.2)
+        pdf.set_font(*saved_font)
+        return height
+
+    def _render_step_description(
+        self, pdf, description: str, timestamp_str: str = "", audio_transcript: str = ""
+    ):
+        """Render a description card below screenshot with visual details and synchronized dialogue."""
         desc_x = _IMG_X
         desc_w = _IMG_WIDTH
-        safe_desc = self._make_safe(description)
-
-        text_for_height = safe_desc.replace('**', '')
-        pdf.set_font('Helvetica', '', 8.5)
-        text_height = pdf.multi_cell(
-            w=desc_w - 14,
-            h=4.5,
-            text=text_for_height,
-            dry_run=True,
-            output='HEIGHT'
-        )
-        label_height = 5
-        padding = 8
-        box_height = label_height + text_height + padding
+        safe_audio = self._make_safe(audio_transcript)
+        action_text, context_text = self._split_action_and_context(self._make_safe(description))
+        box_height = self._description_box_height(pdf, action_text, context_text, safe_audio)
 
         desc_y = pdf.get_y()
-
         if desc_y + box_height > _PAGE_BOTTOM_Y:
             pdf.add_page()
             desc_y = pdf.get_y()
@@ -870,27 +875,56 @@ class MeetingPDFGenerator:
         pdf.set_fill_color(*_DESKMATE_DEEP)
         pdf.rect(desc_x, desc_y, 3, box_height, 'F')
 
-        # "What happened" label with timestamp
-        label_text = f"WHAT HAPPENED AT [{timestamp_str}]" if timestamp_str else "WHAT HAPPENED"
-        pdf.set_y(desc_y + 2.5)
-        pdf.set_x(desc_x + 7)
-        pdf.set_font('Helvetica', 'B', 8)
-        pdf.set_text_color(*_DESKMATE_PRIMARY)
-        pdf.cell(desc_w - 14, label_height, label_text, 0, 1)
+        curr_y = desc_y + _DESC_BOX_PADDING
 
-        # Description text
-        pdf.set_y(desc_y + 2.5 + label_height + 1)
-        pdf.set_x(desc_x + 7)
+        # Visual action description section
+        if action_text:
+            label_text = f"ACTION & OPERATION PERFORMED [{timestamp_str}]" if timestamp_str else "ACTION & OPERATION PERFORMED"
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'B', 8)
+            pdf.set_text_color(*_DESKMATE_PRIMARY)
+            pdf.cell(desc_w - 14, 5, label_text)
 
-        old_l_margin = pdf.l_margin
-        old_r_margin = pdf.r_margin
-        pdf.set_left_margin(desc_x + 7)
-        pdf.set_right_margin(210 - (desc_x + desc_w - 7))
+            curr_y += 5.5
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', '', 8.5)
+            pdf.set_text_color(*_BODY_TEXT)
+            pdf.multi_cell(desc_w - 14, 4.8, action_text, markdown=True)
+            curr_y = pdf.get_y() + 3.0
 
-        self._write_formatted_text(pdf, description, font_size=8.5)
+        # Augmented domain/technical context reference (clearly distinguished)
+        if context_text:
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'B', 7.5)
+            pdf.set_text_color(*_CONTEXT_ACCENT)
+            pdf.cell(desc_w - 14, 4.5, "TECHNICAL CONTEXT & DOMAIN REFERENCE")
 
-        pdf.set_left_margin(old_l_margin)
-        pdf.set_right_margin(old_r_margin)
+            curr_y = pdf.get_y() + 4.5 + 1.0
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'I', 8.0)
+            pdf.set_text_color(15, 76, 92)  # Dark teal for clear distinction
+            pdf.multi_cell(desc_w - 14, 4.2, context_text, markdown=True)
+            curr_y = pdf.get_y() + 3.0
+
+        # Synchronized spoken discussion section - ONLY if safe_audio is present
+        if safe_audio:
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'B', 7.5)
+            pdf.set_text_color(*_DESKMATE_PRIMARY)
+            pdf.cell(desc_w - 14, 4.5, "RELEVANT SPEAKER STATEMENTS")
+
+            curr_y = pdf.get_y() + 4.5 + 1.0
+            pdf.set_y(curr_y)
+            pdf.set_x(desc_x + 7)
+            pdf.set_font('Helvetica', 'I', 8.0)
+            pdf.set_text_color(*_BODY_TEXT)
+            pdf.multi_cell(desc_w - 14, 4.2, safe_audio)
+
         pdf.set_y(desc_y + box_height)
 
     # ── Utilities ─────────────────────────────────────────────────────────

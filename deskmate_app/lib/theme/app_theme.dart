@@ -51,6 +51,8 @@ class AppTheme {
   static const Color amber = Color(0xFFF59E0B);
   static const Color amberLight = Color(0xFFFBBF24);
   static const Color amberDark = Color(0xFFD97706);
+  // Researched context (vs. what happened in the meeting) in step descriptions.
+  static const Color contextTeal = Color(0xFF0E7490);
 
   static final ChipThemeData _chipTheme = ChipThemeData(
     elevation: 0,

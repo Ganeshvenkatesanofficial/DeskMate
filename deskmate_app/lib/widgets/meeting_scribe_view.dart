@@ -221,8 +221,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   }
 
   List<String> _extractActionItemsFromSummary(String summaryText) {
+    // Older reports may still contain a raw timeline; its events are not action items
+    final cleanSummary = summaryText.replaceAll(_timelineSection, '');
     final extractedActions = <String>[];
-    for (final line in summaryText.split('\n')) {
+    for (final line in cleanSummary.split('\n')) {
       if (line.contains('[ACTION ITEM]') || line.contains('[HIGH PRIORITY]')) {
         var clean = line.replaceAll('**', '').trim();
         if (clean.startsWith('-') || clean.startsWith('*')) {
@@ -238,15 +240,59 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
 
   static const _defaultMeetingTitle = 'Executive Meeting Debrief';
 
-  // Matches the silence markers the PDF generator ignores.
-  static const _silenceMarkers = [
-    'no speech',
-    'silent',
-    'no audio',
+  // Whole-quote values the model uses for "nobody spoke" (same list as the summarizer).
+  static const _silentQuotes = {
+    '',
+    'none',
     'n/a',
-    'no spoken',
-    'none recorded',
+    'na',
+    'silent',
+    'silence',
+    'no speech',
+    'no audio',
+    'no spoken dialogue',
+    'no speech during this moment',
+    'no speech at this moment',
+  };
+  // Click targets too generic to describe a step.
+  static const _genericTargets = {
+    'button',
+    'icon button',
+    'unclassified',
+    'interactive region',
+    'menu bar',
+    'menu item',
+  };
+  static final _speakerTag = RegExp(
+    r'\bSPEAKER_0*(\d+)\b',
+    caseSensitive: false,
+  );
+  static final _quoteEdges = RegExp(r'''^[\s."'()]+|[\s."'()]+$''');
+  // A raw click timeline from older reports; never shown.
+  static final _timelineSection = RegExp(
+    r'#{1,4}\s*Detailed Actions Timeline[\s\S]*?(?=(?:#{1,4}\s+|$))',
+    caseSensitive: false,
+  );
+  // How the summarizer marks researched context in a step description (mirrors pdf_generator).
+  static const _contextKinds =
+      r'(?:Context Reference|Domain Context|Technical Context)';
+  static final _contextPatterns = [
+    RegExp(r'\[' + _contextKinds + r':\s*([\s\S]*?)\]', caseSensitive: false),
+    RegExp(
+      r'\*\*\[' + _contextKinds + r'\]\*\*:\s*([\s\S]*)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'\*\(' + _contextKinds + r':\s*([\s\S]*?)\)\*',
+      caseSensitive: false,
+    ),
   ];
+
+  /// SPEAKER_00 -> Speaker 1.
+  static String _humanizeSpeakerTags(String text) => text.replaceAllMapped(
+    _speakerTag,
+    (m) => 'Speaker ${int.parse(m[1]!) + 1}',
+  );
 
   /// Spoken quote for a step, or '' when the model reported silence.
   static String _stepAudioTranscript(Object? meta) {
@@ -254,13 +300,48 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     final text = (meta['audio_transcript'] ?? meta['spoken_context'] ?? '')
         .toString()
         .trim();
-    final lower = text.toLowerCase();
-    return _silenceMarkers.any(lower.contains) ? '' : text;
+    final key = text.toLowerCase().replaceAll(_quoteEdges, '');
+    return _silentQuotes.contains(key) ? '' : _humanizeSpeakerTags(text);
   }
 
-  /// The summary without its leading `# Title` line (the title has its own header).
+  /// (in-meeting action, researched context) from a step description.
+  static (String, String) _splitActionAndContext(String text) {
+    final trimmed = text.trim();
+    for (final pattern in _contextPatterns) {
+      final contexts = pattern
+          .allMatches(trimmed)
+          .map((m) => m.group(1)!.trim())
+          .toList();
+      if (contexts.isNotEmpty) {
+        return (trimmed.replaceAll(pattern, '').trim(), contexts.join(' '));
+      }
+    }
+    return (trimmed, '');
+  }
+
+  /// The AI's step description, or one built from the recorded clicks when it is missing.
+  static String _stepDescription(Object? meta, Map<String, dynamic> step) {
+    final desc = meta is Map
+        ? (meta['description'] ?? '').toString().trim()
+        : '';
+    if (desc.isNotEmpty) return desc;
+    final targets = <String>[];
+    for (final a in ((step['actions'] as List?) ?? const []).take(8)) {
+      final target = a is Map ? (a['target'] ?? '').toString().trim() : '';
+      if (target.isNotEmpty &&
+          !_genericTargets.contains(target.toLowerCase()) &&
+          !targets.contains(target)) {
+        targets.add(target);
+      }
+    }
+    return targets.isEmpty
+        ? 'Screen content shown during the meeting.'
+        : 'Interacted with: ${targets.join('; ')}';
+  }
+
+  /// The summary without its leading `# Title` line (the title has its own header) and without raw timeline.
   static String _summaryBody(String summary) {
-    final lines = summary.split('\n');
+    final lines = summary.replaceAll(_timelineSection, '').split('\n');
     final first = lines.indexWhere((l) => l.trim().isNotEmpty);
     if (first >= 0 && lines[first].trimLeft().startsWith('# ')) {
       lines.removeAt(first);
@@ -4121,7 +4202,114 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         }
       }
     }
-    return list;
+
+    // Deduplicate and sort strictly chronologically
+    final seenIds = <String>{};
+    final seenPaths = <String>{};
+    final deduped = <Map<String, dynamic>>[];
+    for (final item in list) {
+      final sId =
+          item['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+      final path = item['screenshot_path']?.toString() ?? '';
+      if (sId.isNotEmpty && seenIds.contains(sId)) continue;
+      if (path.isNotEmpty && seenPaths.contains(path)) continue;
+      if (sId.isNotEmpty) seenIds.add(sId);
+      if (path.isNotEmpty) seenPaths.add(path);
+      deduped.add(item);
+    }
+
+    // Sort chronologically by numeric step ID / sequence
+    deduped.sort((a, b) {
+      final aId =
+          int.tryParse(
+            a['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+          ) ??
+          0;
+      final bId =
+          int.tryParse(
+            b['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+          ) ??
+          0;
+      return aId.compareTo(bId);
+    });
+
+    return deduped;
+  }
+
+  /// A step's description, with researched context shown in its own labelled box.
+  /// [large] is the full-screen viewer; otherwise the moment card.
+  List<Widget> _buildStepDescription(
+    ThemeData theme,
+    String description, {
+    bool large = false,
+  }) {
+    final (actionText, contextRef) = _splitActionAndContext(description);
+    return [
+      if (actionText.isNotEmpty) ...[
+        if (!large) const SizedBox(height: 4),
+        Text(
+          actionText,
+          style: TextStyle(
+            fontSize: large ? 13 : 12,
+            height: large ? 1.45 : 1.4,
+            color: large ? theme.fgDefault : theme.fgMuted,
+          ),
+        ),
+        if (large) const SizedBox(height: 8),
+      ],
+      if (contextRef.isNotEmpty) ...[
+        if (!large) const SizedBox(height: 5),
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: large ? 10 : 8,
+            vertical: large ? 6 : 5,
+          ),
+          decoration: BoxDecoration(
+            color: AppTheme.contextTeal.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: AppTheme.contextTeal.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: large ? 14 : 13,
+                color: AppTheme.contextTeal,
+              ),
+              SizedBox(width: large ? 8 : 5),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'CONTEXT REFERENCE: ',
+                        style: TextStyle(
+                          fontSize: large ? 11 : 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.contextTeal,
+                        ),
+                      ),
+                      TextSpan(
+                        text: contextRef,
+                        style: TextStyle(
+                          fontSize: large ? 12 : 11.5,
+                          fontStyle: FontStyle.italic,
+                          color: large ? theme.fgDefault : theme.fgMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (large) const SizedBox(height: 8),
+      ],
+    ];
   }
 
   Widget _buildVisualMomentsInner(ThemeData theme) {
@@ -4153,7 +4341,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Key Visual Moments (${displaySteps.length} Steps Identified)',
+                      'Key Visual Moments (${displaySteps.length} Moments Identified)',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -4162,7 +4350,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Click any screenshot thumbnail or step card to inspect high-resolution frames & LocateAnything detections.',
+                      'Click any screenshot thumbnail or moment card to inspect high-resolution frames & LocateAnything detections.',
                       style: TextStyle(fontSize: 12, color: theme.fgMuted),
                     ),
                   ],
@@ -4199,9 +4387,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   _stepDescriptions['step_$stepId'] ??
                   _stepDescriptions['step_$cleanId'] ??
                   _stepDescriptions[cleanId];
-              final summary = step['summary']?.toString() ?? 'Step $stepId';
+              final summary = step['summary']?.toString() ?? 'Moment ${i + 1}';
               final title = meta is Map ? (meta['title'] ?? summary) : summary;
-              final desc = meta is Map ? (meta['description'] ?? '') : '';
+              final description = _stepDescription(meta, step);
               final audioTranscript = _stepAudioTranscript(meta);
               final timestamp = step['timestamp']?.toString() ?? '';
 
@@ -4259,7 +4447,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      'STEP $stepId',
+                                      'MOMENT ${i + 1}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -4320,17 +4508,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                                   color: theme.fgDefault,
                                 ),
                               ),
-                              if (desc.toString().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  desc.toString(),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.4,
-                                    color: theme.fgMuted,
-                                  ),
-                                ),
-                              ],
+                              ..._buildStepDescription(theme, description),
                               if (audioTranscript.isNotEmpty) ...[
                                 const SizedBox(height: 6),
                                 Container(
@@ -4552,7 +4730,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                 _stepDescriptions['step_$cleanId'] ??
                 _stepDescriptions[cleanId];
             final title = meta is Map ? (meta['title'] ?? summary) : summary;
-            final desc = meta is Map ? (meta['description'] ?? '') : '';
+            final description = _stepDescription(meta, step);
             final modalAudioTranscript = _stepAudioTranscript(meta);
             final actions = (step['actions'] as List?) ?? [];
 
@@ -4653,7 +4831,7 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                               ),
                             ),
                             child: Text(
-                              'STEP $stepId',
+                              'MOMENT ${activeIndex + 1}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -4814,17 +4992,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (desc.toString().isNotEmpty) ...[
-                            Text(
-                              desc.toString(),
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.45,
-                                color: theme.fgDefault,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
+                          ..._buildStepDescription(
+                            theme,
+                            description,
+                            large: true,
+                          ),
                           if (modalAudioTranscript.isNotEmpty) ...[
                             Container(
                               padding: const EdgeInsets.symmetric(
