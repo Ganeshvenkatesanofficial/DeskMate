@@ -44,7 +44,8 @@ _CONTEXT_ACCENT = (14, 116, 144)        # #0E7490 — Informational Teal for Con
 _LEFT_MARGIN = 15
 _RIGHT_MARGIN = 15
 _CONTENT_WIDTH = 210 - _LEFT_MARGIN - _RIGHT_MARGIN   # 180mm
-_IMG_WIDTH = 170
+_IMG_WIDTH = 138                                      # Balanced, elegant screenshot width (avoids pushing entire cards to new pages)
+_MAX_IMG_HEIGHT = 76.0                                # Max image height cap to ensure 2 cards fit per page
 _IMG_X = _LEFT_MARGIN + (_CONTENT_WIDTH - _IMG_WIDTH) / 2
 
 
@@ -203,9 +204,31 @@ class MeetingPDFGenerator:
             pdf.set_auto_page_break(auto=True, margin=22)
 
             # ─── Extract Meeting Title & Clean Summary ────────────────────
-            title_match = re.search(r"^#\s+(.*?)$", summary_text or "", re.MULTILINE)
+            raw_s = (summary_text or "").strip()
+            # Strip markdown code fences or JSON wrapper artifacts
+            if raw_s.startswith("```"):
+                raw_s = re.sub(r"^```(?:json|markdown)?\s*", "", raw_s).strip()
+                raw_s = re.sub(r"\s*```$", "", raw_s).strip()
+            raw_s = re.sub(r'^\s*\{\s*"SUMMARY":\s*', "", raw_s).strip()
+            raw_s = re.sub(r'^\s*"SUMMARY":\s*', "", raw_s).strip()
+
+            # Strip delimiters like ===SUMMARY=== or ### SUMMARY or SUMMARY
+            raw_s = re.sub(
+                r"^(?:={3,}\s*SUMMARY\s*={3,}|#{1,4}\s*SUMMARY\s*|SUMMARY\s*:?\s*)\n*",
+                "",
+                raw_s,
+                flags=re.IGNORECASE,
+            ).strip()
+
+            title_match = re.search(r"^#\s+(.*?)$", raw_s, re.MULTILINE)
             doc_title = title_match.group(1).strip() if title_match else "Executive Meeting Intelligence Report"
-            clean_summary = re.sub(r"^#\s+.*?\n+", "", summary_text or "", count=1).strip()
+            if doc_title and doc_title != "Executive Meeting Intelligence Report":
+                clean_summary = re.sub(r"^#\s+" + re.escape(doc_title) + r"\s*\n*", "", raw_s, flags=re.MULTILINE).strip()
+            else:
+                clean_summary = re.sub(r"^#\s+.*?\n+", "", raw_s, count=1).strip()
+
+            # Remove any empty orphaned headers (e.g. ### Header followed by another ### Header with no body)
+            clean_summary = re.sub(r"(#{1,4}\s+[^\n]+)\s*(?=\n+#{1,4}\s+|\Z)", "", clean_summary).strip()
 
             # ─── Hero Title Block ─────────────────────────────────────────
             pdf.set_y(24)
@@ -224,11 +247,13 @@ class MeetingPDFGenerator:
 
             # ─── Key Visual Moments ──────────────────────────────────────
             if steps:
-                # Force a page break if the header and first screenshot card won't fit on the current page
                 first_card_h = self._get_first_card_height(
                     pdf, steps, important_step_ids, step_descriptions, transcript_data=transcript_data
                 )
-                if pdf.get_y() + 25 + first_card_h > _PAGE_BOTTOM_Y:
+                rem_h = _PAGE_BOTTOM_Y - pdf.get_y()
+                # If there's less space than needed for header + first card, or if page is already past mid-point (>145mm),
+                # start the visual moments section cleanly at the top of the next page to avoid awkward blank gaps
+                if rem_h < (16 + first_card_h) and pdf.get_y() > 145:
                     pdf.add_page()
                 self._render_section_header(pdf, 'Key Visual Interaction Moments')
                 self._render_screenshots(
@@ -422,10 +447,17 @@ class MeetingPDFGenerator:
         """Parse and render Markdown text into styled PDF content."""
         pdf.set_text_color(*_BODY_TEXT)
 
-        for original_line in (text or "").split('\n'):
+        raw_lines = (text or "").split('\n')
+        stripped_lines = [l.strip() for l in raw_lines]
+
+        for i, original_line in enumerate(raw_lines):
             line = original_line.strip()
             if not line:
-                pdf.ln(3)
+                pdf.ln(2.5)
+                continue
+
+            # Skip stray delimiter tags or empty title repetitions
+            if line.upper() in ("SUMMARY", "### SUMMARY", "## SUMMARY", "# SUMMARY", "===SUMMARY==="):
                 continue
 
             # Determine indentation levels for nested lists based on original line leading spaces
@@ -437,18 +469,31 @@ class MeetingPDFGenerator:
             elif indent_spaces >= 2:
                 level = 2
 
-            # H1 headers
-            if line.startswith('# '):
-                self._render_sub_header(pdf, line[2:], level=2)
-            # H2 headers
-            elif line.startswith('## '):
-                self._render_sub_header(pdf, line[3:], level=2)
-            # H3 headers
-            elif line.startswith('### '):
-                self._render_sub_header(pdf, line[4:], level=3)
-            # H4 headers
-            elif line.startswith('#### '):
-                self._render_sub_header(pdf, line[5:], level=4)
+            # Guard against headers with no content underneath
+            if line.startswith(('# ', '## ', '### ', '#### ')):
+                header_text = re.sub(r'^#{1,4}\s*', '', line).strip()
+                if header_text.upper() in ("SUMMARY", "MEETING SUMMARY"):
+                    continue
+                has_body = False
+                for next_l in stripped_lines[i + 1:]:
+                    if not next_l:
+                        continue
+                    if next_l.startswith(('# ', '## ', '### ', '#### ')):
+                        break
+                    has_body = True
+                    break
+                if not has_body:
+                    # Skip empty hanging header with no content
+                    continue
+
+                if line.startswith('# '):
+                    self._render_sub_header(pdf, line[2:], level=2)
+                elif line.startswith('## '):
+                    self._render_sub_header(pdf, line[3:], level=2)
+                elif line.startswith('### '):
+                    self._render_sub_header(pdf, line[4:], level=3)
+                elif line.startswith('#### '):
+                    self._render_sub_header(pdf, line[5:], level=4)
             # Bullet points
             elif line.startswith('- ') or line.startswith('* '):
                 self._render_bullet(pdf, line[2:].strip(), level=level)
@@ -653,22 +698,22 @@ class MeetingPDFGenerator:
 
             # Card background
             pdf.set_fill_color(*_CARD_BG)
-            pdf.rect(_LEFT_MARGIN, card_y, _CONTENT_WIDTH, 12, 'F')
+            pdf.rect(_LEFT_MARGIN, card_y, _CONTENT_WIDTH, 10, 'F')
 
             # Left accent bar in DeskMate primary purple
             pdf.set_fill_color(*_DESKMATE_PRIMARY)
-            pdf.rect(_LEFT_MARGIN, card_y, 3, 12, 'F')
+            pdf.rect(_LEFT_MARGIN, card_y, 3, 10, 'F')
 
             # Step badge (pill) with sequential Moment 1..N numbering
             moment_index = rendered_count + 1
-            pdf.set_y(card_y + 3)
-            pdf.set_x(_LEFT_MARGIN + 7)
+            pdf.set_y(card_y + 2)
+            pdf.set_x(_LEFT_MARGIN + 6)
             pdf.set_fill_color(*_DESKMATE_PRIMARY)
             badge_text = f" Moment {moment_index} "
-            badge_w = pdf.get_string_width(badge_text) + 8
-            pdf.set_font('Helvetica', 'B', 8.5)
+            badge_w = pdf.get_string_width(badge_text) + 6
+            pdf.set_font('Helvetica', 'B', 8)
             pdf.set_text_color(*_WHITE)
-            pdf.cell(badge_w, 6, badge_text, 0, 0, 'C', fill=True)
+            pdf.cell(badge_w, 5.5, badge_text, 0, 0, 'C', fill=True)
 
             # Step summary/title text & Timestamp
             raw_summary = step.get("summary", "")
@@ -683,17 +728,17 @@ class MeetingPDFGenerator:
             if len(safe_title) > max_title_chars:
                 safe_title = safe_title[:max_title_chars - 3].rstrip() + "..."
 
-            pdf.set_x(_LEFT_MARGIN + 7 + badge_w + 4)
-            pdf.set_font('Helvetica', 'B', 9.5)
+            pdf.set_x(_LEFT_MARGIN + 6 + badge_w + 4)
+            pdf.set_font('Helvetica', 'B', 9)
             pdf.set_text_color(*_DESKMATE_DARK)
-            pdf.cell(title_w, 6, safe_title, 0, 0)
+            pdf.cell(title_w, 5.5, safe_title, 0, 0)
 
             # Exact moment timestamp on right of step header card
-            pdf.set_font('Helvetica', 'B', 8.5)
+            pdf.set_font('Helvetica', 'B', 8)
             pdf.set_text_color(*_MUTED_TEXT)
-            pdf.cell(24, 6, f"[{step_ts}]", 0, 1, 'R')
+            pdf.cell(24, 5.5, f"[{step_ts}]", 0, 1, 'R')
 
-            pdf.set_y(card_y + 14)
+            pdf.set_y(card_y + 11.5)
 
             # ── Image — bordered and centered ─────────────────────────
             try:
@@ -701,13 +746,23 @@ class MeetingPDFGenerator:
                 pdf.set_draw_color(*_DIVIDER)
                 pdf.set_line_width(0.3)
 
-                pdf.image(full_img_path, x=_IMG_X, w=_IMG_WIDTH)
+                actual_h = min(_IMG_WIDTH * (9 / 16), _MAX_IMG_HEIGHT)
+                if os.path.exists(full_img_path):
+                    try:
+                        import cv2
+                        im_data = cv2.imread(full_img_path)
+                        if im_data is not None:
+                            h_px, w_px = im_data.shape[:2]
+                            actual_h = min(_IMG_WIDTH * (h_px / w_px), _MAX_IMG_HEIGHT)
+                    except Exception:
+                        pass
+
+                pdf.image(full_img_path, x=_IMG_X, y=img_y, w=_IMG_WIDTH, h=actual_h)
 
                 # Draw hairline border after image is placed
-                img_h = pdf.get_y() - img_y
-                pdf.rect(_IMG_X - 0.5, img_y - 0.5, _IMG_WIDTH + 1, img_h + 1)
+                pdf.rect(_IMG_X - 0.5, img_y - 0.5, _IMG_WIDTH + 1, actual_h + 1)
+                pdf.set_y(img_y + actual_h + 2)
 
-                pdf.ln(3)
                 rendered_count += 1
             except Exception as img_err:
                 logger.error(f"Failed to embed screenshot {full_img_path}: {img_err}")
@@ -719,7 +774,7 @@ class MeetingPDFGenerator:
                 pdf, description, timestamp_str=step_ts, audio_transcript=audio_transcript
             )
 
-            pdf.ln(10)
+            pdf.ln(5)
 
         if rendered_count == 0:
             pdf.set_font('Helvetica', 'I', 9)
@@ -785,15 +840,15 @@ class MeetingPDFGenerator:
         self, pdf, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None
     ) -> float:
         """Calculate the total height (in mm) required to render a step card (header, image, description, audio)."""
-        header_h = 12
-        spacing_h = 14 + 3 + 10
+        header_h = 10
+        spacing_h = 2 + 5  # Spacing between image/box and bottom margin
 
         # Image height
         actions = step.get("actions", [])
         asset_rel_path = step.get("screenshot_path") or next(
             (a.get("asset_path") for a in actions if a.get("asset_path")), None
         )
-        rendered_img_h = 95.6  # Default 16:9 aspect ratio height for 170mm width
+        rendered_img_h = min(_IMG_WIDTH * (9 / 16), _MAX_IMG_HEIGHT)
 
         if asset_rel_path:
             full_img_path = resolve_screenshot_path(asset_rel_path)
@@ -803,7 +858,7 @@ class MeetingPDFGenerator:
                     img = cv2.imread(full_img_path)
                     if img is not None:
                         h_px, w_px = img.shape[:2]
-                        rendered_img_h = _IMG_WIDTH * (h_px / w_px)
+                        rendered_img_h = min(_IMG_WIDTH * (h_px / w_px), _MAX_IMG_HEIGHT)
                 except Exception:
                     pass
 

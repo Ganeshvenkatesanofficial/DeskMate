@@ -381,12 +381,19 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
    `- No explicit follow-up action items were assigned during this session.`
 
 ---
+---
+## CRITICAL GROUNDING & FIDELITY DIRECTIVE (STRICT ANTI-HALLUCINATION):
+1. **EXCLUSIVELY USE PROVIDED SOURCES**: All meeting titles, executive summaries, spoken highlights, decisions, action items, and technical parameters MUST be derived EXCLUSIVELY from SOURCE 1 (Visual Event Log & Screen OCR) and SOURCE 2 (Voxtral Audio Transcript).
+2. **ZERO TOLERANCE FOR BORROWED OR FICTIONAL TOPICS**: Absolutely DO NOT invent, assume, or mention topics, projects, or people (such as 'API Gateway', 'Throttle Sync', 'CloudWatch', 'Alex', 'John', 'Peter', 'billing', 'database connection pool') unless they are explicitly present in the actual audio transcript or screen OCR provided above.
+3. **STRICT DOMAIN ALIGNMENT**: If the meeting transcript and visual timeline are about AWS IAM user creation, the entire report—title, overview, decisions, action items, and technical parameters—MUST focus 100% on AWS IAM user creation, permissions, and security credentials.
+
+---
 ## INSTRUCTIONS & STRUCTURE:
-1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (e.g. `# API Gateway Architecture & Throttle Sync` or `# Q3 Product Roadmap Alignment`). DO NOT use generic phrases like "Meeting Summary".
+1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (derived strictly from what was discussed and shown on screen). DO NOT use generic phrases like "Meeting Summary". NEVER copy example text.
 2. STEP DESCRIPTIONS REQUIREMENT: For each step in ===IMPORTANT_STEPS===, you MUST provide an entry in ===STEP_DESCRIPTIONS===:
-   - "title": Concise 2-5 word action-oriented title (e.g., "API Endpoint Configuration" or "Q3 Roadmap Alignment").
+   - "title": Concise 2-5 word action-oriented title.
    - "description": 1-3 detailed sentences explaining EXACTLY what operation was performed at that specific time, what tool or console was manipulated, and what changes occurred. When filling technical context gaps, append `[Context Reference: ...]` clearly distinguishing researched context from the in-meeting action.
-   - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Alex: 'Make sure we verify the database connection pool limits'"). If no speech occurred at that moment, output "" (empty string).
+   - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Speaker 1: '...'"). If no speech occurred at that moment, output "" (empty string).
 
 STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:
 
@@ -414,26 +421,37 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
 (IMPORTANT: Output ONLY valid step IDs matching the numbers from SOURCE 1 Visual Event Log, e.g. ["step_1", "step_2"]. NEVER output arbitrary text strings like ["ui_interaction"]).
 
 ===STEP_DESCRIPTIONS===
-{{"step_1": {{"title": "Service Configuration", "description": "User configured the service authentication endpoint and updated the environment variables. [Context Reference: Environment configurations define service endpoints and operational variables across staging and production deployments.]", "audio_transcript": "Speaker 1: 'Let\\'s verify the endpoint configuration before running the integration tests.'"}}}}
+{{"step_1": {{"title": "[Concise Action Title for Step 1]", "description": "[Accurate description of the visual action and context for Step 1]", "audio_transcript": "[Exact spoken words at this moment, or empty string if silent]"}}}}
 {custom_delimiters}
 """
 
     def _resolve_available_ollama_models(self) -> list[str]:
         """Resolve available Ollama models. Prioritizes the user's configured model,
-        followed by any available installed text-generation models on the user's system."""
+        followed by the highest parameter/capability text-generation models installed on the system."""
         candidates = []
         try:
             r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
             if r.status_code == 200:
                 models_data = r.json().get("models", [])
-                compatible = []
+                compatible_entries = []
                 for m in models_data:
                     name = str(m.get("name") or "")
-                    family = str((m.get("details") or {}).get("family") or "").lower()
-                    # Exclude embedding models and vision-specific architectures (e.g. mllama/vision fail on pure text generation)
+                    details = m.get("details") or {}
+                    family = str(details.get("family") or "").lower()
+                    # Exclude embedding models and vision-specific architectures
                     if any(term in name.lower() or term in family for term in ["embed", "vision", "mllama", "clip"]):
                         continue
-                    compatible.append(name)
+                    # Parse parameter size to prioritize larger models (e.g. 20.9B > 7B > 1.5B)
+                    param_str = str(details.get("parameter_size") or "0").upper().replace("B", "").replace("M", "")
+                    try:
+                        param_val = float(param_str)
+                    except ValueError:
+                        param_val = 0.0
+                    compatible_entries.append((param_val, name))
+
+                # Sort compatible models by parameter size descending (most capable first)
+                compatible_entries.sort(key=lambda x: x[0], reverse=True)
+                compatible = [entry[1] for entry in compatible_entries]
 
                 # 1. Prioritize user's configured model if explicitly set and text-compatible
                 if self.ollama_model and not any(term in self.ollama_model.lower() for term in ["vision", "mllama"]):
@@ -1123,6 +1141,13 @@ This meeting recording has been archived and processed locally. Key screen captu
 
         # Extract SUMMARY (text before the first delimiter when the model skipped ===SUMMARY===)
         summary = blocks.get("SUMMARY") or sections[0].strip() or summary
+
+        # Strip stray markdown code fences or JSON wrapper artifacts
+        if summary.startswith("```"):
+            summary = re.sub(r"^```(?:json|markdown)?\s*", "", summary).strip()
+            summary = re.sub(r"\s*```$", "", summary).strip()
+        summary = re.sub(r'^\s*\{\s*"SUMMARY":\s*', "", summary).strip()
+        summary = re.sub(r'^\s*"SUMMARY":\s*', "", summary).strip()
 
         # If model returned JSON instead of markdown, convert it
         summary, json_imp_steps, json_step_desc = self._convert_json_summary_if_needed(summary)

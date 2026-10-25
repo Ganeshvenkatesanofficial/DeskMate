@@ -2627,7 +2627,10 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text(
                       'Meeting Scribe',
@@ -2637,7 +2640,6 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                         color: theme.fgDefault,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 9,

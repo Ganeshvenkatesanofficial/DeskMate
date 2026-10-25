@@ -17,7 +17,7 @@ INTENSITY_THRESHOLD = 15       # Gray difference threshold for candidate pixels 
 PIXEL_DIFF_THRESHOLD = 0.005   # Fraction of changed pixels to trigger candidate
 SSIM_DROP_THRESHOLD = 0.005    # Structural similarity drop sensitivity
 SSIM_RESIZE_WIDTH = 320        # Resolution for high-speed SSIM computation
-MIN_VISUAL_DIFF_SSIM = 0.94    # Balanced visual dedup (0.94 skips very similar frames)
+MIN_VISUAL_DIFF_SSIM = 0.97    # Sensitive visual dedup (allows subtle form/tab/modal transitions while skipping static identical frames)
 
 # Action-Centric ROI Extraction (16:9 widescreen format)
 ROI_SIZE = (640, 360)          # Base ROI dimensions (w, h) in 16:9 ratio
@@ -31,12 +31,12 @@ CURSOR_SCALES = [0.8, 1.0, 1.25]
 CURSOR_MATCH_THRESHOLD = 0.60
 CURSOR_TEMPLATES_DIR = "assets/cursor_templates"
 STABLE_CURSOR_MAX_MOVE = 20    # Max pixel movement for stable cursor (high-res tolerance)
-CLICK_WINDOW_FRAMES = 3        # Number of frames stable cursor precedes click
-EVENT_COOLDOWN_MS = 2000       # Minimum cooldown between consecutive interaction events to prevent duplicates
+CLICK_WINDOW_FRAMES = 2        # Number of frames stable cursor precedes click (responsive to natural human clicks)
+EVENT_COOLDOWN_MS = 800        # Minimum cooldown between consecutive interaction events to debounce while capturing sequential actions
 
 # Live pipeline timing
 STARTUP_GRACE_SECONDS = 1.5    # Ignore the click on DeskMate's own Start button
-MILESTONE_INTERVAL_SECONDS = 40.0  # Force a screenshot checkpoint this often during long static views
+MILESTONE_INTERVAL_SECONDS = 15.0  # Force a screenshot checkpoint this often during long static views
 DEDUP_THUMBNAIL_SIZE = (320, 180)  # Grayscale size used for SSIM dedup
 
 # Temporal Tracking

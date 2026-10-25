@@ -111,6 +111,9 @@ class LivePipeline:
         self._locate_anything = LocateAnythingDetector() if grounding_enabled else None
         self._has_initial_baseline = False
         self._last_milestone_time = 0.0
+        self._pending_post_click_capture = False
+        self._post_click_time = 0.0
+        self._post_click_target = ""
 
         self.events: list[dict[str, Any]] = []
 
@@ -154,6 +157,9 @@ class LivePipeline:
         self._last_disk_sync = time.time()
         self._has_initial_baseline = False
         self._last_milestone_time = 0.0
+        self._pending_post_click_capture = False
+        self._post_click_time = 0.0
+        self._post_click_target = ""
 
         # Immediate initial persistence to guarantee session exists on disk even if interrupted
         self._save_session_report([], status="recording")
@@ -258,9 +264,19 @@ class LivePipeline:
                 logger.info(f"Captured initial baseline meeting step at {timestamp:.1f}s")
             return
 
+        # Check if we have a pending post-click transition capture (0.4s - 1.5s after user clicked)
+        is_post_click_transition = False
+        if self._pending_post_click_capture:
+            elapsed = timestamp - self._post_click_time
+            if 0.4 <= elapsed <= 1.5:
+                is_post_click_transition = True
+                self._pending_post_click_capture = False
+            elif elapsed > 1.5:
+                self._pending_post_click_capture = False
+
         # Stage 2: Change Detection & Early Candidate Filtering
         is_candidate, _, _, mask = self._change_detector.is_candidate_frame(frame)
-        if mask is None:
+        if mask is None and not is_post_click_transition:
             self._frames_skipped += 1
             return
 
@@ -268,7 +284,7 @@ class LivePipeline:
         is_periodic_checkpoint = timestamp - self._last_milestone_time >= mi_config.MILESTONE_INTERVAL_SECONDS
 
         # Stage 3: Visual Dedup (SSIM)
-        if not is_periodic_checkpoint and not self._is_visually_unique(frame):
+        if not is_periodic_checkpoint and not is_post_click_transition and not self._is_visually_unique(frame):
             self._frames_skipped += 1
             return
 
@@ -283,13 +299,13 @@ class LivePipeline:
             roi_bbox = [0, 0, frame.shape[1], frame.shape[0]]
 
         # Stage 6: Interaction Detection
-        roi_mask = mask[roi_bbox[1]:roi_bbox[3], roi_bbox[0]:roi_bbox[2]]
+        roi_mask = mask[roi_bbox[1]:roi_bbox[3], roi_bbox[0]:roi_bbox[2]] if mask is not None else None
         interactions = self._interaction_detector.detect_interactions(
             cursor_pos, is_candidate, timestamp, motion_patch=roi_mask
         )
 
         is_valid = bool(interactions or cursor_pos is not None)
-        if not is_valid and not is_candidate and not is_periodic_checkpoint:
+        if not is_valid and not is_candidate and not is_periodic_checkpoint and not is_post_click_transition:
             return
 
         # Stage 7: Heuristic & LocateAnything-3B GUI Grounding
@@ -313,8 +329,18 @@ class LivePipeline:
         self._tracker.update([{"label": final_label, "score": final_score, "box": roi_bbox}], timestamp)
         action = self._action_inference.infer(final_label, interactions)
 
-        if action in ["observed_interaction", "unclassified"] and is_valid:
+        if is_post_click_transition:
+            # Resulting destination screen after user clicked
+            action = "screen_presentation"
+            if not final_label or final_label.lower() in ["unknown", "generic_view", "modal_window", "unclassified", "button"]:
+                final_label = f"Result of {self._post_click_target}" if self._post_click_target else "Screen Transition"
+            self._last_milestone_time = timestamp
+        elif action in ["observed_interaction", "unclassified"] and is_valid:
             action = "ui_interaction"
+            if "click" in interactions or "button" in str(final_label).lower():
+                self._pending_post_click_capture = True
+                self._post_click_time = timestamp
+                self._post_click_target = final_label
         elif is_candidate or is_periodic_checkpoint:
             # Visual presentation transition / slide advance during meeting
             action = "screen_presentation"
