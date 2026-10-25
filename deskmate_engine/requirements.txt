@@ -25,4 +25,4 @@ opencv-python-headless>=4.8.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 python-multipart>=0.0.20
-
+mcp>=1.2.0

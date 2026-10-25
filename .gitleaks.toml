@@ -1,0 +1,8 @@
+[allowlist]
+description = "Allowlist historical test dummy API key"
+fingerprints = [
+  "634d63278fd13cb00691c1567d6677d7cb576ae5:terminal-ai-agent/test_agent_debug.py:generic-api-key:9"
+]
+paths = [
+  '''terminal-ai-agent/test_agent_debug\.py'''
+]
