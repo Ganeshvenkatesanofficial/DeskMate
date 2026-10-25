@@ -71,7 +71,7 @@ def _filter_vision_models(raw_models: list[dict[str, Any]]) -> list[str]:
         if not name:
             continue
         name_lower = name.lower()
-        if any(x in name_lower for x in ["vision", "llava", "bakllava", "llama3.2-vision"]):
+        if any(x in name_lower for x in ["vision", "llava", "bakllava"]):
             vision_models.append(name)
     return vision_models
 
@@ -91,7 +91,7 @@ def get_default_model() -> str:
 
 
 def get_installed_vision_models() -> list[str]:
-    """Retrieve list of vision-capable models (e.g. llama3.2-vision, llava) installed in Ollama."""
+    """Retrieve list of vision-capable models (e.g. llava) installed in Ollama."""
     is_online, raw_models = _fetch_ollama_raw_models()
     vision_models = _filter_vision_models(raw_models) if is_online else []
     logger.debug(f"[MODEL DISCOVERY] Detected {len(vision_models)} vision model(s) in Ollama: {vision_models}")

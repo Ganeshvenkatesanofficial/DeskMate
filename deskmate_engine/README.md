@@ -30,6 +30,7 @@ deskmate_engine/
 │       ├── screen_capture.py    # Non-blocking MSS screen frame grabber (2.0 FPS)
 │       ├── live_pipeline.py     # 8-stage real-time computer vision detection pipeline
 │       ├── locate_anything.py   # NVIDIA LocateAnything-3B visual UI grounding (PBD)
+│       ├── native_screen_ocr.py # Zero-download Native OS OCR (Apple Vision / Windows Media OCR)
 │       ├── summarizer.py        # Multimodal Gemini 2.5 Flash & Ollama reasoning engine
 │       ├── pdf_generator.py     # Production DeskMate-branded executive FPDF2 layout engine
 │       ├── export_service.py    # Google Drive folder upload & Gmail PDF dispatch
@@ -135,11 +136,12 @@ DeskMate features three distinct, purpose-built agent systems engineered with a 
   - `AudioExtractor` with -23 LUFS loudness normalization and 16 kHz mono WAV conversion.
   - `ChunkedTranscriber` for multi-chunk partitioning and stitching of long meetings (> 15 minutes).
   - Voice Activity Detection (`VoiceActivityDetector`) to skip dead silence.
-- **Multimodal Reasoner: 3 Flexible Options**:
-  - *Lightweight Laptop Mode (Small Laptops / 8GB–16GB RAM)*: Zero heavy 8GB+ downloads. Uses the active local reasoning model (`qwen2.5-coder:1.5b`, `gpt-oss:20b`) combined with screen OCR + Voxtral diarization to synthesize meeting minutes and action items.
-  - *Full Local Offline Mode*: Requires `llama3.2-vision` active in Ollama (`ollama run llama3.2-vision`) for pixel-by-pixel multimodal image reasoning.
-  - *Cloud Mode (Gemini)*: When **Gemini 2.5 Flash (Cloud)** is selected in Settings, the app sends the key with the request and cloud multimodal reasoning is used—`llama3.2-vision` is **NOT required**. With a local model selected, the key is never sent.
-  - Merges visual action chronology, Base64 screenshot OCR details, and diarized Voxtral transcripts.
+- **Native On-Device Screen OCR & Visual Intelligence Engine**:
+  - *Native OS Engines (Zero extra 8GB downloads, 100% offline)*: Uses native Apple Vision (`VNRecognizeTextRequest`) on macOS and native Windows Runtime OCR (`Windows.Media.Ocr`) on Windows.
+  - Automatically reads on-screen text, form fields, and breadcrumbs in < 0.8s directly on device.
+  - *Video Ad & Commercial Rejection*: Automatically detects and rejects sponsored video ads, commercial banners, and countdown timers from meeting reports.
+  - *Audio-Visual Semantic Cross-Referencing*: Cross-references spoken dialogue with verified visual screenshots based on keyword overlap.
+  - *Reasoning Engines*: Works out of the box with any active local chat model in Ollama (`qwen2.5-coder:1.5b`, `gpt-oss:20b`) or optional cloud Gemini 2.5 Flash—no heavy 8GB vision model download required.
   - Structured output with strict delimiters (`===SUMMARY===`, `===IMPORTANT_STEPS===`, `===STEP_DESCRIPTIONS===`).
   - Action item extraction with `**[ACTION ITEM]**` and `**[HIGH PRIORITY]**` tags.
 - **Agentic Post-Recording Telemetry Flow**:

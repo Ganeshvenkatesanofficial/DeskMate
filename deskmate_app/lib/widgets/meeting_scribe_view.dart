@@ -1394,40 +1394,6 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   _buildVisionStatusCard(theme, provider),
                   const SizedBox(height: 14),
 
-                  // Quick Action: Enable Lightweight Mode if vision inactive
-                  if (!provider.isVisionActive &&
-                      provider.availableLocalModels.isNotEmpty) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.bolt_rounded, size: 16),
-                        label: const Text(
-                          '⚡ Enable Lightweight Laptop Mode & Start',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.teal,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: () async {
-                          await provider.setUseLightweightVision(true);
-                          if (ctx.mounted) {
-                            Navigator.of(ctx).pop();
-                            _startRecording();
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-
                   // Alternative: Cloud Gemini Key
                   Row(
                     children: [
@@ -2963,58 +2929,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
   }
 
   Widget _buildVisionStatusCard(ThemeData theme, ChatProvider provider) {
-    const activeSubtitle = 'Screen OCR capture & keyframe grounding enabled';
-    final ollamaOnline = provider.isLocalLlmOnline;
-
-    if (provider.isUsingGemini) {
-      return _buildAiStatusCard(
-        theme: theme,
-        color: theme.accentFg,
-        icon: Icons.cloud_done_rounded,
-        title: 'Vision: Gemini 2.5 Flash (Cloud)',
-        subtitle: activeSubtitle,
-      );
-    }
-    if (provider.useLightweightVision) {
-      return _buildAiStatusCard(
-        theme: theme,
-        color: AppTheme.teal,
-        icon: Icons.laptop_chromebook_rounded,
-        title: ollamaOnline
-            ? 'Vision: Lightweight Laptop Mode'
-            : 'Vision: Lightweight Laptop Mode (Requires Ollama)',
-        subtitle: ollamaOnline
-            ? activeSubtitle
-            : 'Lightweight mode is enabled. Start Ollama to run the local chat model with OCR.',
-      );
-    }
-    if (provider.hasVisionModel) {
-      return _buildAiStatusCard(
-        theme: theme,
-        color: theme.successFg,
-        icon: Icons.check_circle_rounded,
-        title:
-            'Vision: ${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'Active'}',
-        subtitle: activeSubtitle,
-      );
-    }
-    if (!ollamaOnline) {
-      return _buildAiStatusCard(
-        theme: theme,
-        color: theme.dangerFg,
-        icon: Icons.visibility_off_rounded,
-        title: 'Vision: Offline (Ollama Offline)',
-        subtitle:
-            'Ollama is offline. Start Ollama to use vision models, or configure Gemini API key.',
-      );
-    }
+    final visionName = provider.visionModelName;
     return _buildAiStatusCard(
       theme: theme,
-      color: theme.attentionFg,
-      icon: Icons.visibility_off_rounded,
-      title: 'Vision: Inactive',
+      color: theme.successFg,
+      icon: Icons.check_circle_rounded,
+      title: 'Vision: $visionName',
       subtitle:
-          'Enable Lightweight Laptop Mode below or pull `llama3.2-vision`.',
+          'Built-in OS screen OCR & keyframe grounding active (0 GB download)',
     );
   }
 
@@ -3141,11 +3063,9 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     final provider = Provider.of<ChatProvider>(context, listen: false);
     return provider.isUsingGemini
         ? 'Gemini 2.5 Flash (Cloud Multimodal)'
-        : (provider.hasVisionModel
-              ? 'Local Ollama (${provider.visionModelName.isNotEmpty ? provider.visionModelName : 'llama3.2-vision'})'
-              : (provider.effectiveModel.isNotEmpty
-                    ? 'Local Ollama (${provider.effectiveModel})'
-                    : 'Local Ollama LLM'));
+        : (provider.effectiveModel.isNotEmpty
+              ? 'Local Ollama (${provider.effectiveModel})'
+              : 'Local Ollama LLM');
   }
 
   List<Map<String, dynamic>> get _pipelineSteps => [
@@ -4138,13 +4058,21 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         .toLowerCase();
     final windowTitle = (step['window_title']?.toString() ?? '').toLowerCase();
     final appName = (step['app_name']?.toString() ?? '').toLowerCase();
-    final screenshotPath = (step['screenshot_path']?.toString() ?? '')
-        .toLowerCase();
+
+    // Check if step was strictly within DeskMate window itself
+    final isDeskMateApp =
+        appName == 'deskmate' ||
+        appName == 'deskmate_app' ||
+        appName == 'runner' ||
+        windowTitle == 'deskmate' ||
+        windowTitle.startsWith('deskmate -');
+    if (isDeskMateApp) {
+      return true;
+    }
 
     final combined =
-        '$summary ${actionParts.join(' ')} $title $desc $windowTitle $appName $screenshotPath';
+        '$summary ${actionParts.join(' ')} $title $desc $windowTitle $appName';
     const noiseKeywords = [
-      'deskmate',
       'meeting scribe',
       'start meeting',
       'end meeting',
@@ -4157,18 +4085,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
       'sync to deskmate',
       'modal_window',
       'modal',
-      'runner',
-      'flutter',
-      'electron',
-      'deskmate_app',
-      'deskmate live',
-      'locateanything',
       'app switcher',
       'mission control',
       'window switch',
       'switching window',
       'switch to',
       'recording in progress',
+      'sponsored advertisement',
+      'video player commercial',
+      'skip ad',
+      'skip ads',
     ];
     return noiseKeywords.any((kw) => combined.contains(kw));
   }
@@ -4259,6 +4185,30 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
             if (!exists) {
               list.add(map);
             }
+          }
+        }
+      }
+    }
+
+    // Safety fallback: if list is still empty, include all steps that have screenshots
+    if (list.isEmpty && _meetingSteps.isNotEmpty) {
+      for (final s in _meetingSteps) {
+        if (s is Map) {
+          final map = Map<String, dynamic>.from(s);
+          if ((map['screenshot_path'] == null ||
+                  map['screenshot_path'].toString().isEmpty) &&
+              map['actions'] is List) {
+            for (final a in map['actions']) {
+              if (a is Map &&
+                  (a['asset_path']?.toString().isNotEmpty ?? false)) {
+                map['screenshot_path'] = a['asset_path'].toString();
+                break;
+              }
+            }
+          }
+          final p = map['screenshot_path']?.toString() ?? '';
+          if (p.isNotEmpty) {
+            list.add(map);
           }
         }
       }
@@ -4380,10 +4330,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 10,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -4398,23 +4352,28 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   ),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Key Visual Moments (${displaySteps.length} Moments Identified)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: theme.fgDefault,
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Key Visual Moments (${displaySteps.length} Moments Identified)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: theme.fgDefault,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Click any screenshot thumbnail or moment card to inspect high-resolution frames & LocateAnything detections.',
-                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        'Click any screenshot thumbnail or moment card to inspect high-resolution frames & LocateAnything detections.',
+                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -5197,26 +5156,11 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     _showTopNotification('$label copied to clipboard!');
   }
 
-  /// English text plus the original spoken words, so search finds either.
-  static String _segmentSearchText(Map seg) =>
-      '${seg['text'] ?? ''} ${seg['original_text'] ?? ''}';
+  static String _segmentSearchText(Map seg) => '${seg['text'] ?? ''}';
 
-  /// The words as spoken (e.g. Tamil), shown under the English translation.
+  /// Original speech is disabled to keep transcript clean and readable.
   List<Widget> _buildOriginalSpeech(ThemeData theme, Map seg) {
-    final original = seg['original_text']?.toString().trim() ?? '';
-    if (original.isEmpty) return const [];
-    return [
-      const SizedBox(height: 4),
-      SelectableText(
-        'Original: $original',
-        style: TextStyle(
-          fontSize: 11.5,
-          height: 1.4,
-          fontStyle: FontStyle.italic,
-          color: theme.fgMuted,
-        ),
-      ),
-    ];
+    return const [];
   }
 
   Widget _buildTranscriptInner(ThemeData theme) {
@@ -5250,10 +5194,14 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 10,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -5268,52 +5216,61 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
                   ),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Voxtral 4B Diarized Transcript',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: theme.fgDefault,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (allSpeakers.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.accentFg.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
                             child: Text(
-                              '${allSpeakers.length} Speakers',
+                              'Voxtral 4B Diarized Transcript',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: theme.accentFg,
+                                color: theme.fgDefault,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (allSpeakers.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.accentFg.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${allSpeakers.length} Speakers',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.accentFg,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Mistral Voxtral 4B in-memory audio extraction with native speaker diarization.',
-                      style: TextStyle(fontSize: 12, color: theme.fgMuted),
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Mistral Voxtral 4B in-memory audio extraction with native speaker diarization.',
+                        style: TextStyle(fontSize: 12, color: theme.fgMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
             Wrap(
               spacing: 8,
+              runSpacing: 6,
               children: [
                 if (fullTranscript.isNotEmpty || segments.isNotEmpty) ...[
                   OutlinedButton.icon(

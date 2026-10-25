@@ -16,6 +16,12 @@ import cv2
 import numpy as np
 
 from services.meeting_intelligence import config
+from services.meeting_intelligence.native_screen_ocr import (
+    recognize_text,
+    is_advertisement_or_commercial,
+    cross_reference_image_and_audio,
+    extract_screen_title_and_context,
+)
 
 # Raw step text that means the capture shows DeskMate itself or a window switch, not meeting content.
 HOST_UI_KEYWORDS = (
@@ -39,6 +45,9 @@ _STEP_PREFIX = re.compile(r"^Step\s+\d+:\s*", re.IGNORECASE)
 _GENERIC_TARGETS = {
     "", "button", "icon button", "unclassified", "interactive region", "menu bar", "menu item",
     "scroll bar", "text field", "checkbox", "link", "image", "element", "control", "widget",
+    "presentation milestone", "presentation checkpoint", "screen presentation", "screen interaction",
+    "presentation initial view", "initial view", "presentation", "milestone", "checkpoint",
+    "generic_view", "modal_window",
 }
 
 
@@ -184,7 +193,7 @@ def shows_deskmate_recording_screen(image_path: Optional[str]) -> bool:
 
 
 def is_host_ui_step(step: dict[str, Any]) -> bool:
-    """True when the step captured DeskMate's own window or a window switch."""
+    """True when the step captured DeskMate's own window, a window switch, or a video ad/commercial."""
     if not isinstance(step, dict):
         return False
     combined = " ".join(
@@ -198,16 +207,32 @@ def is_host_ui_step(step: dict[str, Any]) -> bool:
     if any(kw in combined for kw in HOST_UI_KEYWORDS):
         return True
     try:
-        return shows_deskmate_recording_screen(step_screenshot_path(step))
+        path = step_screenshot_path(step)
+        if shows_deskmate_recording_screen(path):
+            return True
+        if path:
+            lines = recognize_text(path)
+            is_ad, _ = is_advertisement_or_commercial(lines)
+            if is_ad:
+                return True
     except Exception:
         return False
+    return False
 
 
 def spoken_quotes_near(transcript_data: Optional[dict[str, Any]], step: dict[str, Any]) -> str:
-    """Transcript lines spoken around the step's time, as 'Speaker 1: "..."', or ''."""
+    """Transcript lines spoken around the step's time, verified against screen content when available."""
     segments = (transcript_data or {}).get("segments") or []
     target = step_seconds(step)
     if target is None or not segments:
+        return ""
+
+    path = step_screenshot_path(step)
+    ocr_lines = recognize_text(path) if path else []
+
+    # If the step is verified as an ad, do NOT attach transcript quotes
+    is_ad, _ = is_advertisement_or_commercial(ocr_lines)
+    if is_ad:
         return ""
 
     def near(seg: dict[str, Any]) -> bool:
@@ -215,7 +240,21 @@ def spoken_quotes_near(transcript_data: Optional[dict[str, Any]], step: dict[str
         end = float(seg.get("end") or start)
         return start - QUOTE_WINDOW_SECONDS <= target <= end + QUOTE_WINDOW_SECONDS
 
-    matched = sorted((s for s in segments if isinstance(s, dict) and near(s)), key=lambda s: float(s.get("start") or 0.0))
+    matched = sorted(
+        (s for s in segments if isinstance(s, dict) and near(s)),
+        key=lambda s: float(s.get("start") or 0.0),
+    )
+
+    # If we have OCR text, prioritize transcript turns with semantic overlap with what is shown on screen
+    if ocr_lines and len(matched) > 1:
+        scored = []
+        for s in matched:
+            text = str(s.get("text") or "").strip()
+            score = cross_reference_image_and_audio(ocr_lines, text)
+            scored.append((score, s))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matched = [s for _, s in scored]
+
     quotes = [
         f'{humanize_speaker_tags(str(s.get("speaker") or "Speaker 1"))}: "{str(s.get("text") or "").strip()}"'
         for s in matched[:MAX_QUOTES_PER_STEP]
@@ -224,16 +263,24 @@ def spoken_quotes_near(transcript_data: Optional[dict[str, Any]], step: dict[str
     return " ".join(quotes)
 
 
-def readable_step_title(summary: str) -> str:
-    """'Step 4: Click on Deploy' -> 'Click on Deploy'; generic summaries -> 'Screen Interaction'."""
+def readable_step_title(summary: str, step: Optional[dict[str, Any]] = None) -> str:
+    """'Step 4: Click on Deploy' -> 'Click on Deploy'; generic summaries -> OCR synthesized title or 'Screen Interaction'."""
     clean = _STEP_PREFIX.sub("", summary or "").strip()
-    if not clean or any(g in clean.lower() for g in ("unclassified", "ui_interaction", "observed_interaction")):
+    if not clean or any(g in clean.lower() for g in ("unclassified", "ui_interaction", "observed_interaction", "presentation milestone", "presentation checkpoint", "screen presentation", "screen interaction")):
+        if step:
+            path = step_screenshot_path(step)
+            if path:
+                lines = recognize_text(path)
+                if lines:
+                    ctx = extract_screen_title_and_context(lines)
+                    if ctx.get("title") and ctx["title"].lower() not in GENERIC_STEP_SUMMARIES:
+                        return ctx["title"]
         return "Screen Interaction"
     return clean
 
 
 def fallback_step_description(step: dict[str, Any]) -> str:
-    """Describe a step from its recorded actions when the AI gave no description."""
+    """Describe a step from its recorded actions or on-screen OCR text when the AI gave no description."""
     parts: list[str] = []
     seen: set[str] = set()
     for action in (step.get("actions") or [])[:8]:
@@ -253,7 +300,15 @@ def fallback_step_description(step: dict[str, Any]) -> str:
     if parts:
         return "; ".join(parts)
 
-    title = readable_step_title(str(step.get("summary") or ""))
+    path = step_screenshot_path(step)
+    if path:
+        lines = recognize_text(path)
+        if lines:
+            ctx = extract_screen_title_and_context(lines)
+            if ctx.get("description"):
+                return ctx["description"]
+
+    title = readable_step_title(str(step.get("summary") or ""), step=step)
     if title.lower() not in GENERIC_STEP_SUMMARIES:
         return f"Operation performed on screen: {title}"
     return "Screen content shown during the meeting."

@@ -40,6 +40,7 @@ hiddenimports = [
     'services.meeting_intelligence.pdf_generator',
     'services.meeting_intelligence.summarizer',
     'services.meeting_intelligence.step_utils',
+    'services.meeting_intelligence.native_screen_ocr',
     'services.meeting_intelligence.export_service',
     'services.meeting_intelligence.locate_anything',
     'services.meeting_intelligence.modules',

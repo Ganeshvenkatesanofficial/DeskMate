@@ -113,23 +113,18 @@ class ChatProvider extends ChangeNotifier {
       _isLocalLlmOnline &&
       (_hasVisionModel || _detectVisionInModels(_availableLocalModels));
   String get visionModelName {
-    if (!_isLocalLlmOnline && !isUsingGemini) return '';
-    if (_visionModelName.isNotEmpty) return _visionModelName;
-    return _getVisionModelFromModels(_availableLocalModels);
+    return Platform.isMacOS
+        ? 'Apple Vision OCR'
+        : (Platform.isWindows ? 'Windows Native OCR' : 'Native Screen OCR');
   }
 
   bool get useLightweightVision => _useLightweightVision;
-  bool get isVisionActive =>
-      isUsingGemini ||
-      hasVisionModel ||
-      (_useLightweightVision && _isLocalLlmOnline);
+  bool get isVisionActive => true;
 
-  /// Check whether AI engines (Gemini or Local Ollama Reasoning + Vision) are ready for meeting transcription & summarization.
+  /// Check whether AI engines (Gemini or Local Ollama Reasoning + Native Screen OCR) are ready for meeting transcription & summarization.
   bool get isMeetingAiReady {
     if (isUsingGemini) return true;
-    return isLocalLlmOnline &&
-        availableLocalModels.isNotEmpty &&
-        isVisionActive;
+    return isLocalLlmOnline && availableLocalModels.isNotEmpty;
   }
 
   String get meetingAiNotReadyReason {
@@ -139,9 +134,6 @@ class ChatProvider extends ChangeNotifier {
     }
     if (availableLocalModels.isEmpty) {
       return 'No reasoning LLM model installed in Ollama. Run `ollama pull qwen2.5-coder:1.5b` or configure a Gemini API key.';
-    }
-    if (!isVisionActive) {
-      return 'No Vision capability active. Pull `llama3.2-vision`, enable Lightweight Laptop Mode in settings, or configure Gemini.';
     }
     return '';
   }

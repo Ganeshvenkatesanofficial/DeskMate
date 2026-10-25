@@ -19,7 +19,7 @@ DeskMate provides an interactive, low-latency interface to communicate with the 
 * **Built-in SQLite Explorer**: In-app database inspector with live search, record viewer, and read-only SQL query console for inspecting local memories, tasks, and notes.
 * **Dynamic Local Model Routing**: Instant discovery of installed Ollama models with automatic capability tagging (Multimodal Vision, Fast Coding, Step-by-Step Reasoning, Parameter scale).
 * **Zero-Model Graceful Fallback**: Comprehensive UI guidance, copyable setup commands (`ollama run llama3.2`), live re-check status actions, and Google Gemini cloud bypass.
-* **Meeting Scribe Visual Modes**: Seamless toggle between Lightweight Laptop Mode (0GB download), Local Ollama Vision (`llama3.2-vision`), and Gemini 2.5 Flash Cloud Vision.
+* **Meeting Scribe Zero-Download Vision**: Built-in Native Screen OCR (Apple Vision on macOS, Windows Media OCR on Windows) with automatic advertisement filtering, audio-visual timeline cross-referencing, and optional Gemini 2.5 Flash Cloud Vision.
 
 ---
 

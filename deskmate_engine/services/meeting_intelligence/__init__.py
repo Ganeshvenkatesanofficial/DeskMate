@@ -14,7 +14,12 @@ from .audio_service import (
     AudioExtractor,
     ChunkedTranscriber,
 )
-from .modules.locate_anything import LocateAnythingDetector
+from .native_screen_ocr import (
+    recognize_text,
+    is_advertisement_or_commercial,
+    cross_reference_image_and_audio,
+    extract_screen_title_and_context,
+)
 from .live_pipeline import LivePipeline
 from .summarizer import MeetingSummarizer
 from .pdf_generator import MeetingPDFGenerator
@@ -27,7 +32,10 @@ __all__ = [
     "VoxtralSpeechEngine",
     "AudioExtractor",
     "ChunkedTranscriber",
-    "LocateAnythingDetector",
+    "recognize_text",
+    "is_advertisement_or_commercial",
+    "cross_reference_image_and_audio",
+    "extract_screen_title_and_context",
     "LivePipeline",
     "MeetingSummarizer",
     "MeetingPDFGenerator",

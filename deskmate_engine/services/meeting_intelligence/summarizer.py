@@ -19,7 +19,7 @@ import re
 from typing import Any
 import requests
 import cv2
-from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_VISION_MODEL
+from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_CHAT_MODEL
 from services.meeting_intelligence.step_utils import (
     HOST_UI_KEYWORDS,
     fallback_step_description,
@@ -32,6 +32,7 @@ from services.meeting_intelligence.step_utils import (
     step_number,
     step_screenshot_path,
 )
+from services.meeting_intelligence.native_screen_ocr import recognize_text
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
@@ -85,7 +86,7 @@ class MeetingSummarizer:
         self,
         gemini_api_key: str | None = None,
         gemini_model: str = DEFAULT_GEMINI_MODEL.split("/")[-1],
-        ollama_model: str = OLLAMA_VISION_MODEL,
+        ollama_model: str = OLLAMA_CHAT_MODEL,
     ):
         self.gemini_api_key = gemini_api_key or GEMINI_API_KEY
         self.gemini_model = gemini_model
@@ -151,7 +152,15 @@ class MeetingSummarizer:
             prefix = f"Step {s_id}: "
             if summary_clean.startswith(prefix):
                 summary_clean = summary_clean[len(prefix):]
-            timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}\n{action_text}")
+
+            path = step_screenshot_path(s)
+            ocr_snippet = ""
+            if path:
+                lines = recognize_text(path)
+                if lines:
+                    ocr_snippet = f" | Screen Text: {', '.join(lines[:6])}"
+
+            timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}{ocr_snippet}\n{action_text}")
         visual_timeline = (
             "\n\n".join(timeline_blocks)
             if timeline_blocks
@@ -213,7 +222,7 @@ class MeetingSummarizer:
                 meta = {}
                 step_descriptions[key] = meta
             if not str(meta.get("title") or "").strip():
-                meta["title"] = readable_step_title(str(step.get("summary") or ""))
+                meta["title"] = readable_step_title(str(step.get("summary") or ""), step=step)
             if not str(meta.get("description") or "").strip():
                 meta["description"] = fallback_step_description(step)
             if not str(meta.get("audio_transcript") or "").strip():
@@ -554,9 +563,6 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
                         "speaker": str(it.get("speaker") or "Speaker 1"),
                         "text": text,
                     }
-                    original = str(it.get("original") or "").strip()
-                    if original and original != text:
-                        segment["original_text"] = original
                     segments.append(segment)
 
             if not segments and failed_chunks:
@@ -576,8 +582,8 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
     def translate_transcript_to_english(
         self, transcript: dict[str, Any], api_key: str | None = None
     ) -> dict[str, Any]:
-        """Translate each transcript segment into English (any source language), keeping the
-        spoken words in `original_text`. Segments that can't be translated stay as spoken."""
+        """Translate each transcript segment into English (any source language).
+        Segments that can't be translated stay as spoken."""
         segments = transcript.get("segments") or []
         if not segments and str(transcript.get("full_transcript") or "").strip():
             segments = [{
@@ -613,7 +619,6 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
             for seg, spoken, eng in zip(batch, lines, english):
                 eng = str(eng or "").strip()
                 if eng and eng != spoken:
-                    seg["original_text"] = spoken
                     seg["text"] = eng
                     translated_count += 1
 

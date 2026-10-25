@@ -36,5 +36,6 @@ deskmate_engine/dist/
 # DeskMate Session & Meeting Outputs
 output/
 deskmate_engine/output/
+deskmate_engine/bin/
 *.wav
 

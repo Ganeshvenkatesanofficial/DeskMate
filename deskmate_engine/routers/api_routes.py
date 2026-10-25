@@ -83,15 +83,19 @@ def read_root():
 @router.get("/api/health")
 def health():
     """Backend status, local LLM availability, and model list."""
+    import sys
     llm_info = check_local_llm_status()
+    native_vision = (
+        "Apple Vision OCR" if sys.platform == "darwin"
+        else ("Windows Native OCR" if sys.platform == "win32" else "Native Screen OCR")
+    )
     return {
         "status": "ok",
         "local_llm": llm_info.get("status", "offline"),
         "models": llm_info.get("models", []),
         "default_model": llm_info.get("default_model"),
-        "has_vision": llm_info.get("has_vision", False),
-        "vision_models": llm_info.get("vision_models", []),
-        "vision_model": llm_info.get("default_vision_model"),
+        "has_vision": True,
+        "vision_engine": native_vision,
         "meeting_ready": True,
         "app_version": APP_VERSION,
     }
@@ -99,14 +103,16 @@ def health():
 
 @router.get("/api/models")
 def get_models():
-    """List all detected chat-capable local models and vision models from Ollama."""
-    from core.models import get_installed_vision_models
-    vision_models = get_installed_vision_models()
+    """List all detected chat-capable local models from Ollama."""
+    import sys
+    native_vision = (
+        "Apple Vision OCR" if sys.platform == "darwin"
+        else ("Windows Native OCR" if sys.platform == "win32" else "Native Screen OCR")
+    )
     return {
         "models": get_installed_chat_models(),
-        "vision_models": vision_models,
-        "has_vision": bool(vision_models),
-        "vision_model": vision_models[0] if vision_models else None,
+        "has_vision": True,
+        "vision_engine": native_vision,
     }
 
 

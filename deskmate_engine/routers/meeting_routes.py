@@ -150,25 +150,20 @@ async def start_meeting(req: StartMeetingRequest):
                 "session_id": _SESSION_STATE["active_session_id"],
             }
 
-        # Compulsory Vision Model Verification (or Lightweight Laptop Mode)
-        from core.models import get_installed_vision_models, get_installed_chat_models
-        vision_models = get_installed_vision_models()
+        # Ensure either local LLM or Gemini is available (Native Screen OCR provides visual intelligence)
+        from core.models import get_installed_chat_models
         has_gemini = bool((req.gemini_api_key or "").strip() or _SESSION_STATE["summarizer"].gemini_api_key)
         installed_chat_models = get_installed_chat_models()
 
-        if not vision_models and not has_gemini:
-            if req.allow_lightweight_mode:
-                if not installed_chat_models:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="No local LLM found in Ollama for Lightweight Mode. Please pull a chat model (e.g. `ollama run qwen2.5-coder:1.5b`) or configure a Gemini API key.",
-                    )
-                logger.info(f"Starting meeting under Lightweight Laptop Mode using reasoning model: {installed_chat_models[0]}")
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Vision Model Required: 'llama3.2-vision' is not active in Ollama. Run `ollama run llama3.2-vision` to enable visual intelligence, or switch to Lightweight Laptop Mode to synthesize meetings using your active chat model.",
-                )
+        if not installed_chat_models and not has_gemini:
+            raise HTTPException(
+                status_code=400,
+                detail="No reasoning LLM found. Please ensure Ollama is running with any local chat model (e.g. `ollama run qwen2.5-coder:1.5b` or `gpt-oss:20b`) or configure a Gemini API key.",
+            )
+        logger.info(
+            f"Starting meeting with Native Screen OCR & reasoning engine: "
+            f"{installed_chat_models[0] if installed_chat_models else 'Gemini 2.5 Flash'}"
+        )
 
         loop = asyncio.get_running_loop()
         def on_meeting_event(event):
@@ -611,16 +606,29 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
 @router.get("/asset/{session_id}/{filename}")
 async def get_session_asset(session_id: str, filename: str):
     """Serve session screenshot assets for interactive UI previews."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     base_dir = Path(_SESSION_STATE["output_dir"]).resolve()
     session_dir = base_dir / session_id
+    app_support_dir = (
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "DeskMate"
+        / "output"
+        / "sessions"
+        / session_id
+    )
     cand_paths = [
         session_dir / "assets" / filename,
         session_dir / filename,
+        app_support_dir / "assets" / filename,
+        app_support_dir / filename,
     ]
     for p in cand_paths:
-        resolved = p.resolve()
-        if resolved.is_relative_to(base_dir) and resolved.is_file():
-            return FileResponse(str(resolved), media_type="image/jpeg")
+        if p.exists() and p.is_file():
+            media_type = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+            return FileResponse(str(p), media_type=media_type)
     raise HTTPException(status_code=404, detail="Asset not found")
 
 
@@ -631,6 +639,19 @@ async def download_meeting_pdf(session_id: str):
         raise HTTPException(status_code=400, detail="Invalid session ID")
     output_dir = Path(_SESSION_STATE["output_dir"])
     pdf_path = output_dir / session_id / f"deskmate_report_{session_id}.pdf"
+    if not pdf_path.exists():
+        app_support_pdf = (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "DeskMate"
+            / "output"
+            / "sessions"
+            / session_id
+            / f"deskmate_report_{session_id}.pdf"
+        )
+        if app_support_pdf.exists():
+            pdf_path = app_support_pdf
     if pdf_path.exists():
         return FileResponse(
             str(pdf_path),
@@ -758,5 +779,25 @@ async def delete_saved_session(session_id: str):
         raise HTTPException(status_code=500, detail="Deletion failed")
     logger.info(f"[SUCCESS] Session {session_id} deleted successfully.")
     return res
+
+
+# Plural alias router (/api/meetings) to support plural endpoint queries gracefully
+plural_router = APIRouter(prefix="/api/meetings", tags=["meetings_alias"])
+
+
+@plural_router.get("/sessions")
+async def get_saved_sessions_alias():
+    return await get_saved_sessions()
+
+
+@plural_router.get("/session/{session_id}")
+async def get_session_details_alias(session_id: str):
+    return await get_session_details(session_id)
+
+
+@plural_router.get("/status")
+async def get_meeting_status_alias():
+    return await get_meeting_status()
+
 
 

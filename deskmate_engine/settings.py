@@ -64,7 +64,7 @@ HOST: str = os.getenv("HOST", "127.0.0.1")
 DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-2.5-flash")
 GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
+OLLAMA_CHAT_MODEL: str = os.getenv("OLLAMA_CHAT_MODEL", "")
 VOXTRAL_MODEL: str = os.getenv("VOXTRAL_MODEL", "voxtral-mini-latest")
 VOXTRAL_LOCAL_MODEL: str = os.getenv("VOXTRAL_LOCAL_MODEL", "mistralai/Voxtral-Mini-4B-Realtime-2602")
 

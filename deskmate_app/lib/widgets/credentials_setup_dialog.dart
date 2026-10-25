@@ -4867,20 +4867,11 @@ RAG_CHUNK_OVERLAP=200
           _buildMeetingEngineRow(
             theme,
             icon: Icons.visibility_rounded,
-            color: AppTheme.amberDark,
-            label: 'Llama 3.2 Vision (Ollama)',
-            badge: 'Local Vision (Compulsory if No API Key)',
+            color: AppTheme.teal,
+            label: 'Native Screen OCR',
+            badge: 'Built-in OS Engine (0 GB Download)',
             desc:
-                'Runs post-recording for 100% offline vision synthesis. Required before recording unless a Gemini API key is configured.',
-          ),
-          _buildMeetingEngineRow(
-            theme,
-            icon: Icons.auto_awesome_rounded,
-            color: theme.accentFg,
-            label: 'Gemini 2.5 Flash (Cloud Alternative)',
-            badge: 'Zero Local Vision Needed',
-            desc:
-                'If you add a Google Gemini API Key in Settings, cloud multimodal vision is used natively—llama3.2-vision is NOT required.',
+                'Built-in on-device screen text reading using Apple Vision on macOS and Windows.Media.Ocr on Windows. 100% offline, zero external model download required.',
           ),
           _buildMeetingEngineRow(
             theme,
@@ -4935,9 +4926,9 @@ RAG_CHUNK_OVERLAP=200
           _buildStepCard(
             theme: theme,
             stepNumber: '2',
-            title: 'Verify Vision & Start Meeting Scribe',
+            title: 'Start Meeting Scribe',
             description:
-                'Ensure either "llama3.2-vision" is active in Ollama or a Google Gemini API Key is saved in Settings. Click "Start Meeting Scribe" to begin.',
+                'Ensure Ollama is running with your active chat model (or a Google Gemini API Key is saved in Settings). Click "Start Meeting Scribe" to begin.',
           ),
           _buildStepCard(
             theme: theme,

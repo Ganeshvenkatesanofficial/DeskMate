@@ -36,7 +36,7 @@ start_parent_watchdog()
 from routers.api_routes import router as api_router
 from routers.ws_file_agent import router as ws_file_router
 from routers.ws_personal_agent import router as ws_personal_router
-from routers.meeting_routes import router as meeting_router
+from routers.meeting_routes import router as meeting_router, plural_router as meeting_plural_router
 from routers.ws_meeting_agent import router as ws_meeting_router
 
 # Configure logging
@@ -86,7 +86,8 @@ app.include_router(ws_personal_router)
 app.include_router(ws_meeting_router)
 app.include_router(api_router)
 app.include_router(meeting_router)
-logger.info("[INIT] Mounted 5 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API.")
+app.include_router(meeting_plural_router)
+logger.info("[INIT] Mounted 6 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API, Meeting Plural API.")
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:

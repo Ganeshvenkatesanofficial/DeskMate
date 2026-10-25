@@ -179,16 +179,15 @@ You can choose either of the following two methods:
 ### 1. Where Does NVIDIA LocateAnything-3B Work?
 * **Live Recording Grounding**: Operates **during the live meeting session**. Whenever a click or UI event occurs, `LocateAnythingDetector` (Parallel Box Decoding) localizes the exact button, dialog, slide region, or code element clicked into spatial bounding boxes and records them in the event narrative.
 
-### 2. Visual Intelligence: 3 Flexible Options
-DeskMate provides 3 flexible ways to process meetings, making it extremely feasible for both high-end workstations and small laptops:
-* **Option A: 💻 Lightweight Laptop Mode (Small Laptops / 8GB–16GB RAM)**:
-  * **Zero heavy downloads**: Users on compact ultrabooks or low-spec laptops do not need to pull multi-gigabyte vision weights.
-  * DeskMate combines high-precision screen OCR + NVIDIA bounding box coordinates with your **active local reasoning model** (e.g. `qwen2.5-coder:1.5b` or `gpt-oss:20b`) and Voxtral speech diarization.
-  * **1-Click Activation**: Click the Vision status indicator in the Meeting sidebar or modal to toggle Lightweight Laptop Mode instantly.
-* **Option B: 🦙 Full Multimodal Vision (`llama3.2-vision`)**:
-  * For 16GB+ RAM laptops. Pull via `ollama run llama3.2-vision` to inspect raw screenshots pixel-by-pixel.
-* **Option C: ☁️ Google Gemini Cloud Vision**:
-  * When **Gemini 2.5 Flash (Cloud)** is selected in **Settings → AI Model** (with your API key saved), cloud multimodal reasoning is used. **Zero local RAM needed**, and no local vision model download is required.
+### 2. Visual Intelligence: Built-in Native Screen OCR
+DeskMate provides zero-download, ultra-fast visual intelligence out-of-the-box:
+* **Default: 💻 Native Screen OCR (Apple Vision / Windows Media OCR)**:
+  * **Zero model download (0 GB RAM overhead)**: Runs directly on hardware via native macOS Apple Vision (`VNRecognizeTextRequest`) or Windows 10/11 native OCR (`Windows.Media.Ocr.OcrEngine`).
+  * **Intelligent Ad Filtering**: Automatically identifies and filters out video commercials, sponsor banners, and "Skip Ad" overlays.
+  * **Audio Cross-Referencing**: Matches on-screen slide text with spoken words from the Voxtral audio transcript to ensure only contextually relevant screenshots appear in the final report.
+  * **Dynamic Screen Summarization**: Generates clean screen titles and context, paired with your active local reasoning model (e.g. `qwen2.5-coder:1.5b` or `gpt-oss:20b`).
+* **Optional: ☁️ Google Gemini Cloud Multimodal**:
+  * When **Gemini 2.5 Flash (Cloud)** is selected in **Settings → AI Model** (with your API key saved), cloud multimodal reasoning is used. Zero local RAM needed.
 
 ### 2b. Speech Transcription (What Was Said)
 The meeting report includes the spoken conversation only when a speech engine is available:

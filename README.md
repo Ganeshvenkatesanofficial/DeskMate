@@ -223,7 +223,7 @@ flutter run -d macos   # or: flutter run -d windows
 
 ### 🧠 Dynamic Model Selection & Capabilities
 DeskMate automatically discovers all models installed in your local Ollama instance (`http://127.0.0.1:11434`) and dynamically identifies their specialized capabilities:
-* **Multimodal Vision & Visual Intelligence**: Detected for models with vision weights (e.g., `llama3.2-vision:latest`, `llava`, `moondream`).
+* **Multimodal Vision & Visual Intelligence**: Detected if optional vision weights are installed (e.g., `llava`, `moondream`). Note: External vision models are completely optional because Native Screen OCR is built into the OS.
 * **Optimized for Fast Coding & Development**: Detected for code-specialized architectures (e.g., `qwen2.5-coder:1.5b`, `starcoder`).
 * **Advanced Step-by-Step Reasoning**: Detected for chain-of-thought models (e.g., `deepseek-r1:8b`).
 * **General Intelligence & Reasoning**: Parameter sizes (e.g., `20B`, `70B`, `8B`) are dynamically parsed for general LLMs (e.g., `gpt-oss:20b`, `llama3.2:3b`).
@@ -232,23 +232,24 @@ DeskMate automatically discovers all models installed in your local Ollama insta
 If you launch DeskMate without any local Ollama models installed, or if Ollama is not running:
 1. **Startup Detection**: The backend reports `no_models` or `offline` status via `GET /api/health`.
 2. **Sidebar Status Indicators**: 
-   - Displays `Reasoning: Offline` (red danger badge) if no model or Gemini key is configured.
-   - Displays `Vision: Setup Required` (amber warning badge).
+   - Displays `Reasoning: Offline` (red danger badge) if no local model or Gemini key is configured.
+   - Displays `Vision: Apple Vision OCR` or `Windows Native OCR` (green ready badge) — ready with zero model downloads.
 3. **Setup Modal with Copyable Guidance**:
-   - The setup dialog presents copyable terminal commands: `ollama run llama3.2` with a 1-click **Re-check Status** button.
-   - **Cloud BYOK Bypass**: Users who prefer not to download multi-gigabyte local model weights can enter a Google Gemini API Key to run without local models.
-4. **Meeting Scribe Safeguards**:
-   - Attempting to record a meeting without a vision model or Gemini key triggers the Visual Intelligence Setup modal, providing immediate 1-click activation for **Lightweight Laptop Mode**.
+   - The setup dialog presents copyable terminal commands: `ollama run qwen2.5-coder:1.5b` with a 1-click **Re-check Status** button.
+   - **Cloud BYOK Bypass**: Users who prefer not to download local model weights can enter a Google Gemini API Key to run without local models.
+4. **Meeting Scribe Zero-Setup Readiness**:
+   - Meeting Scribe visual intelligence is powered by built-in Native Screen OCR (Apple Vision on macOS, Windows Media OCR on Windows) — zero model download required. Only a local chat model or Gemini API key is needed for reasoning.
 
-### 👁️ Visual Intelligence (Meeting Scribe) — 3 Modes
-Meeting Scribe supports three flexible operational modes to accommodate any hardware configuration:
-1. **Lightweight Laptop Mode (Recommended for 8GB–16GB RAM laptops)**:
-   - Zero additional downloads.
-   - Uses your active chat model (e.g., `qwen2.5-coder:1.5b`, `gpt-oss:20b`) combined with screen OCR and Voxtral 4B speech diarization to generate comprehensive meeting briefs and action items.
-2. **Full Local Vision Mode (High-spec machines with 16GB+ RAM / Dedicated GPU)**:
-   - Uses local `llama3.2-vision` in Ollama (`ollama run llama3.2-vision`) for end-to-end pixel and chart understanding.
-3. **Google Gemini Cloud Vision (Zero Local RAM)**:
-   - Uses `gemini-2.5-flash` in Google Cloud for ultra-fast, zero-memory multimodal reasoning with your own API key.
+### 👁️ Visual Intelligence (Meeting Scribe)
+Meeting Scribe features a built-in **Native On-Device Screen OCR & Visual Intelligence Engine**:
+1. **Native OS OCR (Default & Recommended — 0 GB Download, 100% Offline)**:
+   - Uses built-in **Apple Vision** (`VNRecognizeTextRequest`) on macOS and **Windows.Media.Ocr** on Windows.
+   - Runs in < 0.8s on CPU/NPU with zero external pip packages or 8GB model downloads.
+   - Automatically detects and filters sponsored video ads, commercials, and promotional countdowns.
+   - Cross-references on-screen text with Voxtral 4B speech diarization to ground meeting moments in real discussion.
+   - Powers synthesis with any active local chat model in Ollama (e.g., `qwen2.5-coder:1.5b`, `gpt-oss:20b`).
+2. **Google Gemini Cloud Multimodal (Zero Local RAM / Cloud BYOK)**:
+   - Uses `gemini-2.5-flash` in Google Cloud for ultra-fast cloud multimodal reasoning with your own API key.
    - Active only when **Gemini 2.5 Flash (Cloud)** is picked in **Settings → AI Model**. Picking a local Ollama model keeps chats, files and meetings 100% on your machine, even if a Gemini key is saved.
 
 ### 🎙️ Speech Transcription

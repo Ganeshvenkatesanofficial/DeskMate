@@ -672,7 +672,7 @@ class MeetingPDFGenerator:
 
             # Step summary/title text & Timestamp
             raw_summary = step.get("summary", "")
-            title = self._find_step_title(step_id_val, step_descriptions, raw_summary)
+            title = self._find_step_title(step_id_val, step_descriptions, raw_summary, step=step)
             safe_title = self._make_safe(title)
 
             step_ts = step.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
@@ -751,11 +751,11 @@ class MeetingPDFGenerator:
             return str(meta.get("description") or "")
         return str(meta) if meta is not None else ""
 
-    def _find_step_title(self, step_id_val, step_descriptions: dict, default_summary: str) -> str:
+    def _find_step_title(self, step_id_val, step_descriptions: dict, default_summary: str, step: Optional[dict] = None) -> str:
         meta = self._lookup_step_meta(step_id_val, step_descriptions)
-        if isinstance(meta, dict) and meta.get("title"):
+        if isinstance(meta, dict) and meta.get("title") and str(meta["title"]).lower() not in GENERIC_STEP_SUMMARIES:
             return str(meta["title"])
-        return readable_step_title(default_summary)
+        return readable_step_title(default_summary, step=step)
 
     def _step_card_texts(
         self, step: dict, step_descriptions: dict, transcript_data: Optional[dict] = None
