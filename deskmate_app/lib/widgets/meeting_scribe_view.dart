@@ -4185,7 +4185,8 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
               RegExp(r'[^0-9]'),
               '',
             );
-            if ((cleanId.isNotEmpty && sId == cleanId) || s['step_id']?.toString() == stepId) {
+            if ((cleanId.isNotEmpty && sId == cleanId) ||
+                s['step_id']?.toString() == stepId) {
               match = Map<String, dynamic>.from(s);
               break;
             }
@@ -4193,11 +4194,16 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         }
         // Fallback: match by summary keywords if LLM outputted action tag
         if (match == null) {
-          final query = stepId.toLowerCase().replaceAll('step', '').replaceAll('_', '').trim();
+          final query = stepId
+              .toLowerCase()
+              .replaceAll('step', '')
+              .replaceAll('_', '')
+              .trim();
           for (final s in _meetingSteps) {
             if (s is Map) {
               final sum = (s['summary'] ?? '').toString().toLowerCase();
-              if (query.isNotEmpty && (sum.contains(query) || query.contains(sum))) {
+              if (query.isNotEmpty &&
+                  (sum.contains(query) || query.contains(sum))) {
                 match = Map<String, dynamic>.from(s);
                 break;
               }
@@ -4206,9 +4212,12 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         }
         if (match != null) {
           // Ensure screenshot_path is populated from actions if missing on step level
-          if ((match['screenshot_path'] == null || match['screenshot_path'].toString().isEmpty) && match['actions'] is List) {
+          if ((match['screenshot_path'] == null ||
+                  match['screenshot_path'].toString().isEmpty) &&
+              match['actions'] is List) {
             for (final a in match['actions']) {
-              if (a is Map && (a['asset_path']?.toString().isNotEmpty ?? false)) {
+              if (a is Map &&
+                  (a['asset_path']?.toString().isNotEmpty ?? false)) {
                 match['screenshot_path'] = a['asset_path'].toString();
                 break;
               }
@@ -4227,18 +4236,26 @@ class _MeetingScribeViewState extends State<MeetingScribeView>
         if (s is Map) {
           final sId = s['step_id']?.toString() ?? '';
           final map = Map<String, dynamic>.from(s);
-          if ((map['screenshot_path'] == null || map['screenshot_path'].toString().isEmpty) && map['actions'] is List) {
+          if ((map['screenshot_path'] == null ||
+                  map['screenshot_path'].toString().isEmpty) &&
+              map['actions'] is List) {
             for (final a in map['actions']) {
-              if (a is Map && (a['asset_path']?.toString().isNotEmpty ?? false)) {
+              if (a is Map &&
+                  (a['asset_path']?.toString().isNotEmpty ?? false)) {
                 map['screenshot_path'] = a['asset_path'].toString();
                 break;
               }
             }
           }
           if (!_isInternalNoiseStep(map, sId)) {
-            final exists = list.any((item) =>
-                item['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ==
-                map['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), ''));
+            final exists = list.any(
+              (item) =>
+                  item['step_id']?.toString().replaceAll(
+                    RegExp(r'[^0-9]'),
+                    '',
+                  ) ==
+                  map['step_id']?.toString().replaceAll(RegExp(r'[^0-9]'), ''),
+            );
             if (!exists) {
               list.add(map);
             }
