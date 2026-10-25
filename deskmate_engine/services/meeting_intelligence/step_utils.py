@@ -312,3 +312,34 @@ def fallback_step_description(step: dict[str, Any]) -> str:
     if title.lower() not in GENERIC_STEP_SUMMARIES:
         return f"Operation performed on screen: {title}"
     return "Screen content shown during the meeting."
+
+
+def clean_dynamic_sections(summary: str) -> str:
+    """Dynamically evaluate every section in markdown. If a section has no substantive content
+    (or only boilerplate like 'None', 'N/A', 'Not discussed'), prune the section entirely.
+    Only retain sections that contain actual, meaningful content."""
+    if not summary:
+        return ""
+
+    sections = re.split(r"(?m)^(#{2,4}\s+[^\n]+)$", summary)
+    if len(sections) <= 1:
+        return summary
+
+    result_parts = [sections[0]]
+    for i in range(1, len(sections), 2):
+        heading = sections[i].strip()
+        body = sections[i + 1].strip() if i + 1 < len(sections) else ""
+        non_empty_lines = [line.strip() for line in body.splitlines() if line.strip()]
+        substantive_lines = []
+        for l in non_empty_lines:
+            clean_l = re.sub(r"^[-*0-9.]+\s*", "", l).strip().lower().strip(" .\"'()")
+            if clean_l in ("none", "n/a", "not applicable", "not discussed", "not specified", "none identified", "none discussed", "not mentioned", "[]", "{}"):
+                continue
+            if any(clean_l.startswith(prefix) for prefix in ("none ", "no specific ", "not discussed", "not mentioned")):
+                continue
+            substantive_lines.append(l)
+
+        if substantive_lines:
+            result_parts.append(f"\n\n{heading}\n" + "\n".join(substantive_lines))
+
+    return "\n\n".join(p.strip() for p in result_parts if p.strip()).strip()

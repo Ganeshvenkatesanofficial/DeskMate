@@ -22,6 +22,7 @@ import cv2
 from settings import OLLAMA_BASE_URL, GEMINI_API_KEY, DEFAULT_GEMINI_MODEL, OLLAMA_CHAT_MODEL
 from services.meeting_intelligence.step_utils import (
     HOST_UI_KEYWORDS,
+    clean_dynamic_sections,
     fallback_step_description,
     find_step,
     humanize_speaker_tags,
@@ -36,18 +37,56 @@ from services.meeting_intelligence.native_screen_ocr import recognize_text
 
 logger = logging.getLogger("deskmate.meeting_summarizer")
 
-_GENERIC_TITLE_PREFIXES = ("summary", "executive", "meeting summary", "meeting notes", "meeting minutes")
+_GENERIC_TITLE_PREFIXES = (
+    "summary",
+    "executive",
+    "meeting summary",
+    "meeting notes",
+    "meeting minutes",
+    "untitled",
+    "session",
+    "meeting brief",
+    "briefing",
+    "spoken transcript",
+    "transcript",
+    "highlights",
+    "spoken",
+)
 
 
 def extract_meeting_title(summary_md: str) -> str:
-    """The topic title the summarizer writes as the first `# Heading`, or '' if missing/generic."""
+    """Extract substantive topic title from summary markdown, never returning 'Untitled' or generic words."""
+    if not summary_md:
+        return ""
+
+    # 1. Check markdown headings (# Title, ## Title, ### Title)
+    for line in (summary_md or "").splitlines():
+        stripped = re.sub(r"^[\"'\s]+", "", line.strip())
+        m = re.match(r"^#{1,3}\s+(.+)$", stripped)
+        if m:
+            raw_title = re.sub(r"[*_`#\"']", "", m.group(1)).strip()
+            raw_title = re.sub(r"^(?:meeting\s+title|title|topic)\s*:\s*", "", raw_title, flags=re.IGNORECASE).strip()
+            if raw_title and not any(raw_title.lower().startswith(p) for p in _GENERIC_TITLE_PREFIXES):
+                return raw_title
+
+    # 2. Check explicit title lines (e.g. **Title**: ..., **Meeting Title**: ...)
     for line in (summary_md or "").splitlines():
         stripped = line.strip()
-        if not stripped.startswith("# "):
-            continue
-        title = re.sub(r"[*_`]", "", stripped[2:]).strip()
-        if title and not title.lower().startswith(_GENERIC_TITLE_PREFIXES):
-            return title
+        m = re.match(r"^(?:\*\*)?(?:meeting\s+title|title|topic)(?:\*\*)?\s*:\s*(?:\*\*)?\s*(.+)$", stripped, re.IGNORECASE)
+        if m:
+            raw_title = re.sub(r"[*_`#]", "", m.group(1)).strip()
+            if raw_title and not raw_title.lower().startswith(_GENERIC_TITLE_PREFIXES):
+                return raw_title
+
+    # 3. Check standalone bold line near top
+    for line in (summary_md or "").splitlines()[:12]:
+        stripped = line.strip()
+        m = re.match(r"^\*\*(.+?)\*\*$", stripped)
+        if m:
+            raw_title = re.sub(r"[*_`#]", "", m.group(1)).strip()
+            if raw_title and not raw_title.lower().startswith(_GENERIC_TITLE_PREFIXES):
+                return raw_title
+
     return ""
 
 
@@ -124,30 +163,14 @@ class MeetingSummarizer:
         clean_steps = [s for s in steps if not is_host_ui_step(s)]
         effective_steps = clean_steps  # NEVER fall back to steps containing DeskMate UI
 
-        # 1. Build visual timeline text
+        # 1. Build visual timeline text (compact when many steps to preserve LLM context budget)
+        is_dense = len(effective_steps) > 15
         timeline_blocks = []
         for s in effective_steps:
             s_id = s.get("step_id", "?")
             s_summary = s.get("summary", "Screen interaction")
             actions = s.get("actions", [])
             s_ts = s.get("timestamp") or (actions[0].get("timestamp") if actions else "00:00")
-            action_lines = []
-            seen_actions = set()
-            for a in actions:
-                a_ts = a.get("timestamp", s_ts)
-                a_event = a.get("event") or a.get("type", "action")
-                a_target = str(a.get("target") or a.get("description", "")).strip()
-                if a_target.lower() in ("error_state", "unclassified", "interactive region", ""):
-                    desc = a_event
-                else:
-                    desc = f"{a_event}: {a_target}"
-                if desc in seen_actions:
-                    continue
-                seen_actions.add(desc)
-                action_lines.append(f"    - [{a_ts}] {desc}")
-                if len(action_lines) >= 4:
-                    break
-            action_text = "\n".join(action_lines) if action_lines else "    - (UI interaction)"
             summary_clean = s_summary
             prefix = f"Step {s_id}: "
             if summary_clean.startswith(prefix):
@@ -158,9 +181,32 @@ class MeetingSummarizer:
             if path:
                 lines = recognize_text(path)
                 if lines:
-                    ocr_snippet = f" | Screen Text: {', '.join(lines[:6])}"
+                    max_ocr = 3 if is_dense else 5
+                    ocr_snippet = f" | Screen Text: {', '.join(lines[:max_ocr])}"
 
-            timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}{ocr_snippet}\n{action_text}")
+            if is_dense:
+                # Concise single-line entry per step to keep local LLM prompt compact & avoid truncation
+                timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}{ocr_snippet}")
+            else:
+                action_lines = []
+                seen_actions = set()
+                for a in actions:
+                    a_ts = a.get("timestamp", s_ts)
+                    a_event = a.get("event") or a.get("type", "action")
+                    a_target = str(a.get("target") or a.get("description", "")).strip()
+                    if a_target.lower() in ("error_state", "unclassified", "interactive region", ""):
+                        desc = a_event
+                    else:
+                        desc = f"{a_event}: {a_target}"
+                    if desc in seen_actions:
+                        continue
+                    seen_actions.add(desc)
+                    action_lines.append(f"    - [{a_ts}] {desc}")
+                    if len(action_lines) >= 3:
+                        break
+                action_text = "\n".join(action_lines) if action_lines else "    - (UI interaction)"
+                timeline_blocks.append(f"Step {s_id} [{s_ts}]: {summary_clean}{ocr_snippet}\n{action_text}")
+
         visual_timeline = (
             "\n\n".join(timeline_blocks)
             if timeline_blocks
@@ -390,7 +436,8 @@ Your task is to produce a comprehensive, structured meeting intelligence report 
 ---
 ## INSTRUCTIONS & STRUCTURE:
 1. TITLE REQUIREMENT: Start the ===SUMMARY=== block with a single top-level `# [Specific Meeting Title]` naming the substantive topic or project discussed (derived strictly from what was discussed and shown on screen). DO NOT use generic phrases like "Meeting Summary". NEVER copy example text.
-2. STEP DESCRIPTIONS REQUIREMENT: For each step in ===IMPORTANT_STEPS===, you MUST provide an entry in ===STEP_DESCRIPTIONS===:
+2. FORMAT REQUIREMENT (CRITICAL): Under ===SUMMARY===, you MUST output clean, pure Markdown text only (# Headings, ### Subheadings, and - Bullets). NEVER output JSON, curly braces {{}}, or quoted dictionary keys (e.g. "EXECUTIVE_OVERVIEW": or "Decisions":) inside the ===SUMMARY=== block. Only the ===IMPORTANT_STEPS=== and ===STEP_DESCRIPTIONS=== blocks use JSON format.
+3. STEP DESCRIPTIONS REQUIREMENT: For each step in ===IMPORTANT_STEPS===, you MUST provide an entry in ===STEP_DESCRIPTIONS===:
    - "title": Concise 2-5 word action-oriented title.
    - "description": 1-3 detailed sentences explaining EXACTLY what operation was performed at that specific time, what tool or console was manipulated, and what changes occurred. When filling technical context gaps, append `[Context Reference: ...]` clearly distinguishing researched context from the in-meeting action.
    - "audio_transcript": The exact words spoken by the relevant speaker at this moment, labeled with their name or Speaker 1/2 (e.g., "Speaker 1: '...'"). If no speech occurred at that moment, output "" (empty string).
@@ -453,10 +500,12 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
                 compatible_entries.sort(key=lambda x: x[0], reverse=True)
                 compatible = [entry[1] for entry in compatible_entries]
 
-                # 1. Prioritize user's configured model if explicitly set and text-compatible
-                if self.ollama_model and not any(term in self.ollama_model.lower() for term in ["vision", "mllama"]):
+                # 1. Prioritize user's configured model or default chat model from core.models
+                from core.models import get_default_model
+                preferred = (self.ollama_model or get_default_model() or "").strip()
+                if preferred and not any(term in preferred.lower() for term in ["vision", "mllama"]):
                     for m in compatible:
-                        if self.ollama_model.lower() in m.lower() or m.lower() in self.ollama_model.lower():
+                        if preferred.lower() in m.lower() or m.lower() in preferred.lower():
                             candidates.append(m)
                             break
 
@@ -665,15 +714,15 @@ Meaningful, cohesive summary of 50-60 words capturing the primary meeting discus
         for active_model in candidates[:MAX_OLLAMA_CANDIDATES]:
             try:
                 logger.info(f"[MODEL LOAD] Invoking Ollama candidate model: '{active_model}' for summarization...")
-                # Trim prompt if exceedingly large for small local context models
-                trimmed_prompt = plain_prompt if len(plain_prompt) <= 16000 else plain_prompt[:16000] + "\n\n[Prompt truncated for local context limits. Please produce the complete report structure above.]"
+                # Trim prompt from the middle if exceedingly large, preserving all rules and delimiters at the end
+                trimmed_prompt = self._trim_prompt_intelligently(plain_prompt, max_chars=24000)
                 res = requests.post(
                     f"{OLLAMA_BASE_URL}/api/generate",
                     json={
                         "model": active_model,
                         "prompt": trimmed_prompt,
                         "stream": True,
-                        "options": {"num_ctx": 4096},
+                        "options": {"num_ctx": 8192},
                     },
                     stream=True,
                     timeout=(15, 300),
@@ -718,6 +767,36 @@ This meeting recording has been archived and processed locally. Key screen captu
 ===CUSTOM_FIELDS===
 {}
 """
+
+    @staticmethod
+    def _trim_prompt_intelligently(prompt: str, max_chars: int = 24000) -> str:
+        """Trim long prompts from the middle of the source data so instructions and delimiters are never lost."""
+        if len(prompt) <= max_chars:
+            return prompt
+        # Locate where output instructions and format rules start
+        split_markers = [
+            "## CRITICAL GROUNDING & FIDELITY DIRECTIVE",
+            "## INSTRUCTIONS & STRUCTURE:",
+            "STRUCTURE YOUR OUTPUT WITH THESE EXACT DELIMITERS:",
+            "===SUMMARY===",
+        ]
+        split_pos = -1
+        for marker in split_markers:
+            pos = prompt.find(marker)
+            if pos != -1:
+                split_pos = pos
+                break
+
+        if split_pos != -1 and split_pos > 2500:
+            tail = prompt[split_pos:]
+            head_budget = max(2000, max_chars - len(tail) - 300)
+            head = prompt[:head_budget]
+            return head + "\n\n[... Note: Intermediate visual log entries omitted to fit local model context limits ...]\n\n" + tail
+
+        # Fallback: keep first 60% and last 40%
+        head_chars = int(max_chars * 0.6)
+        tail_chars = max_chars - head_chars - 150
+        return prompt[:head_chars] + "\n\n[... Middle content omitted for context limits ...]\n\n" + prompt[-tail_chars:]
 
     @staticmethod
     def _clean_step_quote(quote: Any) -> str:
@@ -916,7 +995,7 @@ This meeting recording has been archived and processed locally. Key screen captu
             lines = section_text.split("\n")
             for line in lines:
                 stripped = line.strip()
-                if not stripped or stripped.startswith("###") or ("extract" in stripped.lower() and "transcript" in stripped.lower()):
+                if not stripped or stripped.startswith("#") or ("extract" in stripped.lower() and "transcript" in stripped.lower()) or "spoken transcript" in stripped.lower():
                     continue
 
                 clean_line = re.sub(r"^[-*]\s*", "", stripped)
@@ -933,6 +1012,8 @@ This meeting recording has been archived and processed locally. Key screen captu
                     speaker = "Speaker 1"
                     quote = clean_line
 
+                # Strip duplicate internal speaker prefixes like **Speaker 1** : "
+                quote = re.sub(r"^(?:\*\*)?Speaker\s*\d+(?:\*\*)?\s*:\s*\"?", "", quote, flags=re.IGNORECASE).strip()
                 quote = quote.strip("\"'")
                 if not quote or len(quote) < 10:
                     continue
@@ -972,16 +1053,15 @@ This meeting recording has been archived and processed locally. Key screen captu
                     if len(condensed) > 15:
                         new_bullets.append(f'- **{speaker}**{ts_str}: *"{condensed}"*')
 
+        # Purge any existing or duplicated highlights blocks first
+        summary = re.sub(pattern, "", summary, flags=re.DOTALL | re.IGNORECASE).strip()
         if new_bullets:
             replacement = "### Spoken Transcript Highlights\n" + "\n".join(new_bullets[:4])
-            if match:
-                summary = re.sub(pattern, replacement + "\n\n", summary, flags=re.DOTALL | re.IGNORECASE).strip()
+            d_pattern = r"(###\s*Decisions\s*&\s*Outcomes)"
+            if re.search(d_pattern, summary, re.IGNORECASE):
+                summary = re.sub(d_pattern, replacement + "\n\n\\1", summary, count=1, flags=re.IGNORECASE)
             else:
-                d_pattern = r"(###\s*Decisions\s*&\s*Outcomes)"
-                if re.search(d_pattern, summary, re.IGNORECASE):
-                    summary = re.sub(d_pattern, replacement + "\n\n\\1", summary, flags=re.IGNORECASE)
-                else:
-                    summary += "\n\n" + replacement
+                summary += "\n\n" + replacement
 
         return summary
 
@@ -992,7 +1072,12 @@ This meeting recording has been archived and processed locally. Key screen captu
         """Convert JSON model responses into structured Markdown, important steps, and descriptions."""
         trimmed = summary.strip()
         cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", trimmed, flags=re.DOTALL).strip()
-        if not (cleaned.startswith("{") and ("OVERVIEW" in cleaned.upper() or "SUMMARY" in cleaned.upper() or "STEPS" in cleaned.upper())):
+        is_json_like = (
+            cleaned.startswith("{")
+            or bool(re.search(r'"(?:EXECUTIVE_)?OVERVIEW":', cleaned, re.IGNORECASE))
+            or bool(re.search(r'"(?:Decisions|Technical|IMPORTANT_STEPS|STEP_DESCRIPTIONS)":', cleaned, re.IGNORECASE))
+        )
+        if not is_json_like:
             return summary, None, None
 
         title = "# Meeting Intelligence Brief"
@@ -1005,9 +1090,13 @@ This meeting recording has been archived and processed locally. Key screen captu
         step_desc = None
 
         parsed_json: dict[str, Any] | None = None
-        try:
-            parsed_json = json.loads(cleaned)
-        except Exception:
+        if cleaned.startswith("{"):
+            try:
+                parsed_json = json.loads(cleaned)
+            except Exception:
+                pass
+
+        if not parsed_json:
             j_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
             if j_match:
                 try:
@@ -1067,28 +1156,34 @@ This meeting recording has been archived and processed locally. Key screen captu
             title_match = re.search(r'"(#\s*[^"\n]+)"', cleaned)
             if title_match:
                 title = title_match.group(1).strip()
+            else:
+                m_top = re.search(r"^#\s+(.+)$", cleaned, re.MULTILINE)
+                if m_top:
+                    title = f"# {m_top.group(1).strip()}"
 
-            for k, v in re.findall(r'"([^"\n]{2,40})":\s*"([^"\n]{10,500})"', cleaned):
-                if "step" not in k.lower():
-                    exec_lines.append(f"- **{k.strip()}**: {v.strip()}")
+            ov_match = re.search(r'"(?:EXECUTIVE_)?OVERVIEW":\s*[`"](.*?)[\"`]', cleaned, re.DOTALL | re.IGNORECASE)
+            if ov_match:
+                overview_text = ov_match.group(1).strip()
 
-            dec_matches = re.search(r'"(?:DECISIONS|OUTCOMES)[^"]*":\s*\[(.*?)\]', cleaned, re.DOTALL | re.IGNORECASE)
+            dec_matches = re.search(r'"(?:Decisions|Outcomes|Actions)[^"]*":\s*\[\s*(.*?)\s*\](?=\s*[,}\n\"])', cleaned, re.DOTALL | re.IGNORECASE)
             if dec_matches:
                 for item in re.findall(r'"([^"]+)"', dec_matches.group(1)):
-                    decisions_bullets.append(f"- {item.strip()}")
+                    clean_item = re.sub(r"^[-*]\s*", "", item.strip())
+                    decisions_bullets.append(f"- {clean_item}")
 
-            tech_matches = re.search(r'"(?:TECHNICAL|DOMAIN)[^"]*":\s*\[(.*?)\]', cleaned, re.DOTALL | re.IGNORECASE)
+            tech_matches = re.search(r'"(?:Technical|Domain|Parameters)[^"]*":\s*\[\s*(.*?)\s*\](?=\s*[,}\n\"])', cleaned, re.DOTALL | re.IGNORECASE)
             if tech_matches:
                 for item in re.findall(r'"([^"]+)"', tech_matches.group(1)):
-                    tech_bullets.append(f"- {item.strip()}")
+                    clean_item = re.sub(r"^[-*]\s*", "", item.strip())
+                    tech_bullets.append(f"- {clean_item}")
 
-            steps_match = re.search(r'"IMPORTANT_STEPS":\s*\[(.*?)\]', cleaned, re.DOTALL)
+            steps_match = re.search(r'"IMPORTANT_STEPS":\s*\[\s*(.*?)\s*\](?=\s*[,}\n\"])', cleaned, re.DOTALL)
             if steps_match:
                 raw_ids = re.findall(r'"([^"]+)"', steps_match.group(1))
                 if raw_ids:
                     imp_steps = raw_ids
 
-            sd_match = re.search(r'"STEP_DESCRIPTIONS":\s*(\{.*?\})\s*\}', cleaned, re.DOTALL)
+            sd_match = re.search(r'"STEP_DESCRIPTIONS":\s*(\{.*\})\s*(?:\n\s*\}|\Z)', cleaned, re.DOTALL)
             if sd_match:
                 try:
                     step_desc = json.loads(sd_match.group(1))
@@ -1172,6 +1267,9 @@ This meeting recording has been archived and processed locally. Key screen captu
 
         # Clean spoken transcript highlights into concise, bolded quote bullets
         summary = self._clean_spoken_transcript_highlights(summary, transcript_data)
+
+        # Dynamically prune any section with empty body or boilerplate ('None', 'N/A', 'Not discussed')
+        summary = clean_dynamic_sections(summary)
 
         # Extract CUSTOM_FIELDS
         if "CUSTOM_FIELDS" in blocks:

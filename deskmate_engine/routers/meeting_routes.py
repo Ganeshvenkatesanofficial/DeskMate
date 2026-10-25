@@ -546,6 +546,8 @@ async def summarize_meeting(req: SummarizeMeetingRequest):
         # Update session report with summary
         if meeting_title:
             report_data["title"] = meeting_title
+        elif not report_data.get("title") or str(report_data.get("title")).lower() in ("untitled", "meeting session"):
+            report_data["title"] = f"Meeting Session {session_id}"
         report_data["summary"] = summary_md
         report_data["important_steps"] = important_steps
         report_data["step_descriptions"] = step_desc

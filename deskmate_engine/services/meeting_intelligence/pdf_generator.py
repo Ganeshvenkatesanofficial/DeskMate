@@ -17,6 +17,7 @@ from fpdf import FPDF
 
 from services.meeting_intelligence.step_utils import (
     GENERIC_STEP_SUMMARIES,
+    clean_dynamic_sections,
     fallback_step_description,
     is_host_ui_step,
     readable_step_title,
@@ -220,15 +221,20 @@ class MeetingPDFGenerator:
                 flags=re.IGNORECASE,
             ).strip()
 
-            title_match = re.search(r"^#\s+(.*?)$", raw_s, re.MULTILINE)
-            doc_title = title_match.group(1).strip() if title_match else "Executive Meeting Intelligence Report"
-            if doc_title and doc_title != "Executive Meeting Intelligence Report":
-                clean_summary = re.sub(r"^#\s+" + re.escape(doc_title) + r"\s*\n*", "", raw_s, flags=re.MULTILINE).strip()
-            else:
-                clean_summary = re.sub(r"^#\s+.*?\n+", "", raw_s, count=1).strip()
+            title_match = re.search(r"^#{1,3}\s+(.*?)$", raw_s, re.MULTILINE)
+            raw_title_matched = title_match.group(1).strip() if title_match else ""
+            doc_title = re.sub(r"[*_`#]", "", raw_title_matched).strip() if raw_title_matched else "Executive Meeting Intelligence Report"
+            doc_title = re.sub(r"^(?:meeting\s+title|title|topic)\s*:\s*", "", doc_title, flags=re.IGNORECASE).strip()
+            if not doc_title or doc_title.lower().startswith(("summary", "untitled", "executive meeting")):
+                doc_title = "Executive Meeting Intelligence Report"
 
-            # Remove any empty orphaned headers (e.g. ### Header followed by another ### Header with no body)
-            clean_summary = re.sub(r"(#{1,4}\s+[^\n]+)\s*(?=\n+#{1,4}\s+|\Z)", "", clean_summary).strip()
+            if raw_title_matched and doc_title != "Executive Meeting Intelligence Report":
+                clean_summary = re.sub(r"^#{1,3}\s+" + re.escape(raw_title_matched) + r"\s*\n*", "", raw_s, flags=re.MULTILINE).strip()
+            else:
+                clean_summary = re.sub(r"^#{1,3}\s+.*?\n+", "", raw_s, count=1).strip()
+
+            # Dynamically prune any section with empty body or boilerplate ('None', 'N/A', 'Not discussed')
+            clean_summary = clean_dynamic_sections(clean_summary)
 
             # ─── Hero Title Block ─────────────────────────────────────────
             pdf.set_y(24)
@@ -474,16 +480,21 @@ class MeetingPDFGenerator:
                 header_text = re.sub(r'^#{1,4}\s*', '', line).strip()
                 if header_text.upper() in ("SUMMARY", "MEETING SUMMARY"):
                     continue
-                has_body = False
+                has_substantive_body = False
                 for next_l in stripped_lines[i + 1:]:
                     if not next_l:
                         continue
                     if next_l.startswith(('# ', '## ', '### ', '#### ')):
                         break
-                    has_body = True
+                    clean_check = re.sub(r"^[-*0-9.]+\s*", "", next_l).strip().lower().strip(" .\"'()")
+                    if clean_check in ("none", "n/a", "not applicable", "not discussed", "not specified", "none identified", "none discussed", "not mentioned", "[]", "{}"):
+                        continue
+                    if any(clean_check.startswith(prefix) for prefix in ("none ", "no specific ", "not discussed", "not mentioned")):
+                        continue
+                    has_substantive_body = True
                     break
-                if not has_body:
-                    # Skip empty hanging header with no content
+                if not has_substantive_body:
+                    # Skip empty hanging header with no substantive content
                     continue
 
                 if line.startswith('# '):
