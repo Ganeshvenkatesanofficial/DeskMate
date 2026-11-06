@@ -38,6 +38,7 @@ from routers.ws_file_agent import router as ws_file_router
 from routers.ws_personal_agent import router as ws_personal_router
 from routers.meeting_routes import router as meeting_router, plural_router as meeting_plural_router
 from routers.ws_meeting_agent import router as ws_meeting_router
+from routers.folder_routes import router as folder_router, ws_router as ws_folder_router
 
 # Configure logging
 logging.basicConfig(
@@ -51,8 +52,10 @@ logger = logging.getLogger("deskmate-server")
 async def lifespan(app: FastAPI):
     setup_clean_logging()
     logger.info(f"[STARTUP] DeskMate AI Server v{APP_VERSION} initialized successfully.")
-    logger.info("[INIT] Services active: Meeting Intelligence, Personal Assistant, File Copilot.")
+    logger.info("[INIT] Services active: Meeting Intelligence, Personal Assistant, File Copilot, Folder Agent.")
     logger.info("[READY] Server accepting incoming WebSocket and REST connections.")
+    from services.folder_agent.indexer import INDEXER
+    INDEXER.ensure_running()  # resumes background indexing of granted folders
     yield
     logger.info("[SHUTDOWN] DeskMate Backend Server shutting down cleanly...")
 
@@ -87,7 +90,9 @@ app.include_router(ws_meeting_router)
 app.include_router(api_router)
 app.include_router(meeting_router)
 app.include_router(meeting_plural_router)
-logger.info("[INIT] Mounted 6 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API, Meeting Plural API.")
+app.include_router(folder_router)
+app.include_router(ws_folder_router)
+logger.info("[INIT] Mounted 8 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API, Meeting Plural API, Folder Agent API, Folder Agent WS.")
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
