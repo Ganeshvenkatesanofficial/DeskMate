@@ -35,7 +35,9 @@ class FolderChatController extends ChangeNotifier {
   /// Model used for turns: DeskMate's global selection (Ollama model or Gemini).
   String get modelLabel => provider.isUsingGemini
       ? 'Gemini 2.5 Flash'
-      : (provider.selectedLocalModel.isNotEmpty ? provider.selectedLocalModel : (provider.availableLocalModels.firstOrNull ?? 'No model'));
+      : (provider.selectedLocalModel.isNotEmpty
+            ? provider.selectedLocalModel
+            : (provider.availableLocalModels.firstOrNull ?? 'No model'));
   bool get hasModel => provider.isUsingGemini || provider.availableLocalModels.isNotEmpty;
 
   // ── socket ───────────────────────────────────────────────────────────────
@@ -76,7 +78,9 @@ class FolderChatController extends ChangeNotifier {
       case 'telemetry':
         final step = AgentStepTelemetry.fromJson(e);
         // Reasoning tokens arrive as repeated updates of the same step: replace, don't append.
-        final i = liveTelemetry.lastIndexWhere((t) => t.step == step.step && t.phase == step.phase && t.tool == step.tool);
+        final i = liveTelemetry.lastIndexWhere(
+          (t) => t.step == step.step && t.phase == step.phase && t.tool == step.tool,
+        );
         if (i >= 0 && (step.phase == 'reasoning' || step.phase == 'thought')) {
           liveTelemetry[i] = step;
         } else {
@@ -136,7 +140,9 @@ class FolderChatController extends ChangeNotifier {
         .where((m) => !m.content.startsWith('⚠️'))
         .map((m) => {'role': m.role == MessageRole.user ? 'user' : 'assistant', 'content': m.content})
         .toList();
-    messages.add(ChatMessage(id: 'u${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message));
+    messages.add(
+      ChatMessage(id: 'u${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message),
+    );
     sending = true;
     liveTitle = 'Thinking…';
     notifyListeners();
@@ -150,7 +156,10 @@ class FolderChatController extends ChangeNotifier {
           'chat_id': chatId,
           'history': history,
           if (provider.isUsingGemini) 'api_key': provider.geminiApiKey,
-          if (provider.isUsingGemini) 'model': 'gemini/gemini-2.5-flash' else if (provider.selectedLocalModel.isNotEmpty) 'model': provider.selectedLocalModel,
+          if (provider.isUsingGemini)
+            'model': 'gemini/gemini-2.5-flash'
+          else if (provider.selectedLocalModel.isNotEmpty)
+            'model': provider.selectedLocalModel,
           'context': {'cwd': app.currentFolder, 'files': files, 'folders': folders},
         }),
       );

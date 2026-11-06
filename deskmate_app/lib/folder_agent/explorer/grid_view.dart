@@ -49,8 +49,7 @@ class FileGridView extends StatelessWidget {
 class GridColumns extends InheritedWidget {
   final ValueNotifier<int> notifier;
   const GridColumns({super.key, required this.notifier, required super.child});
-  static ValueNotifier<int>? of(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<GridColumns>()?.notifier;
+  static ValueNotifier<int>? of(BuildContext context) => context.getInheritedWidgetOfExactType<GridColumns>()?.notifier;
   @override
   bool updateShouldNotify(GridColumns old) => false;
 }
@@ -124,4 +123,3 @@ Color tagColorFor(FaController app, int id) {
   }
   return Scoop.blueberry;
 }
-

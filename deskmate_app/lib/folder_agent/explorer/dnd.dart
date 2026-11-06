@@ -124,4 +124,3 @@ class EntryDropTarget extends StatelessWidget {
     );
   }
 }
-

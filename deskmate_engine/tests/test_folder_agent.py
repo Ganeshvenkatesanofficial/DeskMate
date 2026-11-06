@@ -188,3 +188,35 @@ def test_rest_envelope(sandbox: Path):
     view = client.put("/api/fa/views", json={"path": str(sandbox), "mode": "list", "sortKey": "mtime", "sortDesc": True}).json()
     assert view["ok"]
     assert client.get("/api/fa/views", params={"path": str(sandbox)}).json()["data"] == {"mode": "list", "sortKey": "mtime", "sortDesc": True}
+
+
+# ─── agent tools ─────────────────────────────────────────────────────────────
+
+def test_read_file_tool_uses_deskmate_file_path_convention(sandbox: Path):
+    from services.folder_agent.tools import ReadFileTool
+
+    tool = ReadFileTool(str(sandbox / "docs"))
+    assert "file_path" in tool.inputs
+    assert "Project Falcon" in tool(file_path="notes.md")
+
+
+def test_repeated_identical_tool_call_is_flagged(sandbox: Path):
+    from services.folder_agent.tools import ListFolderTool
+
+    tool = ListFolderTool(str(sandbox))
+    first = tool(folder=None)
+    second = tool(folder=None)
+    assert "already made this exact call" not in first
+    assert "already made this exact call" in second and "docs" in second
+
+
+def test_secret_files_are_refused_by_tools(sandbox: Path):
+    from services.folder_agent.tools import ReadFileTool
+
+    (sandbox / ".env").write_text("API_KEY=xyz")
+    assert "Refused" in ReadFileTool(str(sandbox))(file_path=".env")
+
+
+def test_entities_skip_all_caps_headers_and_short_acronyms():
+    ents = extract.extract_entities("SPEAKER STATEMENTS here. ACTION ACTION. OS OS. AWS AWS.")
+    assert ents == {"AWS": 2}

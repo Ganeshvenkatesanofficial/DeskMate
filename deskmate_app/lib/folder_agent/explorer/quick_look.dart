@@ -186,16 +186,22 @@ class _TitleBar extends StatelessWidget {
         children: [
           FileIcon.entry(entry, size: 20),
           const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              entry.name,
-              overflow: TextOverflow.ellipsis,
-              style: FaText.sans(size: 13.5, weight: FontWeight.w600, color: c.foreground),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    entry.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: FaText.sans(size: 13.5, weight: FontWeight.w600, color: c.foreground),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(meta, style: FaText.mono(size: 10.5, color: c.mutedForeground)),
+              ],
             ),
           ),
           const SizedBox(width: 10),
-          Text(meta, style: FaText.mono(size: 10.5, color: c.mutedForeground)),
-          const Spacer(),
           FaButton(
             label: 'Open with default app',
             icon: Icons.open_in_new_rounded,

@@ -19,7 +19,9 @@ class PaneHeader extends StatelessWidget {
     return Container(
       height: 44,
       padding: const EdgeInsets.only(left: 16, right: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       child: Row(
         children: [
           Expanded(child: title),
@@ -41,7 +43,10 @@ class _SimpleTitle extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: c.foreground),
         const SizedBox(width: 8),
-        Text(label, style: FaText.sans(size: 13, weight: FontWeight.w600, color: c.foreground)),
+        Text(
+          label,
+          style: FaText.sans(size: 13, weight: FontWeight.w600, color: c.foreground),
+        ),
       ],
     );
   }

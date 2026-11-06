@@ -225,9 +225,9 @@ class SearchDemo extends StatelessWidget {
           ),
         ),
         for (final (name, score) in hits) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: c.background,
               borderRadius: BorderRadius.circular(5),

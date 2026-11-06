@@ -28,8 +28,10 @@ class ToastLayer extends StatelessWidget {
                 tween: Tween(begin: 0, end: 1),
                 duration: FaMotion.medium,
                 curve: FaMotion.snappy,
-                builder: (context, v, child) =>
-                    Opacity(opacity: v, child: Transform.translate(offset: Offset(0, 10 * (1 - v)), child: child)),
+                builder: (context, v, child) => Opacity(
+                  opacity: v,
+                  child: Transform.translate(offset: Offset(0, 10 * (1 - v)), child: child),
+                ),
                 child: Material(
                   color: Colors.transparent,
                   child: ConstrainedBox(
@@ -55,7 +57,9 @@ class ToastLayer extends StatelessWidget {
                             },
                           ),
                           const SizedBox(width: 9),
-                          Flexible(child: Text(t.message, style: FaText.sans(size: 12.5, color: c.foreground))),
+                          Flexible(
+                            child: Text(t.message, style: FaText.sans(size: 12.5, color: c.foreground)),
+                          ),
                           if (t.actionLabel != null) ...[
                             const SizedBox(width: 10),
                             FaButton(

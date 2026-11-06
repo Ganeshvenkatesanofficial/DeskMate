@@ -173,8 +173,10 @@ def chunk_segments(segments: list[Segment], size: int = 1000, overlap: int = 150
 
 # ─── Entities ────────────────────────────────────────────────────────────────
 
-_PROPER = re.compile(r"\b([A-Z][a-zA-Z&'\-]+(?:\s+(?:of\s+|de\s+|van\s+)?[A-Z][a-zA-Z&'\-]+){1,3})\b")
-_ACRONYM = re.compile(r"\b([A-Z]{2,6})\b")
+# Proper-noun words are Capitalised (not ALL CAPS: PDF section headers are noise).
+_PROPER = re.compile(r"\b([A-Z][a-z][a-zA-Z&'\-]*(?:\s+(?:of\s+|de\s+|van\s+)?[A-Z][a-z][a-zA-Z&'\-]*){1,3})\b")
+# 3–5 letter acronyms (AWS, NASA); two-letter ones (OS, UI, GB) are mostly noise.
+_ACRONYM = re.compile(r"\b([A-Z]{3,5})\b")
 _ENTITY_STOP = {
     "The", "This", "That", "These", "Those", "There", "Then", "When", "Where", "What", "Which", "While",
     "If", "In", "On", "At", "For", "From", "To", "And", "But", "Or", "We", "You", "They", "It", "Our",
@@ -183,7 +185,8 @@ _ENTITY_STOP = {
     "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
 }
 _ACRONYM_STOP = {"PDF", "HTML", "CSS", "JSON", "HTTP", "HTTPS", "URL", "API", "TODO", "NOTE", "OK", "AM", "PM",
-                 "THE", "AND", "FOR", "ID", "UTC", "USD", "EUR", "PNG", "JPG", "SQL", "XML", "CSV"}
+                 "THE", "AND", "FOR", "ID", "UTC", "USD", "EUR", "PNG", "JPG", "SQL", "XML", "CSV",
+                 "NOT", "YES", "ALL", "NEW", "END", "TBD", "FAQ", "PS", "CPU", "RAM", "YAML", "TOML"}
 
 
 def extract_entities(text: str, limit: int = 12) -> dict[str, int]:

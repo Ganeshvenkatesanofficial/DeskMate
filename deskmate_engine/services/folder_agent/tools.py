@@ -33,6 +33,20 @@ class _FolderTool(Tool):
     def __init__(self, cwd: str) -> None:
         super().__init__()
         self.cwd = cwd
+        self._seen: set[str] = set()
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        # Small local models sometimes loop on an identical call; tell them so.
+        key = json.dumps([args, kwargs], sort_keys=True, default=str)
+        repeated = key in self._seen
+        self._seen.add(key)
+        result = super().__call__(*args, **kwargs)
+        if repeated and isinstance(result, str):
+            return (
+                "(You already made this exact call; its result is unchanged. "
+                "Use it and call final_answer.)\n" + result
+            )
+        return result
 
     def resolve(self, raw: str | None) -> Path:
         if raw is None or not str(raw).strip() or str(raw).strip() in (".", "null", "None"):
@@ -93,11 +107,12 @@ class ListFolderTool(_FolderTool):
 class ReadFileTool(_FolderTool):
     name = "read_file"
     description = "Read a file's contents (text, code, PDF, DOCX, images via OCR)."
-    inputs = {"path": {"type": "string", "description": "File path (absolute or relative to the current folder)."}}
+    # `file_path` matches DeskMate's read_file convention (core.models normalises aliases to it).
+    inputs = {"file_path": {"type": "string", "description": "File path (absolute or relative to the current folder)."}}
     output_type = "string"
 
-    def forward(self, path: str) -> str:
-        p = self.resolve(path)
+    def forward(self, file_path: str) -> str:
+        p = self.resolve(file_path)
         if refusal := self.guard(p):
             return refusal
         if not p.is_file():

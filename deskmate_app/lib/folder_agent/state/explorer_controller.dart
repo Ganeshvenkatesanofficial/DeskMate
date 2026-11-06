@@ -161,8 +161,7 @@ class ExplorerController extends ChangeNotifier {
   }
 
   /// Click on a sort header: same key flips direction.
-  void sortBy(String key) =>
-      setView(sortKey: key, sortDesc: view.sortKey == key ? !view.sortDesc : false);
+  void sortBy(String key) => setView(sortKey: key, sortDesc: view.sortKey == key ? !view.sortDesc : false);
 
   // ── selection ────────────────────────────────────────────────────────────
   final Set<String> selection = {};

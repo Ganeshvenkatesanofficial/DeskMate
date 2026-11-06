@@ -64,7 +64,11 @@ class _Header extends StatelessWidget {
               ),
             ),
             if (active)
-              Icon(ex.view.sortDesc ? Icons.arrow_drop_down_rounded : Icons.arrow_drop_up_rounded, size: 16, color: c.foreground),
+              Icon(
+                ex.view.sortDesc ? Icons.arrow_drop_down_rounded : Icons.arrow_drop_up_rounded,
+                size: 16,
+                color: c.foreground,
+              ),
           ],
         ),
       );
@@ -75,7 +79,9 @@ class _Header extends StatelessWidget {
       height: 28,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       child: Row(
         children: [
           col('name', 'Name'),
@@ -135,17 +141,26 @@ class _Row extends StatelessWidget {
                               ),
                             ),
                             for (final id in tags.take(3))
-                              Padding(padding: const EdgeInsets.only(left: 5), child: ScoopDot(tagColorFor(app, id), size: 7)),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 5),
+                                child: ScoopDot(tagColorFor(app, id), size: 7),
+                              ),
                           ],
                         ),
                 ),
-                SizedBox(width: _dateW, child: Text(formatDate(entry.mtime), style: meta, overflow: TextOverflow.ellipsis)),
+                SizedBox(
+                  width: _dateW,
+                  child: Text(formatDate(entry.mtime), style: meta, overflow: TextOverflow.ellipsis),
+                ),
                 SizedBox(
                   width: _sizeW,
                   child: Text(entry.isDir ? '--' : formatBytes(entry.size), style: meta, textAlign: TextAlign.right),
                 ),
                 const SizedBox(width: 18),
-                SizedBox(width: _kindW, child: Text(kindLabel(entry.kind, entry.ext), style: meta, overflow: TextOverflow.ellipsis)),
+                SizedBox(
+                  width: _kindW,
+                  child: Text(kindLabel(entry.kind, entry.ext), style: meta, overflow: TextOverflow.ellipsis),
+                ),
               ],
             ),
           ),

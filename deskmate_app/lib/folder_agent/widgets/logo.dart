@@ -40,7 +40,10 @@ class DeskMateWordmark extends StatelessWidget {
             text: 'Desk',
             style: FaText.sans(size: size, weight: FontWeight.w300, color: fg, letterSpacing: -0.2),
           ),
-          TextSpan(text: 'Mate', style: FaText.mono(size: size * 0.94, color: fg)),
+          TextSpan(
+            text: 'Mate',
+            style: FaText.mono(size: size * 0.94, color: fg),
+          ),
         ],
       ),
     );

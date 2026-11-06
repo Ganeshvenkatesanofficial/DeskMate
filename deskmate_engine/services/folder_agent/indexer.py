@@ -212,6 +212,11 @@ class Indexer:
         self._emit(force=True)
         if todo or gone:
             events.publish("index.changed", added=len(todo), removed=len(gone))
+            # Keep the Canvas in step with the index once it has been built at least once.
+            from services.folder_agent import graph
+
+            if graph.get_snapshot() is not None:
+                graph.build_async()
 
     def _index_file(self, path: str, mtime: float, size: int) -> None:
         p = Path(path)

@@ -88,7 +88,9 @@ class _ExplorerPaneState extends State<ExplorerPane> {
         child: _EmptyState(
           icon: Icons.folder_open_outlined,
           title: 'This folder is empty',
-          body: ex.hiddenCount > 0 ? '${ex.hiddenCount} hidden item(s). Right-click to show hidden files.' : 'Right-click to create a folder or file.',
+          body: ex.hiddenCount > 0
+              ? '${ex.hiddenCount} hidden item(s). Right-click to show hidden files.'
+              : 'Right-click to create a folder or file.',
         ),
       );
     }
@@ -124,12 +126,18 @@ class _ViewMenuButton extends StatelessWidget {
           final at = box.localToGlobal(Offset(0, box.size.height + 4));
           showFaMenu(context, at, [
             for (final (m, label) in viewModes)
-              FaMenuItem(label, icon: m == mode ? Icons.check_rounded : null, onTap: () => ex.setView(mode: m)),
+              FaMenuItem(
+                label,
+                icon: m == mode ? Icons.check_rounded : null,
+                onTap: () => ex.setView(mode: m),
+              ),
             const FaMenuItem.divider(),
             for (final (k, label) in sortKeys)
               FaMenuItem(
                 'Sort by $label',
-                icon: k == ex.view.sortKey ? (ex.view.sortDesc ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded) : null,
+                icon: k == ex.view.sortKey
+                    ? (ex.view.sortDesc ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)
+                    : null,
                 onTap: () => ex.sortBy(k),
               ),
           ]);
@@ -156,9 +164,16 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 30, color: c.mutedForeground),
             const SizedBox(height: 12),
-            Text(title, style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground)),
+            Text(
+              title,
+              style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground),
+            ),
             const SizedBox(height: 6),
-            Text(body, textAlign: TextAlign.center, style: FaText.sans(size: 12.5, color: c.mutedForeground, height: 1.45)),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: FaText.sans(size: 12.5, color: c.mutedForeground, height: 1.45),
+            ),
             if (action != null) ...[const SizedBox(height: 16), action!],
           ],
         ),

@@ -434,8 +434,12 @@ class AskAiComposerState extends State<AskAiComposer> {
                       padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                       child: Row(
                         children: [
-                          Flexible(child: _ModelChip(chat: chat)),
-                          const Spacer(),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _ModelChip(chat: chat),
+                            ),
+                          ),
                           for (final (t, tint, tip) in const [
                             ('@', Scoop.blueberry, 'Mention a file'),
                             ('#', Scoop.grape, 'Mention a folder'),

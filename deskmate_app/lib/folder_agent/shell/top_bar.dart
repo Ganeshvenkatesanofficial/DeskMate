@@ -38,10 +38,7 @@ class TopBar extends StatelessWidget {
             onPressed: browsing ? () => ex.refresh() : null,
           ),
           const Spacer(),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: const _SearchPill(),
-          ),
+          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: const _SearchPill()),
           const Spacer(),
           _AskAiButton(active: app.section == FaSection.askAi),
         ],
@@ -72,7 +69,9 @@ class _SearchPill extends StatelessWidget {
           children: [
             Icon(Icons.search_rounded, size: 16, color: c.mutedForeground),
             const SizedBox(width: 8),
-            Expanded(child: Text('Search', style: FaText.sans(size: 13, color: c.mutedForeground))),
+            Expanded(
+              child: Text('Search', style: FaText.sans(size: 13, color: c.mutedForeground)),
+            ),
             Kbd(shortcutLabel('K')),
           ],
         ),

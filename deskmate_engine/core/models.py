@@ -453,7 +453,14 @@ class LocalLiteLLMModel(Model):
                     content_str = str(content) if content is not None else ""
 
                 if "tool_response" in role_lower or role_lower == "tool":
-                    clean_messages.append({"role": "tool", "content": content_str})
+                    # The preceding tool call reaches Ollama as plain assistant text (no structured
+                    # tool_calls), so a bare role="tool" message is orphaned: native tool-calling
+                    # templates (Gemma, Qwen) then treat the call as failed and repeat it forever.
+                    # Deliver the result as an explicit observation the model always reads.
+                    clean_messages.append({
+                        "role": "user",
+                        "content": f"Tool result (use it; do not repeat the same call):\n{content_str}",
+                    })
                 elif "tool_call" in role_lower:
                     clean_messages.append({"role": "assistant", "content": content_str})
                 elif "system" in role_lower:

@@ -17,14 +17,7 @@ abstract final class Scoop {
   static const grape = Color(0xFFA585E0);
 
   static const all = [strawberry, bubblegum, mango, blueberry, mint, grape];
-  static const names = [
-    'Strawberry',
-    'Bubblegum',
-    'Mango',
-    'Blueberry',
-    'Mint',
-    'Grape',
-  ];
+  static const names = ['Strawberry', 'Bubblegum', 'Mango', 'Blueberry', 'Mint', 'Grape'];
 
   static Color parse(String? hex, [Color fallback = blueberry]) {
     if (hex == null) return fallback;
@@ -33,8 +26,7 @@ abstract final class Scoop {
     return v == null ? fallback : Color(v);
   }
 
-  static String hex(Color c) =>
-      '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  static String hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 }
 
 @immutable
@@ -119,8 +111,7 @@ class FaColors extends ThemeExtension<FaColors> {
   FaColors copyWith() => this;
 
   @override
-  FaColors lerp(ThemeExtension<FaColors>? other, double t) =>
-      t < 0.5 ? this : (other as FaColors? ?? this);
+  FaColors lerp(ThemeExtension<FaColors>? other, double t) => t < 0.5 ? this : (other as FaColors? ?? this);
 }
 
 /// Text styles: Inter for UI, Space Mono for paths, sizes and other technical text.
@@ -140,25 +131,12 @@ abstract final class FaText {
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
-  static TextStyle mono({
-    double size = 11,
-    FontWeight weight = FontWeight.w400,
-    Color? color,
-    double? height,
-  }) => GoogleFonts.spaceMono(
-    fontSize: size,
-    fontWeight: weight,
-    color: color,
-    height: height,
-  );
+  static TextStyle mono({double size = 11, FontWeight weight = FontWeight.w400, Color? color, double? height}) =>
+      GoogleFonts.spaceMono(fontSize: size, fontWeight: weight, color: color, height: height);
 
   /// Uppercase section label ("QUICK ACCESS").
-  static TextStyle label(FaColors c) => GoogleFonts.inter(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w600,
-    color: c.mutedForeground,
-    letterSpacing: 0.9,
-  );
+  static TextStyle label(FaColors c) =>
+      GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.9);
 }
 
 abstract final class FaMotion {
@@ -178,9 +156,7 @@ abstract final class FaRadius {
 extension FaContext on BuildContext {
   FaColors get fa =>
       Theme.of(this).extension<FaColors>() ??
-      (Theme.of(this).brightness == Brightness.dark
-          ? FaColors.dark
-          : FaColors.light);
+      (Theme.of(this).brightness == Brightness.dark ? FaColors.dark : FaColors.light);
 }
 
 /// Wraps the Folder Agent subtree in a theme carrying [FaColors].
@@ -203,10 +179,27 @@ ThemeData faThemeData(ThemeData base, Brightness brightness) {
       textStyle: FaText.sans(size: 11.5, color: Colors.white),
       waitDuration: const Duration(milliseconds: 450),
     ),
+    // Neutral fields: DeskMate's app theme focuses inputs in purple; Folder
+    // Agent fields are borderless unless they draw their own (FaTextField).
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: false,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+    ),
+    colorScheme: base.colorScheme.copyWith(
+      brightness: brightness,
+      primary: c.foreground,
+      onPrimary: c.background,
+      secondary: Scoop.mint,
+      surface: c.card,
+      onSurface: c.foreground,
+    ),
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStatePropertyAll(
-        c.mutedForeground.withValues(alpha: 0.35),
-      ),
+      thumbColor: WidgetStatePropertyAll(c.mutedForeground.withValues(alpha: 0.35)),
       radius: const Radius.circular(8),
       thickness: const WidgetStatePropertyAll(6),
     ),

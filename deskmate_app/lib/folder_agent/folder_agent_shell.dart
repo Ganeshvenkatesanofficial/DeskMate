@@ -179,9 +179,10 @@ class _StatusBar extends StatelessWidget {
     final ex = context.watch<ExplorerController>();
     final idx = app.index;
     final left = switch (app.section) {
-      FaSection.browse => ex.selection.isNotEmpty
-          ? '${ex.selection.length} of ${ex.entries.length} selected'
-          : '${ex.entries.length} item${ex.entries.length == 1 ? '' : 's'}${ex.hiddenCount > 0 ? ' (${ex.hiddenCount} hidden)' : ''}',
+      FaSection.browse =>
+        ex.selection.isNotEmpty
+            ? '${ex.selection.length} of ${ex.entries.length} selected'
+            : '${ex.entries.length} item${ex.entries.length == 1 ? '' : 's'}${ex.hiddenCount > 0 ? ' (${ex.hiddenCount} hidden)' : ''}',
       FaSection.recents => 'Recents',
       FaSection.tag => 'Tag',
       FaSection.canvas => 'Canvas',
@@ -192,16 +193,24 @@ class _StatusBar extends StatelessWidget {
     return Container(
       height: 24,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.border)),
+      ),
       child: Row(
         children: [
           Text(left, style: style),
           const Spacer(),
           if (idx.busy) ...[
-            const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.4, color: Scoop.mint)),
+            const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(strokeWidth: 1.4, color: Scoop.mint),
+            ),
             const SizedBox(width: 6),
             Text(
-              idx.state == 'scanning' ? 'Scanning folders…' : 'Indexing ${idx.done}/${idx.total}${idx.current != null ? ' · ${baseName(idx.current!)}' : ''}',
+              idx.state == 'scanning'
+                  ? 'Scanning folders…'
+                  : 'Indexing ${idx.done}/${idx.total}${idx.current != null ? ' · ${baseName(idx.current!)}' : ''}',
               style: style,
               overflow: TextOverflow.ellipsis,
             ),
@@ -255,7 +264,8 @@ class _Shortcuts extends StatelessWidget {
           final e = ex.primarySelection;
           if (e != null) ex.activate(e);
         }),
-        const SingleActivator(LogicalKeyboardKey.backspace, meta: true): () => when(browsing, () => ex.trashSelection()),
+        const SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
+            when(browsing, () => ex.trashSelection()),
         const SingleActivator(LogicalKeyboardKey.delete): () => when(browsing, () => ex.trashSelection()),
         const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () => when(browsing, ex.selectAll),
         const SingleActivator(LogicalKeyboardKey.keyA, control: true): () => when(browsing, ex.selectAll),
@@ -282,8 +292,10 @@ class _Shortcuts extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.arrowLeft): () => when(browsing, () => ex.moveSelection(-1)),
         const SingleActivator(LogicalKeyboardKey.arrowDown): () => when(browsing, () => ex.moveSelection(step())),
         const SingleActivator(LogicalKeyboardKey.arrowUp): () => when(browsing, () => ex.moveSelection(-step())),
-        const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () => when(browsing, () => ex.moveSelection(step(), extend: true)),
-        const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () => when(browsing, () => ex.moveSelection(-step(), extend: true)),
+        const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () =>
+            when(browsing, () => ex.moveSelection(step(), extend: true)),
+        const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () =>
+            when(browsing, () => ex.moveSelection(-step(), extend: true)),
       },
       child: Focus(autofocus: true, child: child),
     );

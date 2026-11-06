@@ -45,8 +45,7 @@ class FsEntry {
   );
 
   /// Raster/vector images, PDFs and videos get a live thumbnail.
-  bool get hasThumbnail =>
-      !isDir && const {'image', 'pdf', 'video', 'presentation'}.contains(kind);
+  bool get hasThumbnail => !isDir && const {'image', 'pdf', 'video', 'presentation'}.contains(kind);
 
   @override
   bool operator ==(Object other) => other is FsEntry && other.path == path;
@@ -83,13 +82,8 @@ class Drive {
   final int free;
   final bool removable;
   const Drive(this.name, this.path, this.total, this.free, this.removable);
-  factory Drive.fromJson(Map<String, dynamic> j) => Drive(
-    j['name'] as String,
-    j['path'] as String,
-    _i(j['total']),
-    _i(j['free']),
-    j['removable'] == true,
-  );
+  factory Drive.fromJson(Map<String, dynamic> j) =>
+      Drive(j['name'] as String, j['path'] as String, _i(j['total']), _i(j['free']), j['removable'] == true);
   int get used => total - free;
 }
 
@@ -113,11 +107,8 @@ class ViewPrefs {
     sortKey: j['sortKey'] as String? ?? 'name',
     sortDesc: j['sortDesc'] == true,
   );
-  ViewPrefs copyWith({String? mode, String? sortKey, bool? sortDesc}) => ViewPrefs(
-    mode: mode ?? this.mode,
-    sortKey: sortKey ?? this.sortKey,
-    sortDesc: sortDesc ?? this.sortDesc,
-  );
+  ViewPrefs copyWith({String? mode, String? sortKey, bool? sortDesc}) =>
+      ViewPrefs(mode: mode ?? this.mode, sortKey: sortKey ?? this.sortKey, sortDesc: sortDesc ?? this.sortDesc);
 }
 
 class SearchHit {
@@ -218,9 +209,7 @@ class IndexStatus {
     skipped: _i(j['skipped']),
     failed: _i(j['failed']),
     roots: ((j['roots'] as List?) ?? const []).cast<String>(),
-    lastRun: j['lastRun'] == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch((_d(j['lastRun']) * 1000).round()),
+    lastRun: j['lastRun'] == null ? null : DateTime.fromMillisecondsSinceEpoch((_d(j['lastRun']) * 1000).round()),
     error: j['error'] as String?,
     model: ModelStatus.fromJson((j['model'] as Map?)?.cast<String, dynamic>() ?? const {}),
   );
@@ -249,7 +238,16 @@ class CatalogModel {
   final String note;
   final bool installed;
   final Map<String, dynamic>? pull;
-  const CatalogModel(this.id, this.label, this.family, this.sizeGb, this.minRamGb, this.note, this.installed, this.pull);
+  const CatalogModel(
+    this.id,
+    this.label,
+    this.family,
+    this.sizeGb,
+    this.minRamGb,
+    this.note,
+    this.installed,
+    this.pull,
+  );
   factory CatalogModel.fromJson(Map<String, dynamic> j) => CatalogModel(
     j['id'] as String,
     j['label'] as String,
@@ -336,9 +334,7 @@ class GraphNode {
     path: j['path'] as String?,
     ext: j['ext'] as String?,
     fileKind: j['fileKind'] as String?,
-    mtime: j['mtime'] == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch((_d(j['mtime']) * 1000).round()),
+    mtime: j['mtime'] == null ? null : DateTime.fromMillisecondsSinceEpoch((_d(j['mtime']) * 1000).round()),
     color: j['color'] as String?,
     degree: _i(j['degree']),
     clusterId: _i(j['clusterId']),

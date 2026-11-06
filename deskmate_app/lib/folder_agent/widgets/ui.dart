@@ -149,7 +149,10 @@ class FaButton extends StatelessWidget {
               children: [
                 if (leading != null) ...[leading!, const SizedBox(width: 7)],
                 if (icon != null) ...[Icon(icon, size: dense ? 14 : 15, color: fg), const SizedBox(width: 7)],
-                Text(label, style: FaText.sans(size: dense ? 12 : 13, weight: FontWeight.w500, color: fg)),
+                Text(
+                  label,
+                  style: FaText.sans(size: dense ? 12 : 13, weight: FontWeight.w500, color: fg),
+                ),
               ],
             ),
           );
@@ -331,7 +334,15 @@ class FaMenuItem {
     this.leading,
     this.submenu,
   }) : divider = false;
-  const FaMenuItem.divider() : label = '', icon = null, onTap = null, shortcut = null, destructive = false, divider = true, leading = null, submenu = null;
+  const FaMenuItem.divider()
+    : label = '',
+      icon = null,
+      onTap = null,
+      shortcut = null,
+      destructive = false,
+      divider = true,
+      leading = null,
+      submenu = null;
 }
 
 /// Shows a FilDOS-style context menu at [position] (global coordinates).
@@ -361,7 +372,9 @@ class _MenuLayer extends StatelessWidget {
     const width = 232.0;
     final estHeight = items.fold<double>(8, (h, i) => h + (i.divider ? 9 : 30));
     final left = (position.dx + width > size.width - 8) ? size.width - width - 8 : position.dx;
-    final top = (position.dy + estHeight > size.height - 8) ? (size.height - estHeight - 8).clamp(8.0, size.height) : position.dy;
+    final top = (position.dy + estHeight > size.height - 8)
+        ? (size.height - estHeight - 8).clamp(8.0, size.height)
+        : position.dy;
     return Theme(
       data: theme,
       child: Stack(
@@ -418,9 +431,7 @@ class _MenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     final enabled = item.onTap != null || item.submenu != null;
-    final fg = !enabled
-        ? c.mutedForeground.withValues(alpha: 0.5)
-        : (item.destructive ? c.destructive : c.foreground);
+    final fg = !enabled ? c.mutedForeground.withValues(alpha: 0.5) : (item.destructive ? c.destructive : c.foreground);
     return Hoverable(
       onTap: !enabled
           ? null
@@ -444,10 +455,25 @@ class _MenuRow extends StatelessWidget {
         child: Row(
           children: [
             if (item.leading != null)
-              SizedBox(width: 22, child: Align(alignment: Alignment.centerLeft, child: item.leading))
-            else if (item.icon != null)
-              SizedBox(width: 22, child: Icon(item.icon, size: 15, color: item.destructive ? c.destructive : c.mutedForeground)),
-            Expanded(child: Text(item.label, style: FaText.sans(size: 12.5, color: fg), overflow: TextOverflow.ellipsis)),
+              SizedBox(
+                width: 22,
+                child: Align(alignment: Alignment.centerLeft, child: item.leading),
+              )
+            else
+              // Always reserve the icon slot so labels line up (checked vs unchecked items).
+              SizedBox(
+                width: 22,
+                child: item.icon == null
+                    ? null
+                    : Icon(item.icon, size: 15, color: item.destructive ? c.destructive : c.mutedForeground),
+              ),
+            Expanded(
+              child: Text(
+                item.label,
+                style: FaText.sans(size: 12.5, color: fg),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             if (item.shortcut != null) Text(item.shortcut!, style: FaText.sans(size: 11.5, color: c.mutedForeground)),
             if (item.submenu != null) Icon(Icons.chevron_right_rounded, size: 15, color: c.mutedForeground),
           ],
@@ -495,7 +521,10 @@ Future<String?> promptText(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: FaText.sans(size: 15, weight: FontWeight.w600, color: c.foreground)),
+                Text(
+                  title,
+                  style: FaText.sans(size: 15, weight: FontWeight.w600, color: c.foreground),
+                ),
                 const SizedBox(height: 12),
                 FaTextField(
                   controller: controller,
@@ -569,8 +598,14 @@ class FaTextField extends StatelessWidget {
         filled: true,
         fillColor: c.muted,
         contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: dense ? 8 : 11),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(FaRadius.md), borderSide: BorderSide(color: c.border)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(FaRadius.md), borderSide: BorderSide(color: c.border)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(FaRadius.md),
+          borderSide: BorderSide(color: c.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(FaRadius.md),
+          borderSide: BorderSide(color: c.border),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(FaRadius.md),
           borderSide: BorderSide(color: c.mutedForeground.withValues(alpha: 0.6)),
@@ -603,6 +638,10 @@ class MarkedText extends StatelessWidget {
       last = m.end;
     }
     if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
-    return Text.rich(TextSpan(style: style, children: spans), maxLines: maxLines, overflow: TextOverflow.ellipsis);
+    return Text.rich(
+      TextSpan(style: style, children: spans),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }

@@ -85,17 +85,23 @@ class FaApi {
     }
   }
 
-  Future<Result<T>> get<T>(String path, T Function(dynamic) parse,
-          {Map<String, Object?>? query, Duration timeout = const Duration(seconds: 20)}) =>
-      _send(() => _http.get(uri(path, query)), parse, timeout: timeout);
+  Future<Result<T>> get<T>(
+    String path,
+    T Function(dynamic) parse, {
+    Map<String, Object?>? query,
+    Duration timeout = const Duration(seconds: 20),
+  }) => _send(() => _http.get(uri(path, query)), parse, timeout: timeout);
 
-  Future<Result<T>> post<T>(String path, Object? body, T Function(dynamic) parse,
-          {Duration timeout = const Duration(seconds: 60)}) =>
-      _send(
-        () => _http.post(uri(path), headers: _json, body: jsonEncode(body ?? const {})),
-        parse,
-        timeout: timeout,
-      );
+  Future<Result<T>> post<T>(
+    String path,
+    Object? body,
+    T Function(dynamic) parse, {
+    Duration timeout = const Duration(seconds: 60),
+  }) => _send(
+    () => _http.post(uri(path), headers: _json, body: jsonEncode(body ?? const {})),
+    parse,
+    timeout: timeout,
+  );
 
   Future<Result<T>> put<T>(String path, Object? body, T Function(dynamic) parse) =>
       _send(() => _http.put(uri(path), headers: _json, body: jsonEncode(body ?? const {})), parse);
@@ -128,11 +134,8 @@ class FaApi {
       get('/fs/search', _entries, query: {'q': q, 'root': root});
   Future<Result<FsEntry>> createFolder(String parent, String name) =>
       post('/fs/create-folder', {'parent': parent, 'name': name}, (d) => FsEntry.fromJson(_map(d)));
-  Future<Result<FsEntry>> createFile(String parent, String name, {String content = ''}) => post(
-    '/fs/create-file',
-    {'parent': parent, 'name': name, 'content': content},
-    (d) => FsEntry.fromJson(_map(d)),
-  );
+  Future<Result<FsEntry>> createFile(String parent, String name, {String content = ''}) =>
+      post('/fs/create-file', {'parent': parent, 'name': name, 'content': content}, (d) => FsEntry.fromJson(_map(d)));
   Future<Result<FsEntry>> rename(String path, String newName) =>
       post('/fs/rename', {'path': path, 'newName': newName}, (d) => FsEntry.fromJson(_map(d)));
   Future<Result<List<FsEntry>>> copy(List<String> sources, String dest) =>
@@ -149,12 +152,13 @@ class FaApi {
   Future<Result<void>> openPrivacySettings() => post('/fs/open-privacy-settings', null, _void);
 
   /// Native OS folder chooser; `[]` when the user cancels.
-  Future<Result<List<String>>> pickFolders({String prompt = 'Choose folders for DeskMate', bool multiple = true}) => post(
-    '/fs/pick-folders',
-    {'prompt': prompt, 'multiple': multiple},
-    (d) => (d as List).cast<String>(),
-    timeout: const Duration(minutes: 10),
-  );
+  Future<Result<List<String>>> pickFolders({String prompt = 'Choose folders for DeskMate', bool multiple = true}) =>
+      post(
+        '/fs/pick-folders',
+        {'prompt': prompt, 'multiple': multiple},
+        (d) => (d as List).cast<String>(),
+        timeout: const Duration(minutes: 10),
+      );
 
   // ── prefs / tags / recents / views ───────────────────────────────────────
   Future<Result<Map<String, dynamic>>> prefs() => get('/prefs', _map);
@@ -167,11 +171,9 @@ class FaApi {
   Future<Result<void>> removeTag(int id) => delete('/tags/$id', _void);
   Future<Result<void>> assignTag(int id, List<String> paths) => post('/tags/$id/assign', {'paths': paths}, _void);
   Future<Result<void>> unassignTag(int id, List<String> paths) => post('/tags/$id/unassign', {'paths': paths}, _void);
-  Future<Result<Map<String, List<int>>>> tagsForPaths(List<String> paths) => post(
-    '/tags/for-paths',
-    {'paths': paths},
-    (d) => (d as Map).map((k, v) => MapEntry(k as String, (v as List).cast<int>())),
-  );
+  Future<Result<Map<String, List<int>>>> tagsForPaths(List<String> paths) => post('/tags/for-paths', {
+    'paths': paths,
+  }, (d) => (d as Map).map((k, v) => MapEntry(k as String, (v as List).cast<int>())));
   Future<Result<List<FsEntry>>> tagFiles(int id) => get('/tags/$id/files', _entries);
   Future<Result<List<FsEntry>>> recents() => get('/recents', _entries);
   Future<Result<void>> addRecent(String path) => post('/recents', {'path': path}, _void);
@@ -216,11 +218,8 @@ class FaApi {
       'limit': limit,
     },
   );
-  Future<Result<List<Map<String, dynamic>>>> searchInFile(String path, String q) => get(
-    '/search/file',
-    (d) => (d as List).map((e) => _map(e)).toList(),
-    query: {'path': path, 'q': q},
-  );
+  Future<Result<List<Map<String, dynamic>>>> searchInFile(String path, String q) =>
+      get('/search/file', (d) => (d as List).map((e) => _map(e)).toList(), query: {'path': path, 'q': q});
 
   // ── graph ────────────────────────────────────────────────────────────────
   Future<Result<GraphSnapshot?>> graph() =>

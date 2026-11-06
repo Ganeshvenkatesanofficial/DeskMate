@@ -63,13 +63,18 @@ class FaSidebar extends StatelessWidget {
                 if (app.tags.isEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                    child: Text('Right-click a file to tag it', style: FaText.sans(size: 11.5, color: c.mutedForeground)),
+                    child: Text(
+                      'Right-click a file to tag it',
+                      style: FaText.sans(size: 11.5, color: c.mutedForeground),
+                    ),
                   ),
                 for (final t in app.tags)
                   _NavRow(
                     leading: ScoopDot(Scoop.parse(t.color), size: 9),
                     label: t.name,
-                    trailing: t.count > 0 ? Text('${t.count}', style: FaText.mono(size: 10, color: c.mutedForeground)) : null,
+                    trailing: t.count > 0
+                        ? Text('${t.count}', style: FaText.mono(size: 10, color: c.mutedForeground))
+                        : null,
                     selected: app.section == FaSection.tag && app.activeTagId == t.id,
                     onTap: () => app.showSection(FaSection.tag, tagId: t.id),
                     onSecondaryTapDown: (d) => _tagMenu(context, t, d.globalPosition),
@@ -112,13 +117,17 @@ class FaSidebar extends StatelessWidget {
   void _tagMenu(BuildContext context, Tag t, Offset at) {
     final app = context.read<FaController>();
     showFaMenu(context, at, [
-      FaMenuItem('Rename…', icon: Icons.edit_outlined, onTap: () async {
-        final name = await promptText(context, title: 'Rename tag', initial: t.name, confirm: 'Rename');
-        if (name != null && name.isNotEmpty) {
-          final r = await app.api.updateTag(t.id, name: name);
-          r.ok ? await app.refreshTags() : app.toastError(r.error);
-        }
-      }),
+      FaMenuItem(
+        'Rename…',
+        icon: Icons.edit_outlined,
+        onTap: () async {
+          final name = await promptText(context, title: 'Rename tag', initial: t.name, confirm: 'Rename');
+          if (name != null && name.isNotEmpty) {
+            final r = await app.api.updateTag(t.id, name: name);
+            r.ok ? await app.refreshTags() : app.toastError(r.error);
+          }
+        },
+      ),
       FaMenuItem(
         'Colour',
         icon: Icons.palette_outlined,
@@ -135,11 +144,16 @@ class FaSidebar extends StatelessWidget {
         ],
       ),
       const FaMenuItem.divider(),
-      FaMenuItem('Delete tag', icon: Icons.delete_outline_rounded, destructive: true, onTap: () async {
-        await app.api.removeTag(t.id);
-        if (app.activeTagId == t.id) app.showSection(FaSection.browse);
-        await app.refreshTags();
-      }),
+      FaMenuItem(
+        'Delete tag',
+        icon: Icons.delete_outline_rounded,
+        destructive: true,
+        onTap: () async {
+          await app.api.removeTag(t.id);
+          if (app.activeTagId == t.id) app.showSection(FaSection.browse);
+          await app.refreshTags();
+        },
+      ),
     ]);
   }
 }
@@ -200,11 +214,7 @@ class _NavRow extends StatelessWidget {
               child: Text(
                 label,
                 overflow: TextOverflow.ellipsis,
-                style: FaText.sans(
-                  size: 13,
-                  weight: selected ? FontWeight.w500 : FontWeight.w400,
-                  color: c.foreground,
-                ),
+                style: FaText.sans(size: 13, weight: selected ? FontWeight.w500 : FontWeight.w400, color: c.foreground),
               ),
             ),
             ?trailing,
@@ -249,7 +259,13 @@ class _DriveRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 9),
-                Expanded(child: Text(drive.name, style: FaText.sans(size: 13, color: c.foreground), overflow: TextOverflow.ellipsis)),
+                Expanded(
+                  child: Text(
+                    drive.name,
+                    style: FaText.sans(size: 13, color: c.foreground),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             Padding(
@@ -279,7 +295,9 @@ class _AgentSwitcher extends StatelessWidget {
     final c = context.fa;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.border)),
+      ),
       child: Hoverable(
         onTap: () {
           final box = context.findRenderObject() as RenderBox;
@@ -304,7 +322,10 @@ class _AgentSwitcher extends StatelessWidget {
               Icon(Icons.folder_open_rounded, size: 16, color: Scoop.mint),
               const SizedBox(width: 9),
               Expanded(
-                child: Text('Folder Agent', style: FaText.sans(size: 12.5, weight: FontWeight.w500, color: c.foreground)),
+                child: Text(
+                  'Folder Agent',
+                  style: FaText.sans(size: 12.5, weight: FontWeight.w500, color: c.foreground),
+                ),
               ),
               Icon(Icons.unfold_more_rounded, size: 15, color: c.mutedForeground),
             ],

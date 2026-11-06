@@ -531,16 +531,24 @@ class _ModelRow extends StatelessWidget {
                           children: [
                             SizedBox(width: 18, height: 18, child: Center(child: logo)),
                             const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                title,
-                                style: FaText.sans(size: 13, color: c.foreground),
-                                overflow: TextOverflow.ellipsis,
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      title,
+                                      style: FaText.sans(size: 13, color: c.foreground),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  for (final b in badges) ...[const SizedBox(width: 6), b],
+                                ],
                               ),
                             ),
-                            for (final b in badges) ...[const SizedBox(width: 6), b],
-                            const Spacer(),
-                            if (meta != null) Text(meta!, style: FaText.mono(size: 10, color: c.mutedForeground)),
+                            if (meta != null) ...[
+                              const SizedBox(width: 8),
+                              Text(meta!, style: FaText.mono(size: 10, color: c.mutedForeground)),
+                            ],
                           ],
                         ),
                         if (desc != null && desc!.isNotEmpty) ...[

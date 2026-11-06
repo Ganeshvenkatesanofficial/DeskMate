@@ -251,8 +251,7 @@ int folderScoopIndex(String name) {
   return h % _folderScoops.length;
 }
 
-String folderIconAsset(String name) =>
-    '$_base/${_folderScoops[folderScoopIndex(name)]}.svg';
+String folderIconAsset(String name) => '$_base/${_folderScoops[folderScoopIndex(name)]}.svg';
 
 /// Asset path of the icon for a file or folder.
 String fileIconAsset({required String name, required bool isDir, String ext = ''}) {
