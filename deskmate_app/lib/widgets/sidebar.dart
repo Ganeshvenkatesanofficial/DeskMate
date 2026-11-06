@@ -251,7 +251,7 @@ class _SidebarState extends State<Sidebar> {
         children: [
           _buildModeItem(
             theme: theme,
-            title: 'File Explorer',
+            title: 'Folder Agent',
             icon: Icons.folder_open_rounded,
             isSelected: provider.mode == AgentMode.deskMate,
             onTap: () => provider.switchMode(AgentMode.deskMate),

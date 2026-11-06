@@ -40,6 +40,7 @@ dependencies:
   provider: ^6.1.2
   intl: ^0.19.0
   path: ^1.9.0
+  flutter_svg: ^2.3.2
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,8 @@ flutter:
     - assets/backend/macos_audio_capture
     - assets/app_icon.png
     - assets/app_icon_light.png
+    - assets/folder_agent/file-icons/
+    - assets/folder_agent/ai-logos/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

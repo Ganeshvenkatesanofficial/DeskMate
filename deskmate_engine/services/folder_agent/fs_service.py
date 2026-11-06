@@ -510,6 +510,45 @@ def open_privacy_settings() -> None:
         )
 
 
+def pick_folders(prompt: str = "Choose folders for DeskMate", multiple: bool = True) -> list[str]:
+    """Native OS folder chooser. Returns [] when the user cancels."""
+    prompt = re.sub(r"[\"'`$\\]", "", prompt)[:120]  # it is spliced into a script
+    if sys.platform == "darwin":
+        multi = " with multiple selections allowed" if multiple else ""
+        script = (
+            f'set picked to choose folder with prompt "{prompt}"{multi}\n'
+            'set out to ""\n'
+            'if class of picked is list then\n'
+            '  repeat with f in picked\n'
+            '    set out to out & POSIX path of f & linefeed\n'
+            '  end repeat\n'
+            'else\n'
+            '  set out to POSIX path of picked\n'
+            'end if\n'
+            'return out'
+        )
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+        if res.returncode != 0:
+            return []  # user cancelled
+        return [line.rstrip("/") or "/" for line in res.stdout.splitlines() if line.strip()]
+    if os.name == "nt":
+        ps = (
+            "Add-Type -AssemblyName System.Windows.Forms;"
+            "$d = New-Object System.Windows.Forms.FolderBrowserDialog;"
+            f"$d.Description = '{prompt}';"
+            "if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }"
+        )
+        res = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=600)
+        return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+    for cmd in (["zenity", "--file-selection", "--directory", "--multiple", "--separator=\n"], ["kdialog", "--getexistingdirectory"]):
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        except FileNotFoundError:
+            continue
+    raise FsError("EUNSUPPORTED", "No folder chooser is available on this system.")
+
+
 def probe_access(paths: Iterable[str]) -> dict[str, bool]:
     """Whether each folder can actually be listed (macOS TCC blocks Desktop/Documents/Downloads)."""
     out = {}

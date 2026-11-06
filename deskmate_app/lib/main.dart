@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'folder_agent/folder_agent_shell.dart';
 import 'providers/chat_provider.dart';
 import 'screens/chat_screen.dart';
 import 'theme/app_theme.dart';
@@ -61,7 +62,11 @@ class _DeskMateAppState extends State<DeskMateApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: provider.themeMode,
-      home: const ChatScreen(),
+      // Folder Agent (the AI file explorer) is a full-window experience;
+      // Personal Agent and Meeting Scribe keep the chat shell.
+      home: provider.mode == AgentMode.deskMate
+          ? const Scaffold(body: FolderAgentShell())
+          : const ChatScreen(),
     );
   }
 }

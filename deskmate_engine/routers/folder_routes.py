@@ -202,6 +202,17 @@ def fs_access(body: PathsBody):
     return _run(lambda: fs_service.probe_access(body.paths))
 
 
+class PickBody(BaseModel):
+    prompt: str = "Choose folders for DeskMate"
+    multiple: bool = True
+
+
+@router.post("/fs/pick-folders")
+def fs_pick_folders(body: PickBody):
+    """Open the native folder chooser; ``data`` is the chosen folders ([] if cancelled)."""
+    return _run(lambda: fs_service.pick_folders(body.prompt, body.multiple))
+
+
 @router.post("/fs/open-privacy-settings")
 def fs_open_privacy():
     return _run(fs_service.open_privacy_settings)
