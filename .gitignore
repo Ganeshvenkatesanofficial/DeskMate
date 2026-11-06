@@ -33,7 +33,7 @@ deskmate_engine/dist/
 .DS_Store
 *.swp
 
-# DeskMate Session & Meeting Outputs
+# DeskMate local outputs
 output/
 deskmate_engine/output/
 deskmate_engine/bin/

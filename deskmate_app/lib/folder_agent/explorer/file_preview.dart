@@ -102,6 +102,9 @@ class _FilePreviewState extends State<FilePreview> {
         ),
         child: AnimatedSwitcher(
           duration: FaMotion.fast,
+          // Fill the pane: the default centred, loosely-sized stack made short
+          // text float in the middle instead of starting at the top.
+          layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
           child: KeyedSubtree(
             key: ValueKey('${widget.entry.path}:${loaded?.kind}'),
             child: loaded == null ? const _Pulse() : _stage(context, loaded),
@@ -592,8 +595,13 @@ class _TextSheetState extends State<_TextSheet> {
         child: SelectionArea(
           child: widget.mono
               ? body
-              : Center(
-                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 640), child: body),
+              // Prose: a readable column, starting at the top (never floating mid-pane).
+              : Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: SizedBox(width: double.infinity, child: body),
+                  ),
                 ),
         ),
       ),

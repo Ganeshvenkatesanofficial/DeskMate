@@ -69,9 +69,8 @@ class PollingEndpointFilter(logging.Filter):
 
     POLLING_ENDPOINTS = (
         "/api/health",
-        "/api/meeting/status",
-        "/api/file/health",
-        "/api/personal/health",
+        "/api/fa/index/status",
+        "/api/fa/graph/status",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:

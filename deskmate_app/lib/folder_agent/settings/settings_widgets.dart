@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../providers/chat_provider.dart';
+import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../state/fa_controller.dart';
@@ -331,14 +331,14 @@ const themeChoices = [
 ];
 
 /// System / Light / Dark cards with live miniature previews. Selecting one
-/// changes DeskMate's app-wide theme (ChatProvider) — Folder Agent follows it.
+/// changes DeskMate's app-wide theme (AppSettings) — Folder Agent follows it.
 class ThemePicker extends StatelessWidget {
   final bool compact;
   const ThemePicker({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
-    final chat = context.watch<ChatProvider>();
+    final chat = context.watch<AppSettings>();
     return Row(
       children: [
         for (var i = 0; i < themeChoices.length; i++) ...[

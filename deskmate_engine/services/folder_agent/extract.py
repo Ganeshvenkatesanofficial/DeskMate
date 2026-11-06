@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from services.folder_agent.fs_service import file_kind
+from services.folder_agent.ocr import recognize_text
+from services.folder_agent.security import is_secret_path
 
 MAX_TEXT_BYTES = 4 * 1024 * 1024        # plain text / code cap
 MAX_PDF_BYTES = 200 * 1024 * 1024
@@ -60,8 +62,6 @@ def is_supported(path: Path) -> bool:
 
 
 def extract(path: Path) -> Extraction:
-    from services.file_copilot.tools import is_secret_path
-
     ext = path.suffix.lower()
     kind = file_kind(ext)
     if is_secret_path(path):
@@ -76,7 +76,7 @@ def extract(path: Path) -> Extraction:
     if ext in OCR_EXTS:
         if size > MAX_IMAGE_BYTES:
             return Extraction(kind, skipped_reason="too large")
-        return Extraction("image", [Segment(_ocr_text(path))])
+        return Extraction("image", [Segment(ocr_text(path))])
     if ext in TEXT_EXTS:
         if size > MAX_TEXT_BYTES:
             return Extraction(kind, skipped_reason="too large")
@@ -124,14 +124,8 @@ def docx_text(path: Path) -> str:
     return "\n".join(html.unescape(p).strip() for p in paragraphs if p.strip())
 
 
-def _ocr_text(path: Path) -> str:
-    try:
-        from services.meeting_intelligence.native_screen_ocr import recognize_text
-
-        lines = recognize_text(str(path))
-    except Exception:
-        lines = []
-    return "\n".join(lines)
+def ocr_text(path: Path) -> str:
+    return "\n".join(recognize_text(path))
 
 
 def _notebook_text(raw: str) -> str:

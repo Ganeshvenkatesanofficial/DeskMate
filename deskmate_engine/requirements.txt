@@ -1,31 +1,22 @@
-typer
-rich
-python-dotenv
-smolagents
-litellm
-google-generativeai
-qdrant-client[fastembed]
-langfuse==2.60.10
+# DeskMate Folder Agent engine
 fastapi
 uvicorn
 websockets
-google-api-python-client>=2.120.0
-google-auth-httplib2>=0.2.0
-google-auth-oauthlib>=1.2.0
-duckduckgo-search>=6.2.6
-sqlalchemy>=2.0.0
-faiss-cpu>=1.8.0
-sentence-transformers>=3.0.0
-mistral-common>=1.8.0
+pydantic
+python-dotenv
+requests>=2.31.0
+
+# Agent (SmolAgents over Ollama / Gemini via LiteLLM)
+smolagents
+litellm
+
+# On-device semantic index
+fastembed
+qdrant-client
+numpy>=1.26
+networkx>=3.2
+
+# File reading, thumbnails, Trash
 pypdf>=6.21.2
 Pillow>=10.0.0
-mss>=9.0.1
-fpdf2>=2.7.9
-opencv-python-headless>=4.8.0
-sounddevice>=0.4.6
-soundfile>=0.12.1
-python-multipart>=0.0.20
 send2trash>=1.8.3
-requests>=2.31.0
-networkx>=3.2
-numpy>=1.26

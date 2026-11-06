@@ -2,25 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../core/fa_theme.dart';
 
-/// The DeskMate mark (the star + D app icon), sized like the FilDOS tile mark.
+/// The DeskMate mark — the purple star + D glyph on transparent, used the
+/// way FilDOS uses its tile mark (sidebar, Ask AI, onboarding).
 class DeskMateMark extends StatelessWidget {
   final double size;
   const DeskMateMark({super.key, this.size = 20});
 
   @override
-  Widget build(BuildContext context) {
-    final c = context.fa;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.24),
-      child: Image.asset(
-        c.isDark ? 'assets/app_icon.png' : 'assets/app_icon_light.png',
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.medium,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Image.asset(
+    'assets/brand/deskmate_mark.png',
+    width: size,
+    height: size,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.medium,
+    isAntiAlias: true,
+  );
 }
 
 /// "Desk" (Inter Light) + "Mate" (Space Mono) — the FilDOS wordmark recipe,

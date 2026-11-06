@@ -31,7 +31,13 @@ class FileListView extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
               itemExtent: 30,
               itemCount: ex.entries.length,
-              itemBuilder: (context, i) => _Row(entry: ex.entries[i], striped: i.isOdd),
+              findChildIndexCallback: (key) {
+                if (key is! ValueKey<String>) return null;
+                final i = ex.entries.indexWhere((e) => e.path == key.value);
+                return i < 0 ? null : i;
+              },
+              itemBuilder: (context, i) =>
+                  _Row(key: ValueKey(ex.entries[i].path), entry: ex.entries[i], striped: i.isOdd),
             ),
           ),
         ),
@@ -98,7 +104,7 @@ class _Header extends StatelessWidget {
 class _Row extends StatelessWidget {
   final FsEntry entry;
   final bool striped;
-  const _Row({required this.entry, required this.striped});
+  const _Row({super.key, required this.entry, required this.striped});
 
   @override
   Widget build(BuildContext context) {

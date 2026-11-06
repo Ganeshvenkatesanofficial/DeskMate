@@ -1,12 +1,9 @@
 """
-settings.py — DeskMate Engine Centralized Project Settings
-==========================================================
-Unified settings file following thunai-chat architecture:
-- Environment variable discovery and defaults
-- LLM & Vision model configurations
-- Google Workspace OAuth tokens and file paths
-- WebSocket intervals and timeouts
-- Database and storage persistence targets
+settings.py — DeskMate engine settings
+======================================
+Environment discovery (.env next to the engine, then in the user data dir),
+server and LLM defaults, and the guaranteed-writable user data directory
+where the Folder Agent keeps its database, index and model cache.
 """
 
 from __future__ import annotations
@@ -60,58 +57,11 @@ DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "t")
 PORT: int = int(os.getenv("PORT", "2026"))
 HOST: str = os.getenv("HOST", "127.0.0.1")
 
-# ─── LLM & AI Model Settings ────────────────────────────────────────────────
+# ─── LLM Settings ───────────────────────────────────────────────────────────
 DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini/gemini-2.5-flash")
-GEMINI_LIVE_MODEL: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_CHAT_MODEL: str = os.getenv("OLLAMA_CHAT_MODEL", "")
-VOXTRAL_MODEL: str = os.getenv("VOXTRAL_MODEL", "voxtral-mini-latest")
-VOXTRAL_LOCAL_MODEL: str = os.getenv("VOXTRAL_LOCAL_MODEL", "mistralai/Voxtral-Mini-4B-Realtime-2602")
-
-# ─── API Keys & Credentials ─────────────────────────────────────────────────
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-MISTRAL_API_KEY: str = os.getenv("MISTRAL_API_KEY", "")
-GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
-
-# ─── WebSocket & Live Session Settings ──────────────────────────────────────
-DEFAULT_SCREEN_FPS: float = float(os.getenv("DEFAULT_SCREEN_FPS", "2.0"))
-
-# ─── Database & Local Storage Settings ──────────────────────────────────────
-LOCAL_AGENT_DB: str = os.getenv("LOCAL_AGENT_DB", str(USER_DATA_DIR / "deskmate_agent.db"))
-_default_sessions_dir = USER_DATA_DIR / "output" / "sessions"
-SESSIONS_OUTPUT_DIR: str = os.getenv(
-    "SESSIONS_OUTPUT_DIR",
-    str(_default_sessions_dir if _default_sessions_dir.exists() or IS_FROZEN else Path("output/sessions").resolve()),
-)
-MAX_RETAINED_SESSIONS: int = int(os.getenv("MAX_RETAINED_SESSIONS", "10"))
-
-# ─── Google Workspace Credentials & Tokens ──────────────────────────────────
-GOOGLE_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-
-# One token, one consent screen, covering every Google feature DeskMate uses.
-GOOGLE_TOKEN_PATH: str = os.getenv("GOOGLE_TOKEN_PATH", "token_google.json")
-GOOGLE_SCOPES: list[str] = [
-    "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/tasks",
-]
-# Per-service tokens from older builds; still honoured so nobody signs in again.
-LEGACY_GOOGLE_TOKENS: dict[str, list[str]] = {
-    "gmail": ["token_gmail.json"],
-    "calendar": ["token_gcal.json", "token_calendar.json"],
-    "drive": ["token_drive.json"],
-    "tasks": ["token_tasks.json"],
-}
-
-
-def google_client_credentials() -> tuple[str, str]:
-    """Live client ID/secret: Settings updates os.environ at runtime without a restart."""
-    return (
-        os.environ.get("GOOGLE_CLIENT_ID", "").strip(),
-        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip(),
-    )
 
 
 # ─── Helper Functions ───────────────────────────────────────────────────────

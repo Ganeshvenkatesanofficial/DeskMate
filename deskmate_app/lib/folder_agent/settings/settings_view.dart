@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../providers/chat_provider.dart';
 import '../core/fa_api.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
@@ -159,7 +158,7 @@ class _GeneralTab extends StatelessWidget {
       const SettingsCard(
         icon: Icons.light_mode_outlined,
         title: 'Appearance',
-        subtitle: 'Follows DeskMate\'s app-wide theme',
+        subtitle: 'Light, dark, or match your system',
         children: [ThemePicker(compact: true)],
       ),
       SettingsCard(
@@ -453,7 +452,6 @@ class _AboutTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.read<FaController>();
-    final chat = context.read<ChatProvider>();
     return _gap([
       SettingsCard(
         icon: Icons.info_outline_rounded,
@@ -502,36 +500,6 @@ class _AboutTab extends StatelessWidget {
           Text(
             'File explorer design adapted from FilDOS (MIT).',
             style: FaText.sans(size: 11.5, color: c.mutedForeground),
-          ),
-        ],
-      ),
-      SettingsCard(
-        icon: Icons.swap_horiz_rounded,
-        title: 'Switch agent',
-        subtitle: 'DeskMate\'s other agents',
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: FaButton(
-                  label: 'Personal Agent',
-                  icon: Icons.person_outline_rounded,
-                  variant: FaButtonVariant.outline,
-                  expand: true,
-                  onPressed: () => chat.switchMode(AgentMode.personal),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FaButton(
-                  label: 'Meeting Scribe',
-                  icon: Icons.mic_none_rounded,
-                  variant: FaButtonVariant.outline,
-                  expand: true,
-                  onPressed: () => chat.switchMode(AgentMode.meeting),
-                ),
-              ),
-            ],
           ),
         ],
       ),

@@ -1,33 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [
-    # Header logo for meeting PDF reports
-    ('services/meeting_intelligence/static/deskmate_logo.png', 'services/meeting_intelligence/static'),
-]
+datas = []
 binaries = []
 hiddenimports = [
     'tiktoken_ext.openai_public',
     'tiktoken_ext',
     'settings',
     'core',
-    'core.settings',
     'core.config',
-    'core.database',
     'core.models',
     'core.telemetry',
     'routers',
-    'routers.ws_common',
-    'routers.ws_file_agent',
-    'routers.ws_personal_agent',
-    'routers.ws_meeting_agent',
-    'routers.meeting_routes',
     'routers.api_routes',
+    'routers.folder_routes',
     'services',
-    'services.file_copilot',
-    'services.file_copilot.agent',
-    'services.file_copilot.tools',
-    'services.file_copilot.rag_tools',
     'services.folder_agent',
     'services.folder_agent.agent',
     'services.folder_agent.embedder',
@@ -36,64 +23,21 @@ hiddenimports = [
     'services.folder_agent.fs_service',
     'services.folder_agent.graph',
     'services.folder_agent.indexer',
+    'services.folder_agent.ocr',
     'services.folder_agent.search',
+    'services.folder_agent.security',
     'services.folder_agent.setup',
     'services.folder_agent.store',
     'services.folder_agent.thumbnails',
     'services.folder_agent.tools',
     'services.folder_agent.vector_store',
     'services.folder_agent.watcher',
-    'routers.folder_routes',
     'send2trash',
     'networkx',
-    'services.personal_assistant',
-    'services.personal_assistant.agent',
-    'services.personal_assistant.tools',
-    'services.meeting_intelligence',
-    'services.meeting_intelligence.config',
-    'services.meeting_intelligence.live_pipeline',
-    'services.meeting_intelligence.screen_capture',
-    'services.meeting_intelligence.screen_capture_service',
-    'services.meeting_intelligence.screen_capture_service.screen_capture',
-    'services.meeting_intelligence.pdf_generator',
-    'services.meeting_intelligence.summarizer',
-    'services.meeting_intelligence.step_utils',
-    'services.meeting_intelligence.native_screen_ocr',
-    'services.meeting_intelligence.export_service',
-    'services.meeting_intelligence.locate_anything',
-    'services.meeting_intelligence.modules',
-    'services.meeting_intelligence.modules.action_inference',
-    'services.meeting_intelligence.modules.change_detector',
-    'services.meeting_intelligence.modules.cursor_detector',
-    'services.meeting_intelligence.modules.decision_gate',
-    'services.meeting_intelligence.modules.heuristic_classifier',
-    'services.meeting_intelligence.modules.interaction_detector',
-    'services.meeting_intelligence.modules.locate_anything',
-    'services.meeting_intelligence.modules.roi_extractor',
-    'services.meeting_intelligence.modules.spatial_analyzer',
-    'services.meeting_intelligence.modules.step_builder',
-    'services.meeting_intelligence.modules.tracker',
-    'services.meeting_intelligence.transcriber',
-    'services.meeting_intelligence.transcriber.audio_extractor',
-    'services.meeting_intelligence.transcriber.chunked_transcriber',
-    'services.meeting_intelligence.transcriber.live_audio_recorder',
-    'services.meeting_intelligence.transcriber.voxtral_service',
-    'services.meeting_intelligence.audio_service',
-    'services.meeting_intelligence.audio_service.audio_extractor',
-    'services.meeting_intelligence.audio_service.chunked_transcriber',
-    'services.meeting_intelligence.audio_service.live_audio_recorder',
-    'services.meeting_intelligence.audio_service.voxtral_service',
-    'services.meeting_intelligence.utils',
-    'services.meeting_intelligence.utils.hardware_check',
-    'sqlite3',
-    'duckduckgo_search',
-    'sqlalchemy',
     'pypdf',
     'PIL',
     'PIL.Image',
-    'faiss',
-    'sentence_transformers',
-    'fpdf',
+    'sqlite3',
 ]
 
 packages_to_collect = [
@@ -103,27 +47,16 @@ packages_to_collect = [
     'pydantic',
     'smolagents',
     'litellm',
-    'langfuse',
+    'tiktoken',
     'qdrant_client',
     'fastembed',
-    'tiktoken',
-    'googleapiclient',
-    'google_auth_oauthlib',
-    'duckduckgo_search',
-    'sqlalchemy',
+    'numpy',
+    'networkx',
     'pypdf',
     'PIL',
-    'faiss',
-    'sentence_transformers',
-    'fpdf2',
-    'cv2',
-    'numpy',
-    'mss',
-    'sounddevice',
-    'soundfile',
+    'send2trash',
     'requests',
     'dotenv',
-    'mistral_common',
 ]
 
 for pkg in packages_to_collect:
@@ -136,10 +69,9 @@ for pkg in packages_to_collect:
         pass
 
 import os
-if os.path.exists('helpers/macos_audio_capture'):
-    binaries.append(('helpers/macos_audio_capture', 'helpers'))
-if os.path.exists('services/meeting_intelligence/audio_service/macos_audio_capture'):
-    binaries.append(('services/meeting_intelligence/audio_service/macos_audio_capture', 'services/meeting_intelligence/audio_service'))
+# Apple Vision OCR helper (makes pictures searchable); resolved via sys._MEIPASS/bin.
+if os.path.exists('bin/native_screen_ocr'):
+    binaries.append(('bin/native_screen_ocr', 'bin'))
 
 a = Analysis(
     ['backend.py'],

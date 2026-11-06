@@ -199,7 +199,6 @@ echo "Setting executable permissions..."
 chmod -R u+rwX,go+rX "$TARGET_APP" 2>/dev/null || true
 chmod +x "$TARGET_APP/Contents/MacOS/DeskMate" 2>/dev/null || true
 find "$TARGET_APP/Contents" -type f -name "deskmate_backend" -exec chmod +x {} + 2>/dev/null || true
-find "$TARGET_APP/Contents" -type f -name "macos_audio_capture" -exec chmod +x {} + 2>/dev/null || true
 
 # 7. Apply local ad-hoc signature to satisfy macOS Sequoia dyld
 echo "Signing application bundle locally..."

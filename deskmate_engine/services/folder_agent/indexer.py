@@ -244,7 +244,9 @@ class Indexer:
             store.put_index_state(path, mtime, size, 0, "failed", ex.kind)
             return
         store.put_index_state(path, mtime, size, len(chunks_payload), status, ex.kind)
-        if chunks:
+        # Names of people, companies and projects come from prose; identifiers in
+        # code and data (NULL, TABLE, class names) would only add noise to the Canvas.
+        if chunks and ex.kind not in ("code", "data"):
             store.put_entities(path, extract_entities(ex.text))
 
     def reindex_paths(self, paths: list[str]) -> None:

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/chat_provider.dart';
+import '../app/app_settings.dart';
 import 'canvas/canvas_view.dart';
 import 'chat/ask_ai_view.dart';
 import 'chat/folder_chat_controller.dart';
@@ -45,7 +45,7 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
   @override
   void initState() {
     super.initState();
-    final provider = context.read<ChatProvider>();
+    final provider = context.read<AppSettings>();
     _app = FaController(provider.backendUrl);
     _explorer = ExplorerController(_app);
     _chat = FolderChatController(_app, provider);
@@ -62,7 +62,7 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _app.updateBaseUrl(context.watch<ChatProvider>().backendUrl);
+    _app.updateBaseUrl(context.watch<AppSettings>().backendUrl);
   }
 
   @override
@@ -83,23 +83,20 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
         ChangeNotifierProvider.value(value: _explorer),
         ChangeNotifierProvider.value(value: _chat),
       ],
-      child: Consumer<FaController>(
-        builder: (context, app, _) {
-          // DeskMate's app-wide theme mode (ChatProvider) is the single source of truth.
-          final brightness = Theme.of(context).brightness;
-          return Theme(
-            data: faThemeData(Theme.of(context), brightness),
-            child: Builder(builder: (context) => _frame(context, app)),
-          );
-        },
+      // Rebuild the frame only when its shape changes (boot, onboarding). Index
+      // progress, toasts and other high-frequency events update just the
+      // widgets that show them, so nothing else repaints or flickers.
+      child: Selector<FaController, (bool, bool)>(
+        selector: (_, app) => (app.ready, app.onboarded),
+        builder: (context, state, _) => _frame(context, ready: state.$1, onboarded: state.$2),
       ),
     );
   }
 
-  Widget _frame(BuildContext context, FaController app) {
+  Widget _frame(BuildContext context, {required bool ready, required bool onboarded}) {
     final c = context.fa;
-    if (!app.ready) return _Splash(colors: c);
-    if (!app.onboarded) return const OnboardingView();
+    if (!ready) return _Splash(colors: c);
+    if (!onboarded) return const OnboardingView();
     return GridColumns(
       notifier: _gridColumns,
       child: _Shortcuts(
@@ -118,7 +115,12 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
                         Expanded(
                           child: Column(
                             children: [
-                              Expanded(child: _section(app)),
+                              Expanded(
+                                child: Selector<FaController, (FaSection, int?)>(
+                                  selector: (_, app) => (app.section, app.activeTagId),
+                                  builder: (context, s, _) => _section(s.$1, s.$2),
+                                ),
+                              ),
                               const _StatusBar(),
                             ],
                           ),
@@ -128,7 +130,10 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
                   ),
                 ],
               ),
-              if (app.searchOpen) const SearchOverlay(),
+              Selector<FaController, bool>(
+                selector: (_, app) => app.searchOpen,
+                builder: (context, open, _) => open ? const SearchOverlay() : const SizedBox.shrink(),
+              ),
               const ToastLayer(),
             ],
           ),
@@ -137,10 +142,10 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
     );
   }
 
-  Widget _section(FaController app) => switch (app.section) {
+  Widget _section(FaSection section, int? tagId) => switch (section) {
     FaSection.browse => const ExplorerPane(),
     FaSection.recents => const RecentsView(),
-    FaSection.tag => TagFilesView(tagId: app.activeTagId ?? -1),
+    FaSection.tag => TagFilesView(tagId: tagId ?? -1),
     FaSection.canvas => const CanvasView(),
     FaSection.askAi => const AskAiView(),
     FaSection.settings => const SettingsView(),

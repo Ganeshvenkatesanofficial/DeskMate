@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - dev
-      - feat/meeting-intelligence-engine
+      - feat/folder-agent
 
   pull_request:
     branches:
@@ -389,7 +389,7 @@ jobs:
           path: DeskMate-Windows.zip
 
       - name: Publish Windows Continuous Pre-release
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/meeting-intelligence-engine')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/folder-agent')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
@@ -462,11 +462,10 @@ jobs:
       - name: Build backend
         working-directory: deskmate_engine
         run: |
-          swiftc -O helpers/macos_audio_capture.swift -o helpers/macos_audio_capture
-          chmod +x helpers/macos_audio_capture
-          mkdir -p services/meeting_intelligence/audio_service
-          cp helpers/macos_audio_capture services/meeting_intelligence/audio_service/
-          chmod +x services/meeting_intelligence/audio_service/macos_audio_capture
+          # Apple Vision OCR helper: makes pictures searchable (bundled into the engine).
+          mkdir -p bin
+          swiftc -O helpers/native_screen_ocr.swift -o bin/native_screen_ocr
+          chmod +x bin/native_screen_ocr
           .venv/bin/pyinstaller deskmate_backend.spec --clean
 
       - name: Copy backend binary
@@ -475,12 +474,8 @@ jobs:
           cp \
             deskmate_engine/dist/deskmate_backend \
             deskmate_app/assets/backend/deskmate_backend
-          cp \
-            deskmate_engine/helpers/macos_audio_capture \
-            deskmate_app/assets/backend/macos_audio_capture
 
           chmod +x deskmate_app/assets/backend/deskmate_backend
-          chmod +x deskmate_app/assets/backend/macos_audio_capture
 
       - name: Flutter dependencies
         working-directory: deskmate_app
@@ -511,7 +506,6 @@ jobs:
           chmod -R u+rwX,go+rX dmg/*.app
           chmod +x dmg/*.app/Contents/MacOS/* || true
           find dmg/*.app/Contents -type f -name "deskmate_backend" -exec chmod +x {} + || true
-          find dmg/*.app/Contents -type f -name "macos_audio_capture" -exec chmod +x {} + || true
 
           # Strip extended quarantine attributes before creating disk image
           xattr -cr dmg/*.app || true
@@ -548,7 +542,7 @@ jobs:
           path: DeskMate-macOS.zip
 
       - name: Publish Continuous Pre-release
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/meeting-intelligence-engine')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/feat/folder-agent')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous

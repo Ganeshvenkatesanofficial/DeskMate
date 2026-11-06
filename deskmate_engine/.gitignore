@@ -28,6 +28,6 @@ token_*.json
 # SQLite Agent Databases
 *.db
 
-# DeskMate Session & Meeting Outputs
+# DeskMate local outputs
 output/
 *.wav

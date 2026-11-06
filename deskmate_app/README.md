@@ -1,88 +1,47 @@
-# DeskMate Desktop – Flutter Frontend
+# DeskMate — Flutter app
 
-<p align="center">
-  <img src="../.github/assets/deskmate_hero.png" width="92%" alt="DeskMate Flutter Desktop App" />
-</p>
-
-The official desktop client for **DeskMate**, built with **Flutter Desktop** (macOS and Windows) following the **GitHub Primer** design language.
-
-DeskMate provides an interactive, low-latency interface to communicate with the embedded Python AI backend via bidirectional WebSockets, providing live step-by-step reasoning telemetry, responsive model switching, and local database exploration.
-
----
-
-## 🎨 UI & Architecture Highlights
-
-* **GitHub Primer Design System**: Custom GitHub Primer Light and Dark Default themes with DeskMate Purple accent (`#6A35F5`).
-* **Bidirectional WebSocket Streaming**: Zero-polling, real-time message streaming from `ws/file-agent` and `ws/personal-agent`.
-* **Telemetry Accordion**: Live step-by-step reasoning visualization displaying AI thoughts, tool execution pills, timings, and expandable observation drawers.
-* **Dual-Agent Mode Switching**: Instant transition between **File Copilot** (semantic workspace & document assistant) and **Personal Agent** (offline Google Workspace, task, note, and memory manager).
-* **Built-in SQLite Explorer**: In-app database inspector with live search, record viewer, and read-only SQL query console for inspecting local memories, tasks, and notes.
-* **Dynamic Local Model Routing**: Instant discovery of installed Ollama models with automatic capability tagging (Multimodal Vision, Fast Coding, Step-by-Step Reasoning, Parameter scale).
-* **Zero-Model Graceful Fallback**: Comprehensive UI guidance, copyable setup commands (`ollama run llama3.2`), live re-check status actions, and Google Gemini cloud bypass.
-* **Meeting Scribe Zero-Download Vision**: Built-in Native Screen OCR (Apple Vision on macOS, Windows Media OCR on Windows) with automatic advertisement filtering, audio-visual timeline cross-referencing, and optional Gemini 2.5 Flash Cloud Vision.
-
----
-
-## 📂 Project Structure
+The desktop UI for DeskMate's Folder Agent. It starts the bundled Python
+engine (`deskmate_engine`) and talks to it over `/api/fa/*`,
+`/ws/folder-events` and `/ws/folder-agent`.
 
 ```text
 lib/
-├── main.dart                  # Application entry point, window config & lifecycle
-├── models/
-│   ├── chat_message.dart      # Chat message & step telemetry data models
-│   └── telemetry_event.dart   # Real-time WebSocket telemetry event parser
-├── providers/
-│   └── chat_provider.dart     # Central ChangeNotifier state (WebSocket, history, settings)
-├── screens/
-│   └── chat_screen.dart       # Main desktop workspace layout (sidebar + chat + input bar)
-├── services/
-│   ├── agent_websocket_client.dart  # WebSocket connection manager & reconnect logic
-│   ├── api_service.dart             # REST client for backend health, models & SQLite
-│   └── backend_manager.dart         # Process manager to launch/kill embedded python binary
-└── widgets/
-    ├── chat_bubble.dart             # Message bubble with copy, edit, and retry actions
-    ├── credentials_setup_dialog.dart# Google Workspace & Gemini BYOK setup modal
-    ├── database_explorer_dialog.dart# SQLite table browser & query console
-    ├── meeting_scribe_view.dart     # Meeting intelligence live recorder, visual timeline & PDF brief
-    ├── model_selector_popup.dart    # Centered Ollama & cloud model picker
-    ├── sidebar.dart                 # Collapsible navigation, health status & mode selector
-    └── telemetry_accordion.dart     # Collapsible live thought process & tool call inspector
+  main.dart                     MaterialApp with the DeskMate theme, starts the engine
+  app/
+    app_settings.dart           engine discovery & health, chat model, Gemini key, theme
+    backend_manager.dart        launches / reuses the bundled engine
+    constants.dart
+  folder_agent/
+    folder_agent_shell.dart     window layout, sections, keyboard shortcuts
+    core/                       theme tokens (fa_theme), models, REST client, event socket
+    state/                      FaController (app), ExplorerController (browser)
+    shell/                      top bar, sidebar, pane header
+    explorer/                   grid / list / column / gallery views, Quick Look,
+                                info panel, preview, context menus, drag-and-drop
+    search/                     ⌘K overlay
+    chat/                       Ask AI: composer, messages, agent log
+    canvas/                     knowledge-graph painter, time scrubber
+    onboarding/                 first-run tour
+    settings/                   settings pages and shared model widgets
+assets/
+  brand/                        DeskMate mark
+  fonts/                        Inter + Space Mono (SIL OFL), bundled
+  folder_agent/                 file-type icons and model logos (from FilDOS, MIT)
 ```
 
----
+The design follows FilDOS's system: an Ink / Mist / Cloud foundation, six
+"scoop" accents used only as accents, Mint for AI, Inter for UI and Space Mono
+for paths and technical text. Colours come from `context.fa`, text styles
+from `FaText`.
 
-## 🚀 Running Locally
+## Run
 
-### Prerequisites
-* [Flutter SDK](https://docs.flutter.dev/get-started/install) (`>= 3.22.0`)
-* macOS (Xcode installed) or Windows (Visual Studio C++ build tools installed)
-
-### 1. Install Dependencies
 ```bash
 flutter pub get
-```
-
-### 2. Run on macOS
-```bash
-flutter run -d macos
-```
-
-### 3. Run on Windows
-```bash
-flutter run -d windows
-```
-
----
-
-## 🧪 Testing & Code Quality
-
-```bash
-# Analyze code for warnings and lints
+flutter run -d macos      # or -d windows
 flutter analyze
-
-# Verify code formatting
-dart format --output=none --set-exit-if-changed lib/
-
-# Run widget and unit tests
 flutter test
 ```
+
+In development the app reuses an engine already running on port 2026
+(`cd ../deskmate_engine && python backend.py --port 2026`).

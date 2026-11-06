@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants.dart';
-import '../../providers/chat_provider.dart';
+import '../../app/constants.dart';
+import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
@@ -57,7 +57,7 @@ class ModelLogo extends StatelessWidget {
 
 /// The chat model currently chosen: a pending pull (prefs.chatModel) wins so
 /// the picker shows what the user picked while it downloads.
-String? currentChatModel(FaController app, ChatProvider chat) {
+String? currentChatModel(FaController app, AppSettings chat) {
   final pref = app.chatModel;
   if (pref != null && pref.isNotEmpty) {
     final pulling = app.ai?.catalog.where((m) => m.id == pref).firstOrNull?.pull?['state'] == 'pulling';
@@ -73,7 +73,7 @@ String? installedName(AiStatus? ai, String id) => ai?.ollamaModels.where((m) => 
 /// Applies a chat-model choice everywhere: Gemini or an installed model is
 /// selected right away; a missing catalog model starts an Ollama pull and is
 /// selected once it lands (even if the view that asked has gone).
-Future<void> chooseChatModel(FaController app, ChatProvider chat, String id) async {
+Future<void> chooseChatModel(FaController app, AppSettings chat, String id) async {
   if (id == AppConstants.geminiModelId) {
     if (!chat.hasGeminiKey) return;
     await chat.saveAiConfiguration(model: id, geminiApiKey: chat.geminiApiKey);
@@ -98,7 +98,7 @@ Future<void> chooseChatModel(FaController app, ChatProvider chat, String id) asy
 
 final Set<String> _watching = {};
 
-void _selectWhenPulled(FaController app, ChatProvider chat, String id) {
+void _selectWhenPulled(FaController app, AppSettings chat, String id) {
   if (!_watching.add(id)) return;
   late final VoidCallback listener;
   void stop() {
@@ -253,7 +253,7 @@ class OllamaStatus extends StatefulWidget {
 class _OllamaStatusState extends State<OllamaStatus> {
   bool _checking = false;
 
-  Future<void> _check(FaController app, ChatProvider chat) async {
+  Future<void> _check(FaController app, AppSettings chat) async {
     setState(() => _checking = true);
     await app.refreshAi();
     await chat.fetchAvailableModels();
@@ -264,7 +264,7 @@ class _OllamaStatusState extends State<OllamaStatus> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
-    final chat = context.read<ChatProvider>();
+    final chat = context.read<AppSettings>();
     final status = app.ai?.ollamaStatus ?? 'offline';
     final button = FaButton(
       label: _checking ? 'Checking…' : 'Check again',
@@ -350,7 +350,7 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
     super.dispose();
   }
 
-  Future<void> _saveKey(FaController app, ChatProvider chat) async {
+  Future<void> _saveKey(FaController app, AppSettings chat) async {
     final key = _key.text.trim();
     if (key.isEmpty) return;
     await chat.setGeminiApiKey(key);
@@ -365,7 +365,7 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
-    final chat = context.watch<ChatProvider>();
+    final chat = context.watch<AppSettings>();
     final ai = app.ai;
     final selected = currentChatModel(app, chat);
     final offline = (ai?.ollamaStatus ?? 'offline') == 'offline';
@@ -598,7 +598,7 @@ class ChosenModelProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
-    final chat = context.watch<ChatProvider>();
+    final chat = context.watch<AppSettings>();
     final id = currentChatModel(app, chat);
     if (id == null) {
       return Text('No chat model chosen yet.', style: FaText.sans(size: 12, color: c.mutedForeground));

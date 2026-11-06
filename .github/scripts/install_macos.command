@@ -35,7 +35,6 @@ fi
 xattr -cr "$TARGET_APP" 2>/dev/null || true
 chmod +x "$TARGET_APP/Contents/MacOS/DeskMate" 2>/dev/null || true
 find "$TARGET_APP/Contents" -type f -name "deskmate_backend" -exec chmod +x {} + 2>/dev/null || true
-find "$TARGET_APP/Contents" -type f -name "macos_audio_capture" -exec chmod +x {} + 2>/dev/null || true
 codesign --force --deep --sign - "$TARGET_APP" 2>/dev/null || true
 
 killall Finder 2>/dev/null || true

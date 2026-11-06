@@ -21,15 +21,6 @@ from core.models import chat_local_llm, get_default_model, get_installed_chat_mo
 
 logger = logging.getLogger("deskmate.telemetry")
 
-_RE_ALL_FILES_SCOPE = re.compile(
-    r"(?i)\bAll\s+([^\n]+?)\s+files\s+found\s+in\s+the\s+current\s+directory\s+and\s+its\s+subdirectories:?"
-)
-_RE_CURRENT_DIR_SUBDIRS = re.compile(
-    r"(?i)\b(in|from)\s+the\s+current\s+directory\s+and\s+its\s+subdirectories\b"
-)
-_RE_CURRENT_DIR = re.compile(
-    r"(?i)\b(in|from)\s+the\s+current\s+directory\b"
-)
 _RE_BR_TAG = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _RE_BR_BULLET = re.compile(r"\s*<br\s*/?>\s*•?\s*", re.IGNORECASE)
 _RE_BR_NEWLINE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
@@ -42,8 +33,6 @@ def friendly_agent_error(exc: BaseException) -> str:
     # Messages DeskMate raises itself are already written for users.
     if isinstance(exc, RuntimeError) and type(exc) is RuntimeError and text:
         return text
-    if isinstance(exc, FileNotFoundError) or "credentials.json" in lowered:
-        return "Google account is not connected. Open Settings > Google Workspace OAuth and add your Client ID and Secret."
     if "api key not valid" in lowered or "api_key_invalid" in lowered or "authenticationerror" in lowered:
         return "The Gemini API key was rejected. Check the key in Settings."
     if "429" in lowered or "ratelimit" in lowered or "quota" in lowered:
@@ -52,8 +41,6 @@ def friendly_agent_error(exc: BaseException) -> str:
         return "Ollama is not running. Start the Ollama app, or add a Gemini API key in Settings."
     if "not found" in lowered and "model" in lowered:
         return "The selected model is not installed in Ollama. Pick another model, or pull it with `ollama pull <model>`."
-    if "access_denied" in lowered or "403" in lowered:
-        return "Google blocked the request. Add your Gmail address as a Test user in Google Cloud Console > Google Auth Platform > Audience."
     return "The assistant hit an unexpected error. Try again; if it keeps happening, check the DeskMate log."
 
 
@@ -83,11 +70,6 @@ def clean_final_answer(raw_answer: str) -> str:
                 res_str = str(parsed["answer"]).strip()
         except Exception as e:
             logger.debug(f"Telemetry JSON answer unwrapping failed: {e}")
-
-    # Sanitize incorrect scope phrasing: user home directory is the entire laptop workspace, NOT "current directory"
-    res_str = _RE_ALL_FILES_SCOPE.sub(r"All \1 files found across your laptop and workspaces:", res_str)
-    res_str = _RE_CURRENT_DIR_SUBDIRS.sub("across your laptop and workspaces", res_str)
-    res_str = _RE_CURRENT_DIR.sub("across your laptop and workspaces", res_str)
 
     # Convert cramped Markdown tables containing <br> into clean, structured Markdown sections
     if _RE_BR_TAG.search(res_str):

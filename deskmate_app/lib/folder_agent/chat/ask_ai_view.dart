@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/chat_message.dart';
-import '../../providers/chat_provider.dart';
+import 'messages.dart';
+import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../shell/pane_header.dart';
 import '../state/fa_controller.dart';
@@ -77,7 +77,7 @@ class _AskAiViewState extends State<AskAiView> {
     final c = context.fa;
     final chat = context.watch<FolderChatController>();
     final app = context.watch<FaController>();
-    final provider = context.watch<ChatProvider>();
+    final provider = context.watch<AppSettings>();
     final showHistory = _session.showHistory;
     final title = chat.chatId == null ? null : chat.history.where((h) => h.id == chat.chatId).firstOrNull?.title;
 
@@ -149,7 +149,7 @@ class _AskAiViewState extends State<AskAiView> {
     );
   }
 
-  List<Widget> _callouts(FolderChatController chat, FaController app, ChatProvider provider) {
+  List<Widget> _callouts(FolderChatController chat, FaController app, AppSettings provider) {
     void toSettings() => app.showSection(FaSection.settings);
     if (!chat.hasModel) {
       return [

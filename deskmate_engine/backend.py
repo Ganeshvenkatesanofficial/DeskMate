@@ -1,8 +1,8 @@
 """
-DeskMate AI — Backend Server Entry Point
-========================================
-FastAPI application mounting WebSocket routes for real-time agent telemetry
-and REST compatibility endpoints.
+DeskMate Folder Agent — Engine Entry Point
+=========================================
+FastAPI app serving the Folder Agent REST API, its event and agent sockets,
+and engine health for the desktop launcher.
 """
 
 from __future__ import annotations
@@ -34,10 +34,6 @@ setup_clean_logging()
 start_parent_watchdog()
 
 from routers.api_routes import router as api_router
-from routers.ws_file_agent import router as ws_file_router
-from routers.ws_personal_agent import router as ws_personal_router
-from routers.meeting_routes import router as meeting_router, plural_router as meeting_plural_router
-from routers.ws_meeting_agent import router as ws_meeting_router
 from routers.folder_routes import router as folder_router, ws_router as ws_folder_router
 
 # Configure logging
@@ -52,7 +48,7 @@ logger = logging.getLogger("deskmate-server")
 async def lifespan(app: FastAPI):
     setup_clean_logging()
     logger.info(f"[STARTUP] DeskMate AI Server v{APP_VERSION} initialized successfully.")
-    logger.info("[INIT] Services active: Meeting Intelligence, Personal Assistant, File Copilot, Folder Agent.")
+    logger.info("[INIT] Folder Agent ready.")
     logger.info("[READY] Server accepting incoming WebSocket and REST connections.")
     from services.folder_agent.indexer import INDEXER
     INDEXER.ensure_running()  # resumes background indexing of granted folders
@@ -61,8 +57,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DeskMate AI Server",
-    description="Triple-Service Copilot, Personal Assistant & Meeting Intelligence with Real-Time WebSockets & Telemetry",
+    title="DeskMate Folder Agent Engine",
+    description="AI-native file explorer engine: filesystem, semantic index, canvas graph and the Folder Agent.",
     version=APP_VERSION,
     lifespan=lifespan,
 )
@@ -84,15 +80,9 @@ app.add_middleware(
 )
 
 # Mount WebSockets & REST Endpoints
-app.include_router(ws_file_router)
-app.include_router(ws_personal_router)
-app.include_router(ws_meeting_router)
 app.include_router(api_router)
-app.include_router(meeting_router)
-app.include_router(meeting_plural_router)
 app.include_router(folder_router)
 app.include_router(ws_folder_router)
-logger.info("[INIT] Mounted 8 service routers: File WS, Personal WS, Meeting WS, Core API, Meeting API, Meeting Plural API, Folder Agent API, Folder Agent WS.")
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:

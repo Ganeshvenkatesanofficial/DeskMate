@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants.dart';
-import '../../providers/chat_provider.dart';
+import '../../app/constants.dart';
+import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../core/models.dart';
@@ -667,7 +667,7 @@ class _ModelChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final provider = context.watch<ChatProvider>();
+    final provider = context.watch<AppSettings>();
     final cloud = provider.isUsingGemini;
     final label = chat.modelLabel;
     final currentId = cloud ? '' : (provider.selectedLocalModel.isNotEmpty ? provider.selectedLocalModel : label);
@@ -711,7 +711,7 @@ class _ModelChip extends StatelessWidget {
     );
   }
 
-  void _open(BuildContext context, ChatProvider provider) {
+  void _open(BuildContext context, AppSettings provider) {
     final cloud = provider.isUsingGemini;
     final selected = provider.selectedLocalModel.isNotEmpty
         ? provider.selectedLocalModel

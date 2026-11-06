@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
-import '../../providers/chat_provider.dart';
 import '../core/fa_theme.dart';
 import '../core/file_icons.dart';
 import '../core/format.dart';
@@ -108,7 +107,6 @@ class FaSidebar extends StatelessWidget {
               ],
             ),
           ),
-          const _AgentSwitcher(),
         ],
       ),
     );
@@ -280,56 +278,6 @@ class _DriveRow extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Switch between DeskMate's agents without leaving the FilDOS-style shell.
-class _AgentSwitcher extends StatelessWidget {
-  const _AgentSwitcher();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fa;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: c.border)),
-      ),
-      child: Hoverable(
-        onTap: () {
-          final box = context.findRenderObject() as RenderBox;
-          final at = box.localToGlobal(const Offset(8, -96));
-          final chat = context.read<ChatProvider>();
-          showFaMenu(context, at, [
-            FaMenuItem('Folder Agent', icon: Icons.folder_open_rounded, onTap: () {}),
-            FaMenuItem('Personal Agent', icon: Icons.person_rounded, onTap: () => chat.switchMode(AgentMode.personal)),
-            FaMenuItem('Meeting Scribe', icon: Icons.mic_rounded, onTap: () => chat.switchMode(AgentMode.meeting)),
-          ]);
-        },
-        builder: (context, hover) => AnimatedContainer(
-          duration: FaMotion.fast,
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: hover ? c.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(FaRadius.sm),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.folder_open_rounded, size: 16, color: Scoop.mint),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  'Folder Agent',
-                  style: FaText.sans(size: 12.5, weight: FontWeight.w500, color: c.foreground),
-                ),
-              ),
-              Icon(Icons.unfold_more_rounded, size: 15, color: c.mutedForeground),
-            ],
-          ),
         ),
       ),
     );

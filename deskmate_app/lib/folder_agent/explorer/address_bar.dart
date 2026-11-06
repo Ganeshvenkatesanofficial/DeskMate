@@ -71,36 +71,40 @@ class _AddressBarState extends State<AddressBar> {
         _controller.text = ex.current;
         setState(() => _editing = true);
       },
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        reverse: true,
-        child: Row(
-          children: [
-            for (var i = 0; i < crumbs.length; i++) ...[
-              if (i > 0) Icon(Icons.chevron_right_rounded, size: 14, color: c.mutedForeground.withValues(alpha: 0.7)),
-              EntryDropTarget(
-                folder: crumbs[i].$2,
-                child: Hoverable(
-                  onTap: () => ex.open(crumbs[i].$2),
-                  builder: (context, hover) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: hover ? c.accent : Colors.transparent,
-                      borderRadius: BorderRadius.circular(FaRadius.sm),
-                    ),
-                    child: Text(
-                      crumbs[i].$1,
-                      style: FaText.sans(
-                        size: 13,
-                        weight: i == crumbs.length - 1 ? FontWeight.w600 : FontWeight.w400,
-                        color: i == crumbs.length - 1 ? c.foreground : c.mutedForeground,
+      // Left-aligned like FilDOS; a long path scrolls so its tail stays visible.
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          reverse: true,
+          child: Row(
+            children: [
+              for (var i = 0; i < crumbs.length; i++) ...[
+                if (i > 0) Icon(Icons.chevron_right_rounded, size: 14, color: c.mutedForeground.withValues(alpha: 0.7)),
+                EntryDropTarget(
+                  folder: crumbs[i].$2,
+                  child: Hoverable(
+                    onTap: () => ex.open(crumbs[i].$2),
+                    builder: (context, hover) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: hover ? c.accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(FaRadius.sm),
+                      ),
+                      child: Text(
+                        crumbs[i].$1,
+                        style: FaText.sans(
+                          size: 13,
+                          weight: i == crumbs.length - 1 ? FontWeight.w600 : FontWeight.w400,
+                          color: i == crumbs.length - 1 ? c.foreground : c.mutedForeground,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

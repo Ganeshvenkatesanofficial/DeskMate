@@ -47,8 +47,16 @@ class ExplorerController extends ChangeNotifier {
   bool get canGoForward => _forward.isNotEmpty;
   bool get canGoUp => current.isNotEmpty && parentDir(current) != current;
 
+  int _nav = 0;
+
+  /// Navigate to [path]. The folder's saved view and its listing load together
+  /// and apply in one frame, so the old folder never flashes in the new
+  /// layout (or the new folder in the old one).
   Future<void> open(String path, {bool record = true}) async {
     if (path.isEmpty) return;
+    final token = ++_nav;
+    final results = await Future.wait([api.view(path), api.list(path, hidden: app.showHidden)]);
+    if (token != _nav) return; // a newer navigation won
     if (record && current.isNotEmpty && current != path) {
       _back.add(current);
       _forward.clear();
@@ -58,11 +66,12 @@ class ExplorerController extends ChangeNotifier {
     selection.clear();
     anchor = null;
     renaming = null;
+    view = (results[0] as Result<ViewPrefs?>).value ?? ViewPrefs(mode: view.mode);
+    _applyListing(results[1] as Result<DirListing>);
+    loading = false;
     app.events.watch(path);
     if (app.section != FaSection.browse) app.showSection(FaSection.browse);
-    final v = await api.view(path);
-    view = v.value ?? view.copyWith(mode: view.mode);
-    await refresh();
+    notifyListeners();
     unawaited(app.setPrefs({'lastPath': path}));
   }
 
@@ -89,9 +98,15 @@ class ExplorerController extends ChangeNotifier {
       notifyListeners();
     }
     final path = current;
+    final token = _nav;
     final r = await api.list(path, hidden: app.showHidden);
-    if (path != current) return; // navigated away meanwhile
+    if (path != current || token != _nav) return; // navigated away meanwhile
     loading = false;
+    _applyListing(r);
+    notifyListeners();
+  }
+
+  void _applyListing(Result<DirListing> r) {
     if (r.ok) {
       error = null;
       _raw = r.value!.entries;
@@ -103,8 +118,8 @@ class ExplorerController extends ChangeNotifier {
     } else {
       error = r.error;
       _raw = entries = const [];
+      hiddenCount = 0;
     }
-    notifyListeners();
   }
 
   Future<void> _loadTags() async {

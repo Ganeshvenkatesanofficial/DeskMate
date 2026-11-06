@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/chat_message.dart';
-import '../../widgets/telemetry_accordion.dart';
+import 'messages.dart';
+import 'agent_log.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../state/explorer_controller.dart';
@@ -113,7 +113,7 @@ class _AssistantMessageState extends State<_AssistantMessage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (m.telemetry.isNotEmpty) TelemetryAccordion(key: ValueKey('fa_telemetry_${m.id}'), steps: m.telemetry),
+          if (m.telemetry.isNotEmpty) AgentLog(key: ValueKey('fa_log_${m.id}'), steps: m.telemetry),
           if (isError) _ErrorNote(text: m.content.replaceFirst('⚠️', '').trim()) else AnswerMarkdown(text: m.content),
           if (!isError && m.content.isNotEmpty)
             Padding(
@@ -338,11 +338,10 @@ class LiveTelemetry extends StatelessWidget {
   const LiveTelemetry({super.key, required this.steps, required this.title});
 
   @override
-  Widget build(BuildContext context) => TelemetryAccordion(
-    key: const ValueKey('fa_live_telemetry'),
+  Widget build(BuildContext context) => AgentLog(
+    key: const ValueKey('fa_live_log'),
     steps: List.of(steps),
-    isActive: true,
+    active: true,
     activeTitle: title.isEmpty ? 'Thinking…' : title,
-    initiallyExpanded: true,
   );
 }

@@ -110,7 +110,7 @@ pytest -v
    ```
 3. **Commit your changes** with descriptive commit messages following the Conventional Commits specification (e.g., `feat:`, `fix:`, `style:`, `docs:`):
    ```bash
-   git commit -m "feat(agent): add search filtering to file copilot"
+   git commit -m "feat(search): add a date filter to the search overlay"
    ```
 4. **Push your branch** to your fork:
    ```bash
@@ -123,6 +123,6 @@ pytest -v
 ## Architectural Overview
 
 * **Embedded Backend Packaging**: PyInstaller compiles `deskmate_engine/backend.py` into a single binary (`deskmate_backend`) placed in `deskmate_app/assets/`.
-* **State & Communication**: `agent_websocket_client.dart` maintains bidirectional WebSockets with `/ws/file-agent` and `/ws/personal-agent`.
-* **Local Persistence**: SQLite database (`deskmate_agent.db`) stores user memories, tasks, and notes in the OS user data directory. It initializes dynamically at runtime and is never pre-bundled.
-* **Vector Storage**: Local Qdrant instance is used for semantic RAG retrieval of workspace documents.
+* **State & Communication**: the Flutter app (`lib/folder_agent/`) calls the engine's `/api/fa/*` REST API, listens on `/ws/folder-events`, and chats with the Folder Agent over `/ws/folder-agent`.
+* **Local Persistence**: SQLite (`folder_agent.db`) keeps prefs, tags, recents, per-folder views, index state and saved chats in the OS user data directory. It is created at runtime and never bundled.
+* **Vector Storage**: an embedded Qdrant collection holds the on-device FastEmbed vectors used for search by meaning and the Canvas.

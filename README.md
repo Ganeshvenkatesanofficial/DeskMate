@@ -13,54 +13,21 @@
   <img src=".github/assets/deskmate_hero.png" width="95%" alt="DeskMate Desktop Application Preview" />
 </p>
 
-**DeskMate** is a free, privacy-first open-source AI desktop copilot and personal assistant. Built with **Flutter Desktop** (GitHub Primer design system) and an embedded **FastAPI + SmolAgents** backend, DeskMate runs 100% offline and natively on your computer with zero cloud telemetry.
+
+**DeskMate** is a free, open-source **AI-native file explorer** for your computer: a real file manager, search by meaning, a chat agent that works on your files, and a map of how your work connects. The app, the index and the models run on your machine; nothing is uploaded unless you choose Gemini in the cloud.
+
+Built with **Flutter** (desktop UI) and an embedded **Python engine** (FastAPI + SmolAgents, FastEmbed + Qdrant, SQLite).
 
 ---
 
-## ✨ Core Features & Tri-Agent Capabilities
+## ✨ What DeskMate does
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>📁 Folder Agent (100% Offline)</h3>
-      <ul>
-        <li><b>A real file explorer</b>: Icon, list, column and gallery views, Quick Look, tags, recents, drag-and-drop, undo, and per-folder view memory.</li>
-        <li><b>Search by meaning</b>: Fused filename + semantic search over text, code, PDFs (opens at the page), DOCX and images (native OCR), powered by embedded <b>Qdrant</b> &amp; <b>FastEmbed</b>.</li>
-        <li><b>Ask AI with live agent logs</b>: Chat with <code>@file</code>, <code>#folder</code> and <code>/find</code>; the agent can create, copy, move, rename or trash files (always recoverable) and every step streams into the chat.</li>
-        <li><b>Canvas</b>: A knowledge graph of your files from similarity, shared entities, tags and work sessions.</li>
-      </ul>
-    </td>
-    <td width="50%" valign="top">
-      <h3>👤 Personal Assistant</h3>
-      <ul>
-        <li><b>Google Workspace Ecosystem</b>: Bi-directional access to Gmail, Calendar, Drive, and Google Docs with secure OAuth.</li>
-        <li><b>Local SQLite Vault</b>: Full CRUD management of daily tasks, quick notes, and structured personal data.</li>
-        <li><b>Episodic FAISS Memory</b>: Recalls user preferences, past decisions, and conversational facts with semantic search.</li>
-        <li><b>Web Research &amp; Weather</b>: Live DuckDuckGo queries and weather data.</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>🎙️ Meeting Scribe &amp; Intelligence</h3>
-      <ul>
-        <li><b>8-Stage Computer Vision</b>: Non-blocking 2.0 FPS screen change detection, cursor tracking, and UI interaction logging.</li>
-        <li><b>NVIDIA LocateAnything-3B</b>: Visual UI grounding with high-speed Parallel Box Decoding (PBD).</li>
-        <li><b>Voxtral 4B Diarization</b>: Speech-to-text with native multi-speaker recognition (<i>Zero Whisper</i>).</li>
-        <li><b>Executive PDF &amp; Cloud Sync</b>: Auto-generates styled PDF briefs and uploads directly to Google Drive &amp; Gmail.</li>
-      </ul>
-    </td>
-    <td width="50%" valign="top">
-      <h3>⚡ Native Desktop Experience</h3>
-      <ul>
-        <li><b>Live Streaming Telemetry</b>: Real-time accordion displaying LLM reasoning steps, tool calls, and execution latencies.</li>
-        <li><b>Dynamic Local LLM Discovery</b>: Auto-detects local <b>Ollama</b> models (<code>llama3.2</code>, <code>mistral</code>, <code>qwen2.5</code>, <code>deepseek-r1</code>).</li>
-        <li><b>In-App SQLite Explorer</b>: Inspect and query your agent database tables directly with an interactive console.</li>
-        <li><b>GitHub Primer UI</b>: Sleek, high-contrast dark &amp; light themes with custom DeskMate purple accents.</li>
-      </ul>
-    </td>
-  </tr>
-</table>
+- **A real file manager first.** Icon, list, column and gallery views, Quick Look on <kbd>Space</kbd>, inline rename, drag-and-drop, undo, tags, recents and per-folder view memory. Deletes go to the Trash and nothing is ever overwritten.
+- **Search by meaning.** <kbd>⌘K</kbd> searches file names and file contents in one list: text, code, PDFs (opening at the matching page), DOCX, and pictures through the OS's own text recognition. When nothing matches, it says so instead of showing the nearest noise.
+- **Ask AI, with live agent logs.** Chat with your files using `@file`, `#folder` and `/find`. The Folder Agent can list, read, find, create, copy, move, rename and trash files, and every reasoning step, tool call and result streams into the chat as it happens.
+- **Canvas.** A map of your indexed files linked by similar content, shared names (people, companies, projects), tags and files worked on together, with a timeline you can replay.
+- **You stay in control.** You choose which folders are indexed, can hide any file, folder or extension from AI, and secrets (`.env`, SSH keys, credentials) are never read.
+- **Your model.** Any local chat model through [Ollama](https://ollama.com) (the first-run tour can install one), or Gemini with your own key.
 
 ---
 
@@ -144,128 +111,54 @@ curl.exe -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMa
    - *(Tip)* Right-click `DeskMate.exe` ➔ select **Pin to Start** or **Pin to taskbar** for one-click access anytime.
 
 ---
+---
 
 ## 🏗️ Architecture
 
-```mermaid
-graph TD
-    User([Desktop User]) <-->|Queries & Streaming Telemetry| UI[Flutter Desktop UI]
-    UI <-->|Bidirectional WebSockets /ws & REST| BE[Embedded FastAPI Backend - deskmate_engine]
-
-    subgraph "DeskMate Tri-Agent Engine"
-        BE --> Router{Agent Mode Router}
-        Router -->|Personal Agent| PA[Personal Assistant SmolAgent]
-        Router -->|File Copilot| FC[File Copilot SmolAgent]
-        Router -->|Meeting Scribe| MS[Meeting Intelligence Pipeline]
-
-        PA <--> LocalDB[(SQLite Vault\nTasks, Notes, Memories)]
-        PA <--> GWorkspace[Google Workspace Tools\nGmail, Calendar, Drive]
-
-        FC <--> LocalFiles[(Local Filesystem\nPDF, Code, Docs, TXT)]
-        FC <--> Qdrant[(Qdrant Vector DB\nRAG Semantic Search)]
-
-        MS --> Screen[ScreenCapture - MSS 2.0 FPS]
-        MS --> CV8[8-Stage CV Detection & LocateAnything-3B]
-        MS --> Vox[Voxtral 4B Diarized Speech - Zero Whisper]
-        MS --> Sum[Multimodal Gemini 2.5 Flash / Ollama]
-        MS --> PDF[DeskMate Executive PDF Engine]
-        MS --> CloudSync[Google Drive Upload & Gmail Dispatch]
-
-        PA <--> LLM[Local Ollama / Gemini BYOK]
-        FC <--> LLM
-        Sum <--> LLM
-    end
+```text
+deskmate_app/                Flutter desktop app
+  lib/app/                   engine launcher, app settings (model, theme)
+  lib/folder_agent/          the UI: shell, explorer views, search, Ask AI,
+                             Canvas, onboarding tour, settings
+deskmate_engine/             Python engine (bundled with the app)
+  backend.py                 FastAPI entry point
+  core/                      LLM adapters (Ollama / Gemini) and agent telemetry
+  routers/                   /api/health, /api/fa/* REST, /ws/folder-events, /ws/folder-agent
+  services/folder_agent/     filesystem, index, search, graph and the SmolAgents Folder Agent
 ```
 
----
+| Piece | How it works |
+|---|---|
+| Filesystem | `fs_service.py`: list, info, create, rename, copy, move, duplicate, Trash; name search is breadth-first and tokenized |
+| Index | `indexer.py` walks the folders you grant, re-reading only files whose size or date changed; text is chunked and embedded on-device with FastEmbed (BGE Small) into an embedded Qdrant |
+| Search | `search.py` fuses filename and meaning hits; meaning hits must stand out from the query's own score distribution |
+| Canvas | `graph.py` builds file links (k-NN similarity, shared entities, tags, sessions), Louvain clusters and the layout |
+| Agent | `agent.py` / `tools.py`: a SmolAgents `ToolCallingAgent` whose steps stream over `/ws/folder-agent` |
 
-## 🌟 Open Source Technologies & Models
-
-DeskMate is built upon world-class open-source projects, models, and libraries. Below is the breakdown of technologies powering each subsystem:
-
-| Technology / Model | Official Repository / Model Page | Role in DeskMate | Implementation Location |
-| :--- | :--- | :--- | :--- |
-| **NVIDIA LocateAnything-3B** | [nvidia/LocateAnything-3B](https://huggingface.co/nvidia/LocateAnything-3B) | Visual UI Grounding & Parallel Box Decoding (PBD) for detecting buttons, menus, and controls | [`deskmate_engine/services/meeting_intelligence/modules/locate_anything.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/modules/locate_anything.py) |
-| **Mistral Voxtral 4B Realtime** | [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) | Real-time speech transcription with native multi-speaker diarization (*Zero Whisper*) | [`deskmate_engine/services/meeting_intelligence/transcriber/voxtral_service.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/transcriber/voxtral_service.py) |
-| **Hugging Face SmolAgents** | [huggingface/smolagents](https://github.com/huggingface/smolagents) | Autonomous multi-step tool execution, reasoning loops, and streaming thought telemetry | [`deskmate_engine/services/file_copilot/agent.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/file_copilot/agent.py), [`services/personal_assistant/agent.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/personal_assistant/agent.py) |
-| **Ollama** | [ollama/ollama](https://github.com/ollama/ollama) | 100% offline, air-gapped local LLM inference engine (`llama3.2`, `mistral`, `qwen2.5`, `deepseek-r1`) | [`deskmate_engine/core/models.py`](file:///Users/entrans/DeskMate/deskmate_engine/core/models.py) |
-| **Qdrant & FastEmbed** | [qdrant/qdrant](https://github.com/qdrant/qdrant) \| [qdrant/fastembed](https://github.com/qdrant/fastembed) | Embedded local vector database and fast ONNX embeddings for offline codebase semantic search | [`deskmate_engine/services/file_copilot/rag_tools.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/file_copilot/rag_tools.py) |
-| **FAISS** | [facebookresearch/faiss](https://github.com/facebookresearch/faiss) | Dense vector similarity search for personal assistant long-term episodic memory recall | [`deskmate_engine/services/personal_assistant/tools.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/personal_assistant/tools.py) |
-| **OpenCV (cv2)** | [opencv/opencv](https://github.com/opencv/opencv) | SSIM visual dedup, Canny edge detection, contour bounding box evaluation, and cursor tracking | [`deskmate_engine/services/meeting_intelligence/modules/`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/modules/) |
-| **MSS** | [BoboTiG/python-mss](https://github.com/BoboTiG/python-mss) | Ultra-fast, zero-overhead background screen capture at 2.0 FPS | [`deskmate_engine/services/meeting_intelligence/screen_capture.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/screen_capture.py) |
-| **SoundDevice & SoundFile** | [spatialaudio/python-sounddevice](https://github.com/spatialaudio/python-sounddevice) \| [bastibe/python-soundfile](https://github.com/bastibe/python-soundfile) | System loopback / earphone audio capture and real-time PCM microphone mute gating | [`deskmate_engine/services/meeting_intelligence/transcriber/live_audio_recorder.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/transcriber/live_audio_recorder.py) |
-| **FPDF2** | [py-pdf/fpdf2](https://github.com/py-pdf/fpdf2) | Production vector PDF layout engine for DeskMate executive meeting intelligence reports | [`deskmate_engine/services/meeting_intelligence/pdf_generator.py`](file:///Users/entrans/DeskMate/deskmate_engine/services/meeting_intelligence/pdf_generator.py) |
-| **FastAPI & Uvicorn** | [fastapi/fastapi](https://github.com/fastapi/fastapi) \| [encode/uvicorn](https://github.com/encode/uvicorn) | Asynchronous backend web framework and bidirectional WebSocket streaming (`/ws/*`) | [`deskmate_engine/backend.py`](file:///Users/entrans/DeskMate/deskmate_engine/backend.py), [`routers/`](file:///Users/entrans/DeskMate/deskmate_engine/routers/) |
-| **Flutter Desktop** | [flutter/flutter](https://github.com/flutter/flutter) | Cross-platform desktop interface styled with GitHub Primer design tokens and dark/light modes | [`deskmate_app/`](file:///Users/entrans/DeskMate/deskmate_app/) |
+The file-explorer design is adapted from [FilDOS](https://github.com/ahmedfahim21/FilDOS) (MIT); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The engine is DeskMate's own.
 
 ---
 
 ## 🛠️ Local Development
 
-### 1. Python Backend
+### 1. Python engine
 ```bash
 cd deskmate_engine
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python backend.py --port 8080
+python backend.py --port 2026
+python -m pytest tests          # engine tests
 ```
 
-### 2. Flutter Desktop
+### 2. Flutter app
 ```bash
 cd deskmate_app
 flutter pub get
 flutter run -d macos   # or: flutter run -d windows
+flutter test           # app tests
 ```
 
----
-
-## 📖 User Guide & Model Architecture
-
-### 🧠 Dynamic Model Selection & Capabilities
-DeskMate automatically discovers all models installed in your local Ollama instance (`http://127.0.0.1:11434`) and dynamically identifies their specialized capabilities:
-* **Multimodal Vision & Visual Intelligence**: Detected if optional vision weights are installed (e.g., `llava`, `moondream`). Note: External vision models are completely optional because Native Screen OCR is built into the OS.
-* **Optimized for Fast Coding & Development**: Detected for code-specialized architectures (e.g., `qwen2.5-coder:1.5b`, `starcoder`).
-* **Advanced Step-by-Step Reasoning**: Detected for chain-of-thought models (e.g., `deepseek-r1:8b`).
-* **General Intelligence & Reasoning**: Parameter sizes (e.g., `20B`, `70B`, `8B`) are dynamically parsed for general LLMs (e.g., `gpt-oss:20b`, `llama3.2:3b`).
-
-### 🛡️ How DeskMate Handles Zero Models / Fresh Installations
-If you launch DeskMate without any local Ollama models installed, or if Ollama is not running:
-1. **Startup Detection**: The backend reports `no_models` or `offline` status via `GET /api/health`.
-2. **Sidebar Status Indicators**: 
-   - Displays `Reasoning: Offline` (red danger badge) if no local model or Gemini key is configured.
-   - Displays `Vision: Apple Vision OCR` or `Windows Native OCR` (green ready badge) — ready with zero model downloads.
-3. **Setup Modal with Copyable Guidance**:
-   - The setup dialog presents copyable terminal commands: `ollama run qwen2.5-coder:1.5b` with a 1-click **Re-check Status** button.
-   - **Cloud BYOK Bypass**: Users who prefer not to download local model weights can enter a Google Gemini API Key to run without local models.
-4. **Meeting Scribe Zero-Setup Readiness**:
-   - Meeting Scribe visual intelligence is powered by built-in Native Screen OCR (Apple Vision on macOS, Windows Media OCR on Windows) — zero model download required. Only a local chat model or Gemini API key is needed for reasoning.
-
-### 👁️ Visual Intelligence (Meeting Scribe)
-Meeting Scribe features a built-in **Native On-Device Screen OCR & Visual Intelligence Engine**:
-1. **Native OS OCR (Default & Recommended — 0 GB Download, 100% Offline)**:
-   - Uses built-in **Apple Vision** (`VNRecognizeTextRequest`) on macOS and **Windows.Media.Ocr** on Windows.
-   - Runs in < 0.8s on CPU/NPU with zero external pip packages or 8GB model downloads.
-   - Automatically detects and filters sponsored video ads, commercials, and promotional countdowns.
-   - Cross-references on-screen text with Voxtral 4B speech diarization to ground meeting moments in real discussion.
-   - Powers synthesis with any active local chat model in Ollama (e.g., `qwen2.5-coder:1.5b`, `gpt-oss:20b`).
-2. **Google Gemini Cloud Multimodal (Zero Local RAM / Cloud BYOK)**:
-   - Uses `gemini-2.5-flash` in Google Cloud for ultra-fast cloud multimodal reasoning with your own API key.
-   - Active only when **Gemini 2.5 Flash (Cloud)** is picked in **Settings → AI Model**. Picking a local Ollama model keeps chats, files and meetings 100% on your machine, even if a Gemini key is saved.
-
-### 🎙️ Speech Transcription
-- **Gemini selected**: speech is transcribed by Gemini (no download).
-- **Local Voxtral 4B**: fully offline after a one-time ~9 GB model download; used automatically with a local model.
-- **Neither**: the report uses screen activity only, and DeskMate says so.
-
-### 🔐 Google Workspace Setup (Personal Agent: Gmail, Calendar, Drive & Tasks)
-To connect your personal Google Workspace with DeskMate:
-1. **Enable APIs**: In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable `Gmail API`, `Google Calendar API`, `Google Drive API`, and `Google Tasks API`. *(Note: Google automatically enables all API methods by default—leave them as-is).*
-2. **Configure Branding**: In **Google Auth Platform** ➔ **Create branding**, enter App name (`DeskMate`), select your email from the dropdown, choose **External** for **Audience** *(allows standard `@gmail.com` accounts to log in)*, enter your contact email, and agree to the user data policy.
-3. **Add Test Users (Mandatory)**: Under **Audience** ➔ **Test users**, click **+ Add Users** and add your Google account. Because unverified apps are in "Testing" mode, Google blocks any login attempt with `Error 403: access_denied` unless your account is listed as a Test User.
-4. **Create OAuth Client ID**: Under **Clients** (or Credentials), click **Create Credentials** ➔ **OAuth client ID**, select **Desktop app**, name it `DeskMate Desktop Client`, and click **Create**.
-5. **Connect to DeskMate**: Either copy your **Client ID** and **Client Secret** directly into DeskMate's **Credentials Setup** dialog, or click **Download JSON**, rename it to `credentials.json`, and place it in the application directory.
-6. **Sign in once**: click **Connect Google Account** in Settings. Google shows **one** screen for Gmail, Calendar, Drive and Tasks; keep every permission ticked and click **Allow**.
-7. For full step-by-step instructions with troubleshooting, see the [Distribution User Guide](deskmate_app/README_DISTRIBUTION.md#step-1-open-google-cloud-console--create-project).
+The app starts the bundled engine itself; in development it reuses one already running on port 2026.
 
 ---
 

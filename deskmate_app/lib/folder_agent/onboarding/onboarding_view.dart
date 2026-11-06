@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants.dart';
-import '../../providers/chat_provider.dart';
+import '../../app/constants.dart';
+import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../settings/model_widgets.dart';
@@ -96,7 +96,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
         _initRoots();
       case OnboardingStep.assistant:
         _app.refreshAi();
-        context.read<ChatProvider>().fetchAvailableModels();
+        context.read<AppSettings>().fetchAvailableModels();
       default:
         break;
     }
@@ -130,7 +130,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   }
 
   String? get _blocker {
-    final chat = context.read<ChatProvider>();
+    final chat = context.read<AppSettings>();
     return onboardingBlocker(_step, agreedToTerms: _agreed, hasChatModel: currentChatModel(_app, chat) != null);
   }
 
@@ -296,7 +296,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
     final c = context.fa;
     // Rebuild on backend state (AI status, prefs, quick access) and chat model changes.
     context.watch<FaController>();
-    context.watch<ChatProvider>();
+    context.watch<AppSettings>();
     final steps = _steps;
     if (_ix >= steps.length) _ix = steps.length - 1;
     final step = _step;
@@ -951,7 +951,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
 
   Widget _readyStep(BuildContext context) {
     final c = context.fa;
-    final chat = context.watch<ChatProvider>();
+    final chat = context.watch<AppSettings>();
     final mod = _app.isMac ? '⌘' : 'Ctrl';
     final shortcuts = Reveal(
       order: 3,

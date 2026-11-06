@@ -19,8 +19,9 @@ from typing import Any
 
 from smolagents import Tool
 
-from services.file_copilot.tools import SECRET_FILE_REFUSAL, extract_file_content, is_secret_path
 from services.folder_agent import fs_service, search
+from services.folder_agent.extract import extract
+from services.folder_agent.security import SECRET_FILE_REFUSAL, is_secret_path
 from services.folder_agent.indexer import INDEXER, is_hidden_from_ai
 from services.folder_agent.watcher import WATCHER
 
@@ -117,16 +118,29 @@ class ReadFileTool(_FolderTool):
             return refusal
         if not p.is_file():
             return f"Error: “{p.name}” isn't a file in {p.parent}."
-        if p.suffix.lower() == ".docx":
-            from services.folder_agent.extract import docx_text
+        return read_text(p)
 
-            return docx_text(p)[:20000] or "(empty document)"
-        if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".heic", ".webp", ".tiff"}:
-            from services.folder_agent.extract import _ocr_text
 
-            text = _ocr_text(p)
-            return f"Image {p.name}. Text found in it:\n{text}" if text else f"Image {p.name} (no readable text)."
-        return extract_file_content(p)
+MAX_READ_CHARS = 20_000
+
+
+def read_text(p: Path) -> str:
+    """Readable text of a file for the model: pages marked for PDFs, OCR for pictures."""
+    try:
+        ex = extract(p)
+    except Exception as exc:  # corrupt PDF, unreadable file, ...
+        return f"Error: couldn't read “{p.name}”: {exc}"
+    if ex.skipped_reason == "unsupported" or ex.skipped_reason == "binary":
+        return f"“{p.name}” is a {ex.kind} file; its contents can't be read as text."
+    if ex.skipped_reason:
+        return f"“{p.name}” wasn't read ({ex.skipped_reason})."
+    if not ex.segments or not ex.text.strip():
+        return f"“{p.name}” has no readable text." + (" (picture without text)" if ex.kind == "image" else "")
+    parts = [f"--- Page {s.page} ---\n{s.text.strip()}" if s.page else s.text for s in ex.segments]
+    text = "\n\n".join(parts)
+    if len(text) > MAX_READ_CHARS:
+        text = text[:MAX_READ_CHARS] + f"\n… (truncated; {len(text):,} characters in total)"
+    return text
 
 
 class FindFilesTool(_FolderTool):

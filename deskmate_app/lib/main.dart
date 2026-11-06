@@ -3,42 +3,34 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'app/app_settings.dart';
+import 'app/backend_manager.dart';
+import 'folder_agent/core/fa_theme.dart';
 import 'folder_agent/folder_agent_shell.dart';
-import 'providers/chat_provider.dart';
-import 'screens/chat_screen.dart';
-import 'theme/app_theme.dart';
-import 'services/backend_manager.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(ChangeNotifierProvider(create: (_) => AppSettings(), child: const DeskMateApp()));
 
-  runApp(
-    MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => ChatProvider())],
-      child: const DeskMateApp(),
-    ),
-  );
-
-  // Start the background python backend asynchronously without blocking window rendering
-  BackendManager.start().catchError((e) {
-    debugPrint('Failed to start backend on launch: $e');
-  });
+  // Start the bundled engine in the background; the window renders immediately.
+  BackendManager.start().catchError((e) => debugPrint('Failed to start the DeskMate engine: $e'));
 }
 
 class DeskMateApp extends StatefulWidget {
   const DeskMateApp({super.key});
-
   @override
   State<DeskMateApp> createState() => _DeskMateAppState();
 }
 
 class _DeskMateAppState extends State<DeskMateApp> {
-  late final AppLifecycleListener _lifecycleListener;
+  late final AppLifecycleListener _lifecycle;
+  static final _light = faTheme(Brightness.light);
+  static final _dark = faTheme(Brightness.dark);
 
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(
+    _lifecycle = AppLifecycleListener(
       onExitRequested: () async {
         await BackendManager.stop();
         return AppExitResponse.exit;
@@ -48,25 +40,23 @@ class _DeskMateAppState extends State<DeskMateApp> {
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    _lifecycle.dispose();
     BackendManager.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ChatProvider>(context);
+    final themeMode = context.select<AppSettings, ThemeMode>((s) => s.themeMode);
     return MaterialApp(
-      title: 'DeskMate - AI Desktop Copilot',
+      title: 'DeskMate',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: provider.themeMode,
-      // Folder Agent (the AI file explorer) is a full-window experience;
-      // Personal Agent and Meeting Scribe keep the chat shell.
-      home: provider.mode == AgentMode.deskMate
-          ? const Scaffold(body: FolderAgentShell())
-          : const ChatScreen(),
+      theme: _light,
+      darkTheme: _dark,
+      themeMode: themeMode,
+      // Swap themes instantly: a cross-fade repaints every surface (visible flicker).
+      themeAnimationDuration: Duration.zero,
+      home: const Scaffold(body: FolderAgentShell()),
     );
   }
 }

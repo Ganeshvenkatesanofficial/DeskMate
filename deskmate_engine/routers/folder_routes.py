@@ -232,7 +232,7 @@ def fs_thumbnail(path: str, size: int = 256):
 @router.get("/fs/raw")
 def fs_raw(path: str):
     """Stream a file's bytes for in-app preview (images, PDF, media)."""
-    from services.file_copilot.tools import is_secret_path
+    from services.folder_agent.security import is_secret_path
 
     p = Path(path)
     if not p.is_absolute() or not p.is_file() or is_secret_path(p):

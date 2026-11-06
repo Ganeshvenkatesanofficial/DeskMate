@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
-import '../core/fa_theme.dart';
 import '../core/file_icons.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
@@ -48,32 +47,24 @@ class FileIcon extends StatelessWidget {
     );
     if (!thumbnail || !hasThumbnail || path == null) return icon;
     final api = context.read<FaController>().api;
-    final px = (size * MediaQuery.devicePixelRatioOf(context)).round().clamp(64, 1024);
+    // Request a fixed bucket per tile size so the same thumbnail URL (and its
+    // cached image) is reused everywhere instead of refetching on every rebuild.
+    final px = size <= 32 ? 128 : (size <= 96 ? 256 : 512);
+    final url = api.thumbnailUrl(path!, size: px, mtime: mtime);
     return SizedBox(
       width: size,
       height: size,
       child: Image.network(
-        api.thumbnailUrl(path!, size: px, mtime: mtime),
+        url,
+        // One element per file: a recycled tile never shows the previous file's picture.
+        key: ValueKey(url),
         width: size,
         height: size,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.medium,
-        gaplessPlayback: true,
-        frameBuilder: (context, child, frame, sync) {
-          if (frame == null) return icon;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: context.fa.isDark ? 0.35 : 0.10),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: child,
-          );
-        },
+        gaplessPlayback: false,
+        // Show the type icon until the picture is decoded (cached pictures arrive synchronously).
+        frameBuilder: (context, child, frame, sync) => frame == null ? icon : child,
         errorBuilder: (_, _, _) => icon,
       ),
     );

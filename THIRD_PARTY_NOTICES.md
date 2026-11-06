@@ -32,3 +32,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Inter and Space Mono
+
+`deskmate_app/assets/fonts/` bundles **Inter** (© The Inter Project Authors)
+and **Space Mono** (© Colophon Foundry), both licensed under the
+[SIL Open Font License 1.1](https://openfontlicense.org).

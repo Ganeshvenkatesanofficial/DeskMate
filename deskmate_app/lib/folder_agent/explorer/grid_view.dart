@@ -37,7 +37,9 @@ class FileGridView extends StatelessWidget {
               mainAxisSpacing: 6,
             ),
             itemCount: ex.entries.length,
-            itemBuilder: (context, i) => _GridTile(entry: ex.entries[i]),
+            // Tiles follow their file across refreshes and re-sorts (no thumbnail swaps).
+            findChildIndexCallback: (key) => _indexOf(ex, key),
+            itemBuilder: (context, i) => _GridTile(key: ValueKey(ex.entries[i].path), entry: ex.entries[i]),
           ),
         );
       },
@@ -54,9 +56,15 @@ class GridColumns extends InheritedWidget {
   bool updateShouldNotify(GridColumns old) => false;
 }
 
+int? _indexOf(ExplorerController ex, Key key) {
+  if (key is! ValueKey<String>) return null;
+  final i = ex.entries.indexWhere((e) => e.path == key.value);
+  return i < 0 ? null : i;
+}
+
 class _GridTile extends StatelessWidget {
   final FsEntry entry;
-  const _GridTile({required this.entry});
+  const _GridTile({super.key, required this.entry});
 
   @override
   Widget build(BuildContext context) {

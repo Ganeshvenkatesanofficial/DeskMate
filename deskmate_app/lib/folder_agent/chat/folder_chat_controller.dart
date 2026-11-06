@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../../models/chat_message.dart';
-import '../../providers/chat_provider.dart';
+import 'messages.dart';
+import '../../app/app_settings.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
 
@@ -16,7 +16,7 @@ import '../state/fa_controller.dart';
 /// shared telemetry accordion renders the agent's logs unchanged.
 class FolderChatController extends ChangeNotifier {
   final FaController app;
-  final ChatProvider provider;
+  final AppSettings provider;
 
   FolderChatController(this.app, this.provider);
 

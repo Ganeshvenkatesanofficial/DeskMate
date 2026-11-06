@@ -1,10 +1,10 @@
 """
-services.folder_agent.vector_store — Folder index on DeskMate's Qdrant
-======================================================================
-Chunks live in the ``folder_agent_chunks`` collection of the same embedded
-Qdrant instance the File Copilot RAG tools use (one local client per process
-— Qdrant's local mode locks its directory; it is not thread-safe either, so
-every call here holds ``_lock``). Each point is one chunk:
+services.folder_agent.vector_store — The folder index in embedded Qdrant
+========================================================================
+Chunks live in the ``folder_agent_chunks`` collection of a local, on-disk
+Qdrant (``<user data>/.qdrant_data``). Local mode allows one client per
+directory and is not thread-safe, so the client is a process-wide singleton
+and every call holds ``_lock``. Each point is one chunk:
 ``{path, chunk, page, text, kind, mtime}`` with a stable uuid5 id.
 """
 
@@ -17,13 +17,26 @@ from typing import Any, Iterator
 import numpy as np
 from qdrant_client import models
 
-from services.file_copilot.rag_tools import get_qdrant_client
 from services.folder_agent.embedder import MODEL_DIM
+from settings import get_user_data_dir
 
 COLLECTION = "folder_agent_chunks"
+_QDRANT_PATH = get_user_data_dir() / ".qdrant_data"
 _NS = uuid.UUID("6f1c6c2e-9a5e-4c31-9a87-1d4bd2a1f0aa")
 _lock = threading.RLock()
 _ready = False
+_qdrant = None
+
+
+def get_qdrant_client():
+    """The process-wide embedded Qdrant client (local mode allows one per directory)."""
+    global _qdrant
+    with _lock:
+        if _qdrant is None:
+            from qdrant_client import QdrantClient
+
+            _qdrant = QdrantClient(path=str(_QDRANT_PATH))
+        return _qdrant
 
 
 def _client():

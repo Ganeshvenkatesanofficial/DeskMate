@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Folder Agent design tokens.
 ///
@@ -116,27 +115,41 @@ class FaColors extends ThemeExtension<FaColors> {
 
 /// Text styles: Inter for UI, Space Mono for paths, sizes and other technical text.
 abstract final class FaText {
+  static const sansFamily = 'Inter';
+  static const monoFamily = 'SpaceMono';
+
+  /// FilDOS's Inter setup: contextual alternates, the alternate a/g/l glyphs
+  /// (cv03/cv04/cv11) and tabular digits so counts don't jitter.
+  static const _interFeatures = [
+    FontFeature.enable('calt'),
+    FontFeature('cv03'),
+    FontFeature('cv04'),
+    FontFeature('cv11'),
+    FontFeature.tabularFigures(),
+  ];
+
   static TextStyle sans({
     double size = 13,
     FontWeight weight = FontWeight.w400,
     Color? color,
     double? height,
     double letterSpacing = 0,
-  }) => GoogleFonts.inter(
+  }) => TextStyle(
+    fontFamily: sansFamily,
     fontSize: size,
     fontWeight: weight,
     color: color,
     height: height,
     letterSpacing: letterSpacing,
-    fontFeatures: const [FontFeature.tabularFigures()],
+    fontFeatures: _interFeatures,
   );
 
   static TextStyle mono({double size = 11, FontWeight weight = FontWeight.w400, Color? color, double? height}) =>
-      GoogleFonts.spaceMono(fontSize: size, fontWeight: weight, color: color, height: height);
+      TextStyle(fontFamily: monoFamily, fontSize: size, fontWeight: weight, color: color, height: height);
 
   /// Uppercase section label ("QUICK ACCESS").
   static TextStyle label(FaColors c) =>
-      GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.9);
+      sans(size: 10.5, weight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.9);
 }
 
 abstract final class FaMotion {
@@ -159,7 +172,20 @@ extension FaContext on BuildContext {
       (Theme.of(this).brightness == Brightness.dark ? FaColors.dark : FaColors.light);
 }
 
-/// Wraps the Folder Agent subtree in a theme carrying [FaColors].
+/// The complete DeskMate theme for [brightness] (FilDOS tokens on Material 3).
+ThemeData faTheme(Brightness brightness) => faThemeData(
+  ThemeData(
+    brightness: brightness,
+    useMaterial3: true,
+    fontFamily: FaText.sansFamily,
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
+    hoverColor: Colors.transparent,
+    visualDensity: VisualDensity.compact,
+  ),
+  brightness,
+);
+
 ThemeData faThemeData(ThemeData base, Brightness brightness) {
   final c = brightness == Brightness.dark ? FaColors.dark : FaColors.light;
   return base.copyWith(

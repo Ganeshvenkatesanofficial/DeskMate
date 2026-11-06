@@ -580,7 +580,7 @@ class Preview:
 
 
 def preview(path: str, max_chars: int = 60_000) -> dict[str, Any]:
-    from services.file_copilot.tools import is_secret_path
+    from services.folder_agent.security import is_secret_path
 
     p = assert_valid_path(path)
     if not p.is_file():

@@ -70,6 +70,7 @@ class _GalleryBrowserViewState extends State<GalleryBrowserView> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: AnimatedSwitcher(
                 duration: FaMotion.fast,
+                layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, ?current]),
                 child: KeyedSubtree(
                   key: ValueKey(entry.path),
                   child: entry.isDir ? _FolderStage(entry: entry) : FilePreview(entry: entry),
