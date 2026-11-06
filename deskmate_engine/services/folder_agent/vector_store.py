@@ -3,7 +3,8 @@ services.folder_agent.vector_store — Folder index on DeskMate's Qdrant
 ======================================================================
 Chunks live in the ``folder_agent_chunks`` collection of the same embedded
 Qdrant instance the File Copilot RAG tools use (one local client per process
-— Qdrant's local mode locks its directory). Each point is one chunk:
+— Qdrant's local mode locks its directory; it is not thread-safe either, so
+every call here holds ``_lock``). Each point is one chunk:
 ``{path, chunk, page, text, kind, mtime}`` with a stable uuid5 id.
 """
 
@@ -84,12 +85,15 @@ def clear() -> None:
 
 
 def count() -> int:
-    return _client().count(COLLECTION, exact=True).count
+    client = _client()
+    with _lock:
+        return client.count(COLLECTION, exact=True).count
 
 
 def query(vector: np.ndarray, limit: int = 300, path_prefix: str | None = None) -> list[dict[str, Any]]:
     client = _client()
-    res = client.query_points(COLLECTION, query=vector.tolist(), limit=limit, with_payload=True)
+    with _lock:
+        res = client.query_points(COLLECTION, query=vector.tolist(), limit=limit, with_payload=True)
     out = []
     for p in res.points:
         payload = p.payload or {}
@@ -100,7 +104,9 @@ def query(vector: np.ndarray, limit: int = 300, path_prefix: str | None = None) 
 
 
 def file_chunks(path: str, limit: int = 64) -> list[dict[str, Any]]:
-    points, _ = _client().scroll(COLLECTION, scroll_filter=_path_filter(path), limit=limit, with_payload=True)
+    client = _client()
+    with _lock:
+        points, _ = client.scroll(COLLECTION, scroll_filter=_path_filter(path), limit=limit, with_payload=True)
     return sorted((p.payload or {} for p in points), key=lambda c: c.get("chunk", 0))
 
 
@@ -109,9 +115,10 @@ def iter_vectors(batch: int = 1024) -> Iterator[tuple[str, np.ndarray, dict[str,
     client = _client()
     offset = None
     while True:
-        points, offset = client.scroll(
-            COLLECTION, limit=batch, offset=offset, with_payload=["path", "mtime", "kind"], with_vectors=True
-        )
+        with _lock:  # page by page, so indexing can interleave between pages
+            points, offset = client.scroll(
+                COLLECTION, limit=batch, offset=offset, with_payload=["path", "mtime", "kind"], with_vectors=True
+            )
         for p in points:
             yield str((p.payload or {}).get("path")), np.asarray(p.vector, dtype=np.float32), p.payload or {}
         if offset is None:

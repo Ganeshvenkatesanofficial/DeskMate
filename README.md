@@ -22,12 +22,12 @@
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>📁 File Copilot (100% Offline)</h3>
+      <h3>📁 Folder Agent (100% Offline)</h3>
       <ul>
-        <li><b>Local Filesystem Discovery</b>: Seamlessly search, read, and navigate local codebases, documents, and directories.</li>
-        <li><b>Multi-Format Intelligence</b>: Native parsing of Source Code, PDFs, Markdown, JSON, YAML, and Images.</li>
-        <li><b>Local Codebase RAG</b>: Semantic document search and indexing powered by embedded <b>Qdrant</b> &amp; <b>FastEmbed</b>.</li>
-        <li><b>Zero Cloud Exposure</b>: 100% air-gapped execution on local GPU/CPU.</li>
+        <li><b>A real file explorer</b>: Icon, list, column and gallery views, Quick Look, tags, recents, drag-and-drop, undo, and per-folder view memory.</li>
+        <li><b>Search by meaning</b>: Fused filename + semantic search over text, code, PDFs (opens at the page), DOCX and images (native OCR), powered by embedded <b>Qdrant</b> &amp; <b>FastEmbed</b>.</li>
+        <li><b>Ask AI with live agent logs</b>: Chat with <code>@file</code>, <code>#folder</code> and <code>/find</code>; the agent can create, copy, move, rename or trash files (always recoverable) and every step streams into the chat.</li>
+        <li><b>Canvas</b>: A knowledge graph of your files from similarity, shared entities, tags and work sessions.</li>
       </ul>
     </td>
     <td width="50%" valign="top">

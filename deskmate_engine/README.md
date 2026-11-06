@@ -22,6 +22,21 @@ deskmate_engine/
 │   │   ├── tools.py             # Filesystem exploration & code editing tools
 │   │   └── rag_tools.py         # Offline Qdrant document vector search & indexing
 │   │
+│   ├── folder_agent/            # Folder Agent: AI-native file explorer backend
+│   │   ├── fs_service.py        # Recoverable filesystem ops (never overwrite, Trash deletes), name search
+│   │   ├── store.py             # SQLite: prefs, tags, recents, views, index state, entities, chats
+│   │   ├── indexer.py           # Paced background indexer of granted folders (diffed by mtime/size)
+│   │   ├── extract.py           # Text/code/PDF pages/DOCX/OCR extraction, chunking, entity mining
+│   │   ├── embedder.py          # FastEmbed BGE-small on-device embeddings + download progress
+│   │   ├── vector_store.py      # folder_agent_chunks collection in the embedded Qdrant
+│   │   ├── search.py            # Fused name + meaning ranking (z-normalised; empty when nothing fits)
+│   │   ├── graph.py             # Canvas graph: k-NN, entity, tag, temporal edges + Louvain + layout
+│   │   ├── agent.py / tools.py  # Folder Agent SmolAgent with file-action tools and /find
+│   │   ├── setup.py             # Install flow: specs, model catalog, ollama pull progress
+│   │   ├── watcher.py           # Folder-in-view change polling
+│   │   ├── thumbnails.py        # Quick Look / Pillow thumbnails with disk cache
+│   │   └── events.py            # Thread-safe event bus for /ws/folder-events
+│   │
 │   ├── personal_assistant/      # Agent 2: Personal Workspace Assistant
 │   │   ├── agent.py             # Agent initialization & execution
 │   │   └── tools.py             # Google Workspace (Gmail, Calendar, Drive), SQLite, FAISS
