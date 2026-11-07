@@ -4,9 +4,10 @@ routers.folder_agent.sockets — Live channels
 ``/ws/folder-events``  server → app events (index / graph / model progress,
                        folder changes); app → server ``{"action": "watch", "path"}``.
 ``/ws/folder-agent``   the Folder Agent chat. App → server:
-                         ``{"action": "chat", "message", "chat_id"?, "context": {"cwd", "files", "folders"}}``
+                         ``{"action": "chat", "message", "chat_id"?, "edit_of"?, "context": {"cwd", "files", "folders"}}``
+                         (``edit_of``: id of the user message this one replaces)
                          ``{"action": "stop", "chat_id"}`` · ``{"action": "ping"}``
-                       Server → app: the turn's ``chat`` id, then ``AgentTelemetry``
+                       Server → app: the turn's ``chat`` (chat id + saved message id), then ``AgentTelemetry``
                        events (run / status / telemetry / done / error), each tagged
                        with ``chat_id``. Model, key, history and the system prompt
                        never cross the wire: the engine owns them.
@@ -68,18 +69,27 @@ async def folder_events(websocket: WebSocket):
 
 
 class _AgentSocket:
-    """One app connection: at most one turn in flight, events relayed in order."""
+    """One app connection: turns run one at a time, events relayed in order.
+
+    The turn's final ``done`` / ``error`` is held back until the turn is fully
+    finished (reply saved, run released), so a client that reloads the chat or
+    sends the next message on ``done`` never races the engine."""
 
     def __init__(self, websocket: WebSocket) -> None:
         self.ws = websocket
         self.loop = asyncio.get_running_loop()
-        self.turn: Optional[asyncio.Task] = None
+        self.turns: set[asyncio.Task] = set()
         self.chat_id: Optional[str] = None
+        self._one_at_a_time = asyncio.Lock()
 
     async def send(self, event: dict[str, Any]) -> None:
         await self.ws.send_json(event)
 
     async def run_turn(self, data: dict[str, Any]) -> None:
+        async with self._one_at_a_time:
+            await self._relay_turn(data)
+
+    async def _relay_turn(self, data: dict[str, Any]) -> None:
         queue: asyncio.Queue = asyncio.Queue()
 
         def sink(event: dict[str, Any]) -> None:
@@ -89,7 +99,13 @@ class _AgentSocket:
 
         def work() -> None:
             try:
-                CHAT.run_turn(str(data.get("message", "")), data.get("chat_id") or None, data.get("context"), sink)
+                CHAT.run_turn(
+                    str(data.get("message", "")),
+                    data.get("chat_id") or None,
+                    data.get("context"),
+                    sink,
+                    edit_of=data.get("edit_of") or None,
+                )
             except Exception as exc:  # never leave the app waiting
                 telemetry = AgentTelemetry(sink, chat_id=self.chat_id)
                 telemetry.error(exc)
@@ -97,8 +113,14 @@ class _AgentSocket:
                 self.loop.call_soon_threadsafe(queue.put_nowait, None)
 
         self.loop.run_in_executor(_TURNS, work)
+        final: Optional[dict[str, Any]] = None
         while (event := await queue.get()) is not None:
-            await self.send(event)
+            if event.get("type") in ("done", "error"):
+                final = event  # sent once the worker has finished
+            else:
+                await self.send(event)
+        if final is not None:
+            await self.send(final)
 
     async def handle(self, data: dict[str, Any]) -> None:
         action = data.get("action", "chat")
@@ -109,10 +131,17 @@ class _AgentSocket:
         elif action == "chat":
             if not str(data.get("message", "")).strip():
                 await self.send({"type": "error", "error": "Message cannot be empty."})
-            elif self.turn and not self.turn.done():
-                await self.send({"type": "error", "error": "Still working on the last request."})
-            else:
-                self.turn = asyncio.create_task(self.run_turn(data))
+            else:  # queued behind a turn still finishing
+                task = asyncio.create_task(self.run_turn(data))
+                self.turns.add(task)
+                task.add_done_callback(self.turns.discard)
+
+    def close(self) -> None:
+        """The app went away: stop the run and drop queued turns."""
+        if self.turns:
+            CHAT.stop(self.chat_id)
+            for task in list(self.turns):
+                task.cancel()
 
 
 @router.websocket("/ws/folder-agent")
@@ -130,6 +159,4 @@ async def folder_agent(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        if conn.turn and not conn.turn.done():
-            CHAT.stop(conn.chat_id)
-            conn.turn.cancel()
+        conn.close()

@@ -133,7 +133,7 @@ const _toolIcons = <String, IconData>{
   'move_files': Icons.arrow_forward_rounded,
   'rename_file': Icons.drive_file_rename_outline_rounded,
   'trash_files': Icons.delete_outline_rounded,
-  'delete_files': Icons.delete_outline_rounded,
+  'index_files': Icons.manage_search_rounded,
 };
 
 const _toolLabels = <String, String>{
@@ -148,18 +148,26 @@ const _toolLabels = <String, String>{
   'move_files': 'Moved',
   'rename_file': 'Renamed',
   'trash_files': 'Moved to Trash',
-  'delete_files': 'Moved to Trash',
+  'index_files': 'Indexed',
 };
 
 String _argsText(Map<String, dynamic>? args, String home) {
   if (args == null || args.isEmpty) return '';
   final parts = <String>[];
   args.forEach((k, v) {
-    if (v == null || k == 'content') return;
-    parts.add(v is List ? v.map((e) => compactDir('$e', home)).join(', ') : compactDir('$v', home));
+    if (v == null || v == false || k == 'content') return;
+    parts.add(switch ((k, v)) {
+      ('everywhere', true) => 'everywhere',
+      ('min_size_mb', final num n) => '≥ ${_mb(n)} MB',
+      ('max_size_mb', final num n) => '≤ ${_mb(n)} MB',
+      (_, final List l) => l.map((e) => compactDir('$e', home)).join(', '),
+      _ => compactDir('$v', home),
+    });
   });
   return parts.join(' → ');
 }
+
+String _mb(num n) => n == n.roundToDouble() ? '${n.round()}' : '$n';
 
 bool _failed(String out) => out.startsWith('Error') || out.startsWith('Refused');
 

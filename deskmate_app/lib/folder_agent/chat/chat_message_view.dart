@@ -14,6 +14,7 @@ import '../state/fa_controller.dart';
 import '../widgets/ui.dart';
 import 'chat_widgets.dart';
 import 'composer_logic.dart';
+import 'folder_chat_controller.dart';
 
 /// One rendered turn: the user's right-aligned bubble (with its mention chips)
 /// or the assistant's answer — agent logs (the shared DeskMate telemetry
@@ -26,21 +27,66 @@ class ChatMessageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return message.role == MessageRole.user
-        ? _UserBubble(text: message.content, mentions: mentions)
+        ? _UserBubble(message: message, mentions: mentions)
         : _AssistantMessage(message: message);
   }
 }
 
 /// FilDOS user bubble: right-aligned `max-w-[88%] rounded-2xl rounded-br-md
 /// bg-primary/10 px-3.5 py-2`, `text-sm`; a leading known `/command` becomes
-/// the mint mono badge; mention chips sit `gap-1` below.
-class _UserBubble extends StatelessWidget {
-  final String text;
+/// the mint mono badge; mention chips sit `gap-1` below. On hover, Edit (load
+/// it back into the composer to change and resend) and Copy fade in.
+class _UserBubble extends StatefulWidget {
+  final ChatMessage message;
   final List<ChatMention> mentions;
-  const _UserBubble({required this.text, required this.mentions});
+  const _UserBubble({required this.message, required this.mentions});
+
+  @override
+  State<_UserBubble> createState() => _UserBubbleState();
+}
+
+class _UserBubbleState extends State<_UserBubble> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
+    final chat = context.read<FolderChatController>();
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _bubble(context),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: _hover ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !_hover,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HoverAction(
+                      icon: Icons.edit_outlined,
+                      tooltip: 'Edit and resend',
+                      onTap: () => chat.startEdit(widget.message),
+                    ),
+                    _CopyButton(text: widget.message.content, tooltip: 'Copy message'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bubble(BuildContext context) {
+    final text = widget.message.content;
+    final mentions = widget.mentions;
     final c = context.fa;
     final style = FaText.sans(size: 14, color: c.foreground, height: 20 / 14);
     final cmd = RegExp(r'^/(\S+)\s*').firstMatch(text);
@@ -146,7 +192,7 @@ class _AssistantMessageState extends State<_AssistantMessage> {
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 150),
                 opacity: _hover ? 1 : 0,
-                child: _CopyButton(text: m.content),
+                child: _CopyButton(text: m.content, tooltip: 'Copy answer'),
               ),
             ),
         ],
@@ -158,7 +204,8 @@ class _AssistantMessageState extends State<_AssistantMessage> {
 /// FilDOS `CopyButton`: `size-6 rounded-md`, 12px copy icon → mint tick for 1.5s.
 class _CopyButton extends StatefulWidget {
   final String text;
-  const _CopyButton({required this.text});
+  final String tooltip;
+  const _CopyButton({required this.text, required this.tooltip});
   @override
   State<_CopyButton> createState() => _CopyButtonState();
 }
@@ -167,18 +214,35 @@ class _CopyButtonState extends State<_CopyButton> {
   bool _copied = false;
 
   @override
+  Widget build(BuildContext context) => _HoverAction(
+    icon: _copied ? Icons.check_rounded : Icons.copy_rounded,
+    tooltip: widget.tooltip,
+    color: _copied ? Scoop.mint : null,
+    onTap: () {
+      Clipboard.setData(ClipboardData(text: widget.text));
+      setState(() => _copied = true);
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) setState(() => _copied = false);
+      });
+    },
+  );
+}
+
+/// The `size-6 rounded-md` icon button under a message (12px icon, accent on hover).
+class _HoverAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? color;
+  const _HoverAction({required this.icon, required this.tooltip, required this.onTap, this.color});
+
+  @override
   Widget build(BuildContext context) {
     final c = context.fa;
     return Tooltip(
-      message: 'Copy answer',
+      message: tooltip,
       child: Hoverable(
-        onTap: () {
-          Clipboard.setData(ClipboardData(text: widget.text));
-          setState(() => _copied = true);
-          Future.delayed(const Duration(milliseconds: 1500), () {
-            if (mounted) setState(() => _copied = false);
-          });
-        },
+        onTap: onTap,
         builder: (context, hover) => Container(
           width: 24,
           height: 24,
@@ -186,11 +250,7 @@ class _CopyButtonState extends State<_CopyButton> {
             color: hover ? c.accent : c.accent.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(FaRadius.md),
           ),
-          child: Icon(
-            _copied ? Icons.check_rounded : Icons.copy_rounded,
-            size: 12,
-            color: _copied ? Scoop.mint : (hover ? c.foreground : c.mutedForeground),
-          ),
+          child: Icon(icon, size: 12, color: color ?? (hover ? c.foreground : c.mutedForeground)),
         ),
       ),
     );

@@ -15,6 +15,7 @@ import '../widgets/ui.dart';
 import 'chat_widgets.dart';
 import 'composer_logic.dart';
 import 'folder_chat_controller.dart';
+import 'messages.dart';
 
 class _Option {
   final String key;
@@ -60,6 +61,7 @@ class AskAiComposerState extends State<AskAiComposer> {
   int _gen = 0;
   int _shown = 0; // bumps each time the popover opens, replaying its entrance
   double _width = 600;
+  ChatMessage? _editing; // the edit last loaded into the field
 
   FaController get _app => widget.chat.app;
   List<ChatMention> get _mentions => _session.mentions;
@@ -72,6 +74,7 @@ class AskAiComposerState extends State<AskAiComposer> {
     _text.addListener(_onTextChanged);
     _focus.addListener(_onFocus);
     _app.addListener(_consumePending);
+    widget.chat.addListener(_onChatChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _consumePending();
@@ -83,6 +86,7 @@ class AskAiComposerState extends State<AskAiComposer> {
   void dispose() {
     _debounce?.cancel();
     _app.removeListener(_consumePending);
+    widget.chat.removeListener(_onChatChanged);
     _text.removeListener(_onTextChanged);
     _text.dispose();
     _focus.dispose();
@@ -100,6 +104,22 @@ class AskAiComposerState extends State<AskAiComposer> {
         _prefill('Explain @');
       case 'action':
         _prefill('Create a file called ');
+    }
+  }
+
+  /// "Edit and resend": load the question (with its @/# mentions) into the field;
+  /// cancelling the edit empties it again.
+  void _onChatChanged() {
+    final next = widget.chat.editing;
+    if (identical(next, _editing)) return;
+    final cancelled = _editing != null && next == null;
+    _editing = next;
+    if (next != null) {
+      _session.mentions = List.of(_session.sentMentions[next.content.trim()] ?? const <ChatMention>[]);
+      _text.mentions = _session.mentions;
+      _prefill(next.content);
+    } else if (cancelled) {
+      _clear();
     }
   }
 
@@ -267,6 +287,10 @@ class AskAiComposerState extends State<AskAiComposer> {
         return KeyEventResult.handled;
       }
     }
+    if (key == LogicalKeyboardKey.escape && widget.chat.editing != null) {
+      widget.chat.cancelEdit();
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.backspace && !shift && _text.selection.isCollapsed) {
       final del = tokenBeforeCaret(_text.text, _text.selection.baseOffset, _mentions);
       if (del != null) {
@@ -391,6 +415,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (chat.editing != null) _EditingStrip(onCancel: chat.cancelEdit),
                     if (live.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -600,6 +625,48 @@ class AskAiComposerState extends State<AskAiComposer> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown above the field while a sent question is being edited.
+class _EditingStrip extends StatelessWidget {
+  final VoidCallback onCancel;
+  const _EditingStrip({required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
+      child: Row(
+        children: [
+          const Icon(Icons.edit_outlined, size: 12, color: Scoop.mint),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Editing — sending replaces this question and its answer',
+              overflow: TextOverflow.ellipsis,
+              style: FaText.sans(size: 12, color: c.mutedForeground),
+            ),
+          ),
+          Tooltip(
+            message: 'Cancel editing (Esc)',
+            child: Hoverable(
+              onTap: onCancel,
+              builder: (context, hover) => Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: hover ? c.accent : c.accent.withValues(alpha: 0),
+                  borderRadius: BorderRadius.circular(FaRadius.sm),
+                ),
+                child: Icon(Icons.close_rounded, size: 12, color: hover ? c.foreground : c.mutedForeground),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

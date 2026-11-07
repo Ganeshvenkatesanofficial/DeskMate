@@ -29,7 +29,14 @@ class FolderChatController extends ChangeNotifier {
   bool sending = false;
   String? error;
 
+  /// The user message being edited in the composer; sending replaces it and
+  /// every message after it (here and in the engine's saved chat).
+  ChatMessage? editing;
+
   List<ChatSummary> history = const [];
+
+  /// Ids of questions the engine hasn't saved yet (saved ids are hex).
+  static const _localPrefix = 'u';
 
   /// What turns run on, per the engine's configuration.
   AiConfig get _config => app.aiConfig;
@@ -70,6 +77,10 @@ class FolderChatController extends ChangeNotifier {
     switch (e['type']) {
       case 'chat':
         chatId = e['chat_id'] as String? ?? chatId;
+        // Adopt the saved id for the question just sent, so it can be edited later.
+        final saved = e['message_id'] as String?;
+        final i = messages.lastIndexWhere((m) => m.role == MessageRole.user);
+        if (saved != null && i >= 0) messages[i] = messages[i].withId(saved);
       case 'status':
         liveTitle = e['title']?.toString() ?? liveTitle;
       case 'telemetry':
@@ -121,8 +132,9 @@ class FolderChatController extends ChangeNotifier {
     final message = text.trim();
     if (message.isEmpty || sending) return;
     error = null;
+    final editOf = _takeEdit();
     messages.add(
-      ChatMessage(id: 'u${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message),
+      ChatMessage(id: '$_localPrefix${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message),
     );
     sending = true;
     liveTitle = 'Thinking…';
@@ -135,6 +147,7 @@ class FolderChatController extends ChangeNotifier {
           'action': 'chat',
           'message': message,
           'chat_id': chatId,
+          'edit_of': ?editOf,
           'context': {'cwd': app.currentFolder, 'files': files, 'folders': folders},
         }),
       );
@@ -142,6 +155,29 @@ class FolderChatController extends ChangeNotifier {
     } catch (_) {
       if (sending) _endTurn(_localError('Couldn\'t reach the DeskMate engine. Is it still starting?'));
     }
+  }
+
+  /// Load a sent question back into the composer to change and resend it.
+  void startEdit(ChatMessage message) {
+    if (sending || message.role != MessageRole.user) return;
+    editing = message;
+    notifyListeners();
+  }
+
+  void cancelEdit() {
+    if (editing == null) return;
+    editing = null;
+    notifyListeners();
+  }
+
+  /// Drop the edited question and what followed it; returns its saved id.
+  String? _takeEdit() {
+    final edited = editing;
+    editing = null;
+    if (edited == null) return null;
+    final i = messages.indexWhere((m) => m.id == edited.id);
+    if (i >= 0) messages.removeRange(i, messages.length);
+    return edited.id.startsWith(_localPrefix) ? null : edited.id; // not saved yet: nothing to replace
   }
 
   void stop() {
@@ -155,6 +191,7 @@ class FolderChatController extends ChangeNotifier {
     if (sending) return;
     chatId = null;
     messages.clear();
+    editing = null;
     error = null;
     notifyListeners();
   }
@@ -172,6 +209,7 @@ class FolderChatController extends ChangeNotifier {
     final r = await app.api.chatMessages(id);
     if (!r.ok) return app.toastError(r.error);
     chatId = id;
+    editing = null;
     messages
       ..clear()
       ..addAll(r.value!.map(ChatMessage.fromStored));

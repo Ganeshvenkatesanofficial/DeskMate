@@ -403,6 +403,9 @@ def stream_agent_steps(agent: ToolCallingAgent, prompt: str, telemetry: AgentTel
                 telemetry.observation(step, name, getattr(item, "output", ""))
                 telemetry.status("passing_to_llm", f"Reading the {name} result…", step=step)
             elif isinstance(item, ActionStep):
+                if final_answer_pending and getattr(item, "error", None) is not None:
+                    # A final-answer check rejected it: the agent keeps working.
+                    final_answer_pending, final_output = False, None
                 number = getattr(item, "step_number", None) or step
                 if not telemetry.has_reasoning(number):
                     duration = getattr(item, "duration", None)

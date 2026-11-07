@@ -102,5 +102,12 @@ class AiConfigBody(BaseModel):
     geminiApiKey: Optional[str] = None
 
 
+class TurnBody(BaseModel):
+    message: str = Field(..., min_length=1)
+    chat_id: Optional[str] = None
+    edit_of: Optional[str] = None
+    context: Optional[dict[str, Any]] = None
+
+
 class ChatPatch(BaseModel):
     title: str = Field(..., min_length=1)

@@ -78,15 +78,16 @@ Every REST response is `{"ok": true, "data": …}` or
 | Index & search | `/api/fa/index/{status,start,pause,clear,roots,excludes,exclude-extensions,estimate}` · `GET /api/fa/search` · `GET /api/fa/search/file` |
 | Canvas | `GET /api/fa/graph` · `POST /api/fa/graph/build` · `GET /api/fa/graph/status` |
 | AI | `GET/PUT /api/fa/ai/config` (`{"chatModel","geminiApiKey"}`; an empty key removes it) · `GET /api/fa/ai/status` · `POST /api/fa/ai/embedder/download` · `POST /api/fa/ai/ollama/pull` |
-| Chats | `GET /api/fa/chats` · `GET/PATCH/DELETE /api/fa/chats/{id}` |
+| Chats | `GET /api/fa/chats` · `GET /api/fa/chats/{id}/messages` · `PATCH/DELETE /api/fa/chats/{id}` · `POST /api/fa/chats/turn` (a whole turn over REST; returns the final `done` / `error` event) |
 | Events | `WS /ws/folder-events` → `fs.changed`, `index.progress`, `graph.progress`, `ai.model`, `ai.ollama` |
-| Agent | `WS /ws/folder-agent` → send `{"action":"chat","message","chat_id","context":{"cwd","files","folders"}}` or `{"action":"stop","chat_id"}`; receive the telemetry events below |
+| Agent | `WS /ws/folder-agent` → send `{"action":"chat","message","chat_id","edit_of"?,"context":{"cwd","files","folders"}}` or `{"action":"stop","chat_id"}`; receive the telemetry events below. `edit_of` is the id of a sent question to replace (it and everything after it are dropped first). Turns on one connection run in order |
 
 ## Agent telemetry
 
 Every agent run (including `/find`) is reported by `core.telemetry.AgentTelemetry`.
 Each of its events carries `run_id`, `chat_id` and an increasing `seq`. A turn
-first receives `{"type":"chat","chat_id"}` naming the chat it is saved to.
+first receives `{"type":"chat","chat_id","message_id"}` naming the chat and the
+saved id of the question. `done` / `error` is sent only after the reply is saved.
 
 | Event | Fields |
 |---|---|
@@ -100,6 +101,21 @@ first receives `{"type":"chat","chat_id"}` naming the chat it is saved to.
 its steps and stats are persisted with the chat, so a reopened chat shows the
 same agent log. The conversation history and system prompt are built by the
 engine; the app sends only what the user typed.
+
+## Agent tools
+
+| Tool | What it does |
+|---|---|
+| `list_folder` | a folder's files and subfolders |
+| `read_file` | text, code, PDF (paged), DOCX, images (OCR + format/size); a bare name ("resume") is found in the folder in view, then home |
+| `find_files` | names by words or wildcards (`*.pdf`, `*invoice*`), optional `min_size_mb` / `max_size_mb`, in a folder, the folder in view, or `everywhere` |
+| `search_index` | meaning search over indexed contents, with paths and pages |
+| `index_files` | adds files/folders to the index and indexes them now (large folders finish in the background) |
+| `create_file`, `create_folder`, `copy_files`, `move_files`, `rename_file`, `trash_files` | recoverable actions |
+
+Paths may be absolute, `~`, relative to the folder in view, a home folder by
+name ("downloads"), or "my laptop" / "my computer" (the home folder). A final
+answer that still contains a tool call is sent back to the model to make it.
 
 ## Safety model
 

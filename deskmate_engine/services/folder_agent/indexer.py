@@ -46,6 +46,12 @@ def _excluded(path: str, excludes: list[str], exclude_exts: set[str]) -> bool:
     return False
 
 
+def _exclusions(prefs: dict[str, Any]) -> tuple[list[str], set[str]]:
+    """Hidden paths and extensions (normalised to ``.ext``) from the prefs."""
+    exts = {e.lower() if e.startswith(".") else "." + e.lower() for e in prefs.get("excludeExtensions") or []}
+    return prefs.get("excludes") or [], exts
+
+
 def is_hidden_from_ai(path: str) -> bool:
     prefs = store.get_prefs()
     exts = {e.lower() if e.startswith(".") else "." + e.lower() for e in prefs.get("excludeExtensions") or []}
@@ -134,6 +140,11 @@ class Indexer:
     def _scan(self, roots: list[str], excludes: list[str], exclude_exts: set[str]) -> dict[str, tuple[float, int]]:
         found: dict[str, tuple[float, int]] = {}
         for root in roots:
+            if os.path.isfile(root):  # a single file the user asked to index
+                if is_supported(Path(root)) and not _excluded(root, excludes, exclude_exts):
+                    st = os.stat(root)
+                    found[root] = (st.st_mtime, st.st_size)
+                continue
             if not os.path.isdir(root):
                 continue
             for dirpath, dirnames, filenames in os.walk(root, onerror=lambda e: None):
@@ -171,8 +182,7 @@ class Indexer:
             self._emit(force=True)
             return
 
-        excludes = prefs.get("excludes") or []
-        exts = {e.lower() if e.startswith(".") else "." + e.lower() for e in prefs.get("excludeExtensions") or []}
+        excludes, exts = _exclusions(prefs)
 
         self.state = "scanning"
         self.last_error = None
@@ -249,6 +259,21 @@ class Indexer:
         if chunks and ex.kind not in ("code", "data"):
             store.put_entities(path, extract_entities(ex.text))
 
+    def index_now(self, paths: list[str], limit: int = 40) -> tuple[list[str], int]:
+        """Index new or changed files under ``paths`` on the caller's thread, up to
+        ``limit`` files; returns (indexed paths, files left for the background pass)."""
+        excludes, exts = _exclusions(store.get_prefs())
+        found = self._scan(paths, excludes, exts)
+        known = store.all_index_states()
+        todo = [
+            p for p, (mtime, size) in found.items()
+            if p not in known or known[p]["mtime"] != mtime or known[p]["size"] != size
+        ]
+        todo.sort(key=lambda p: found[p][0], reverse=True)
+        for path in todo[:limit]:
+            self._index_file(path, *found[path])
+        return todo[:limit], max(0, len(todo) - limit)
+
     def reindex_paths(self, paths: list[str]) -> None:
         """Index specific files now (e.g. a file the agent just created)."""
         for path in paths:
@@ -270,6 +295,21 @@ class IndexSettings:
     def set_roots(roots: list[str]) -> dict[str, Any]:
         store.set_prefs({"indexRoots": sorted(set(roots))})
         return INDEXER.start()
+
+    @staticmethod
+    def add_roots(paths: list[str]) -> list[str]:
+        """Make more folders (or single files) searchable; returns the full list.
+        Paths already inside an indexed folder are not added again."""
+        current = store.get_pref("indexRoots") or []
+
+        def covered(p: str) -> bool:
+            return any(p == r or p.startswith(r.rstrip(os.sep) + os.sep) for r in current)
+
+        merged = sorted(set(current) | {p for p in paths if not covered(p)})
+        if merged != sorted(current):
+            store.set_prefs({"indexRoots": merged})
+            INDEXER.start()
+        return merged
 
     @staticmethod
     def add_excludes(paths: list[str]) -> list[str]:

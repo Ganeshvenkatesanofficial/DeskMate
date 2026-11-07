@@ -3,7 +3,8 @@ services.folder_agent.chat_service — One Ask AI turn, end to end
 ================================================================
 ``ChatService.run_turn`` is the only place a turn is orchestrated:
 
-1. persist the user's message (creating the chat on its first message);
+1. persist the user's message (creating the chat on its first message; an
+   edited question first drops the turn it replaces and everything after it);
 2. rebuild the conversation history from the database (the app doesn't send it);
 3. handle slash commands (``/find`` answers from search without a model;
    ``/summarize`` becomes an agent prompt with the folder attached);
@@ -42,13 +43,25 @@ class ChatService:
         self._lock = threading.Lock()
 
     # ── public ─────────────────────────────────────────────────────────────
-    def run_turn(self, message: str, chat_id: Optional[str], context: Optional[dict[str, Any]], sink: Sink) -> str:
-        """Run one turn; every event goes to ``sink``. Returns the chat id."""
+    def run_turn(
+        self,
+        message: str,
+        chat_id: Optional[str],
+        context: Optional[dict[str, Any]],
+        sink: Sink,
+        *,
+        edit_of: Optional[str] = None,
+    ) -> str:
+        """Run one turn; every event goes to ``sink``. Returns the chat id.
+
+        ``edit_of`` is the id of a user message this one replaces."""
         text = message.strip()
+        if edit_of and chat_id:
+            store.truncate_chat(chat_id, edit_of)
         chat_id = store.ensure_chat(chat_id, text)
         history = self._history(chat_id)
-        store.add_chat_message(chat_id, "user", text)
-        sink({"type": "chat", "chat_id": chat_id})
+        message_id = store.add_chat_message(chat_id, "user", text)
+        sink({"type": "chat", "chat_id": chat_id, "message_id": message_id})
 
         ctx = TurnContext.from_payload(context)
         command = parse_command(text)
@@ -82,6 +95,15 @@ class ChatService:
                 self._running.pop(chat_id, None)
         self._persist(chat_id, telemetry, reply)
         return chat_id
+
+    def run_turn_sync(
+        self, message: str, chat_id: Optional[str], context: Optional[dict[str, Any]], *, edit_of: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Run a turn to completion and return its final event (the REST form of the socket)."""
+        events: list[dict[str, Any]] = []
+        chat_id = self.run_turn(message, chat_id, context, events.append, edit_of=edit_of)
+        final = next((e for e in reversed(events) if e.get("type") in ("done", "error")), {"type": "error"})
+        return {**final, "chat_id": chat_id}
 
     def stop(self, chat_id: Optional[str]) -> bool:
         with self._lock:

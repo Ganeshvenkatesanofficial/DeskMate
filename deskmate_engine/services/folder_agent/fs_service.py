@@ -13,6 +13,7 @@ collision — and deletes go to the OS Trash, so every action is recoverable.
 from __future__ import annotations
 
 import errno
+import fnmatch
 import os
 import re
 import shutil
@@ -23,7 +24,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from services.folder_agent import store
 
@@ -323,9 +324,15 @@ def _tokens(text: str) -> list[str]:
     return [t for t in _SEP.split(text.lower()) if t]
 
 
+def is_glob(query: str) -> bool:
+    return any(ch in query for ch in "*?[")
+
+
 def name_match_tier(name: str, query: str) -> int:
-    """3 = exact, 2 = prefix, 1 = every query token present, 0 = no match."""
+    """3 = exact, 2 = prefix, 1 = every query token present (or the glob matches), 0 = no match."""
     n, q = name.lower(), query.lower().strip()
+    if is_glob(q):
+        return 1 if fnmatch.fnmatchcase(n, q) else 0
     stem = n.rsplit(".", 1)[0] if "." in n else n
     if n == q or stem == q:
         return 3
@@ -339,8 +346,15 @@ def name_match_tier(name: str, query: str) -> int:
 
 
 def name_search(
-    query: str, root: str, limit: int = 300, deadline_s: float = 3.0, show_hidden: bool = False
+    query: str,
+    root: str,
+    limit: int = 300,
+    deadline_s: float = 3.0,
+    show_hidden: bool = False,
+    accept: Callable[[dict[str, Any]], bool] | None = None,
 ) -> list[dict[str, Any]]:
+    """Breadth-first name search. ``query`` is words (all must appear) or a glob
+    (``*.pdf``, ``*invoice*``); ``accept`` filters matched entries (e.g. by size)."""
     q = query.strip()
     if not q:
         return []
@@ -359,7 +373,9 @@ def name_search(
                     tier = name_match_tier(name, q)
                     if tier:
                         try:
-                            hits.append((tier, depth, entry_for(Path(de.path))))
+                            entry = entry_for(Path(de.path))
+                            if accept is None or accept(entry):
+                                hits.append((tier, depth, entry))
                         except OSError:
                             pass
                     try:

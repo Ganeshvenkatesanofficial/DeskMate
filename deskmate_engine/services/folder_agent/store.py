@@ -423,6 +423,24 @@ def add_chat_message(
     return msg_id
 
 
+def truncate_chat(chat_id: str, from_message_id: str) -> int:
+    """Delete a message and everything after it (editing a question replaces that turn onwards)."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT created_at FROM chat_messages WHERE id = ? AND chat_id = ?", (from_message_id, chat_id)
+        ).fetchone()
+        if row is None:
+            return 0
+        cur = conn.execute(
+            "DELETE FROM chat_messages WHERE chat_id = ? AND created_at >= ?", (chat_id, row["created_at"])
+        )
+        emptied = conn.execute("SELECT 1 FROM chat_messages WHERE chat_id = ? LIMIT 1", (chat_id,)).fetchone() is None
+    if emptied:  # the first question was edited: the chat takes its title from the new one
+        with db() as conn:
+            conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+    return cur.rowcount
+
+
 def list_chats() -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(

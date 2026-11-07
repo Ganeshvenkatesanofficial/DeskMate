@@ -110,6 +110,17 @@ class ChatMessage {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
+  /// This message under the id the engine saved it with.
+  ChatMessage withId(String newId) => ChatMessage(
+    id: newId,
+    role: role,
+    content: content,
+    telemetry: telemetry,
+    stats: stats,
+    isError: isError,
+    timestamp: timestamp,
+  );
+
   /// A saved message from `/api/fa/chats/{id}/messages`.
   factory ChatMessage.fromStored(Map<String, dynamic> m) => ChatMessage(
     id: m['id'] as String? ?? '',
