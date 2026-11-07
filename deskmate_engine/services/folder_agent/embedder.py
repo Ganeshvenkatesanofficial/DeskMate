@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -122,7 +121,3 @@ def _normalize(vecs: np.ndarray) -> np.ndarray:
         raise ValueError("Embedding model returned non-finite values.")
     return out
 
-
-def iter_batches(items: list, size: int) -> Iterable[list]:
-    for i in range(0, len(items), size):
-        yield items[i : i + size]

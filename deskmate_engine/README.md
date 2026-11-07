@@ -44,7 +44,7 @@ services/folder_agent/
   security.py               files the AI must never read (keys, tokens, .env)
   events.py                 thread-safe event bus for /ws/folder-events
 helpers/
-  native_screen_ocr.swift   source of the Vision OCR helper (compiled into bin/ by CI)
+  macos_ocr.swift           source of the Apple Vision OCR helper (compiled into bin/ by CI)
 tests/                      pytest suite (runs in a throwaway HOME)
 ```
 

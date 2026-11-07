@@ -169,7 +169,5 @@ void showBackgroundMenu(BuildContext context, Offset at) {
   ]);
 }
 
-const viewModes = [('list', 'List'), ('grid', 'Icons'), ('gallery', 'Gallery'), ('columns', 'Columns')];
-
 /// FilDOS sort options, in its order (Type = extension, Modified = mtime).
 const sortKeys = [('name', 'Name'), ('size', 'Size'), ('kind', 'Type'), ('mtime', 'Modified')];

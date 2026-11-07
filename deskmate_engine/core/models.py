@@ -63,19 +63,6 @@ def _filter_chat_models(raw_models: list[dict[str, Any]]) -> list[str]:
     return chat_models
 
 
-def _filter_vision_models(raw_models: list[dict[str, Any]]) -> list[str]:
-    """Extract vision-capable models from raw Ollama models list."""
-    vision_models: list[str] = []
-    for m in raw_models:
-        name = m.get("name", "")
-        if not name:
-            continue
-        name_lower = name.lower()
-        if any(x in name_lower for x in ["vision", "llava", "bakllava"]):
-            vision_models.append(name)
-    return vision_models
-
-
 def get_installed_chat_models() -> list[str]:
     """Retrieve list of chat-capable models installed in Ollama on this machine."""
     is_online, raw_models = _fetch_ollama_raw_models()
@@ -88,14 +75,6 @@ def get_default_model() -> str:
     """Find the first available local chat model on this machine."""
     models = get_installed_chat_models()
     return models[0] if models else ""
-
-
-def get_installed_vision_models() -> list[str]:
-    """Retrieve list of vision-capable models (e.g. llava) installed in Ollama."""
-    is_online, raw_models = _fetch_ollama_raw_models()
-    vision_models = _filter_vision_models(raw_models) if is_online else []
-    logger.debug(f"[MODEL DISCOVERY] Detected {len(vision_models)} vision model(s) in Ollama: {vision_models}")
-    return vision_models
 
 
 def check_local_llm_status() -> dict[str, Any]:
@@ -112,21 +91,14 @@ def check_local_llm_status() -> dict[str, Any]:
             "status": "offline",
             "models": [],
             "default_model": None,
-            "vision_models": [],
-            "has_vision": False,
-            "default_vision_model": None,
         }
 
     chat_models = _filter_chat_models(raw_models)
-    vision_models = _filter_vision_models(raw_models)
 
     return {
         "status": "online" if chat_models else "no_models",
         "models": chat_models,
         "default_model": chat_models[0] if chat_models else None,
-        "vision_models": vision_models,
-        "has_vision": bool(vision_models),
-        "default_vision_model": vision_models[0] if vision_models else None,
     }
 
 

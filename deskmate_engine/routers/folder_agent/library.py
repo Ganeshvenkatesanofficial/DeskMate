@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from routers.folder_agent.common import PathBody, PathsBody, TagBody, TagPatch, ViewBody, api_router, respond
+from routers.folder_agent.common import PathsBody, TagBody, TagPatch, ViewBody, api_router, respond
 from services.folder_agent import library, store
 
 router = api_router("library")
@@ -63,11 +63,6 @@ def tag_files(tag_id: int):
 @router.get("/recents")
 def recents(limit: int = 100):
     return respond(lambda: library.recents(limit))
-
-
-@router.post("/recents")
-def add_recent(body: PathBody):
-    return respond(lambda: store.add_recent(body.path))
 
 
 @router.delete("/recents")

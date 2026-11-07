@@ -176,7 +176,6 @@ class FaApi {
   }, (d) => (d as Map).map((k, v) => MapEntry(k as String, (v as List).cast<int>())));
   Future<Result<List<FsEntry>>> tagFiles(int id) => get('/tags/$id/files', _entries);
   Future<Result<List<FsEntry>>> recents() => get('/recents', _entries);
-  Future<Result<void>> addRecent(String path) => post('/recents', {'path': path}, _void);
   Future<Result<void>> removeRecent(String path) => delete('/recents', _void, query: {'path': path});
   Future<Result<void>> clearRecents() => delete('/recents', _void);
   Future<Result<ViewPrefs?>> view(String path) =>

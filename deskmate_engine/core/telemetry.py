@@ -236,7 +236,6 @@ class AgentTelemetry:
         self._tool_calls = 0
         self._tool_errors = 0
         self._reasoned_steps: set[int] = set()
-        self.finished = False
         self.last_error: Optional[str] = None
 
     # ── wire ───────────────────────────────────────────────────────────────
@@ -319,7 +318,6 @@ class AgentTelemetry:
         )
 
     def done(self, reply: str, **extra: Any) -> Dict[str, Any]:
-        self.finished = True
         stats = self.stats
         logger.info(f"[RUN {self.run_id}] done in {stats['duration_ms']}ms ({stats['tool_calls']} tool calls)")
         return self._send(
@@ -328,7 +326,6 @@ class AgentTelemetry:
         )
 
     def error(self, exc_or_message: BaseException | str) -> Dict[str, Any]:
-        self.finished = True
         message = exc_or_message if isinstance(exc_or_message, str) else friendly_agent_error(exc_or_message)
         self.last_error = message
         if isinstance(exc_or_message, BaseException):

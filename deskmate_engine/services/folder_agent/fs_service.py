@@ -22,7 +22,6 @@ import subprocess
 import sys
 import time
 from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -597,14 +596,6 @@ _TEXT_PREVIEW_EXTS = set(
     ".py .js .ts .tsx .jsx .dart .java .kt .swift .go .rs .c .h .cpp .hpp .cs .rb .php .sh .zsh .bash "
     ".ps1 .html .css .scss .sass .vue .sql .lua .r .scala .ex .exs .hs .pl .sol .graphql .gitignore".split()
 )
-
-
-@dataclass
-class Preview:
-    kind: str
-    text: str | None = None
-    truncated: bool = False
-    pages: int | None = None
 
 
 def preview(path: str, max_chars: int = 60_000) -> dict[str, Any]:

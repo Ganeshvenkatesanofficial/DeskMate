@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 
@@ -78,42 +77,6 @@ class BackendManager {
         await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
       }
     } catch (_) {}
-  }
-
-  /// Returns true if running on macOS directly from a mounted DMG or AppTranslocation sandbox
-  static bool get isRunningFromDmgOrTranslocation {
-    if (!Platform.isMacOS) return false;
-    final exe = Platform.resolvedExecutable;
-    return exe.contains('/Volumes/') || exe.contains('/AppTranslocation/');
-  }
-
-  /// Copies the currently running DeskMate.app to /Applications, removes quarantine, and relaunches
-  static Future<bool> copyToApplications() async {
-    if (!Platform.isMacOS) return false;
-    try {
-      final exe = Platform.resolvedExecutable;
-      final appIndex = exe.indexOf('.app');
-      if (appIndex == -1) return false;
-      final appPath = exe.substring(0, appIndex + 4);
-      final targetApp = '/Applications/DeskMate.app';
-
-      // Remove existing /Applications/DeskMate.app if present
-      await Process.run('/bin/rm', ['-rf', targetApp]);
-
-      // Copy DeskMate.app to /Applications
-      final copyRes = await Process.run('/bin/cp', ['-R', appPath, targetApp]);
-      if (copyRes.exitCode == 0) {
-        // Strip quarantine attributes so it opens cleanly without Gatekeeper bounce
-        await Process.run('/usr/bin/xattr', ['-cr', targetApp]);
-        await Process.run('/bin/chmod', ['-R', 'u+rwX,go+rX', targetApp]);
-        await Process.run('/usr/bin/open', [targetApp]);
-        await stop();
-        SystemNavigator.pop();
-      }
-    } catch (e) {
-      debugPrint('Failed to copy DeskMate to Applications: $e');
-    }
-    return false;
   }
 
   /// Launch backend executable silently in background on dynamic free port

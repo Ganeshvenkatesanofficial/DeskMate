@@ -23,7 +23,7 @@ DeskMate is an AI-native file explorer that runs on your computer.
 | Search names and contents | <kbd>⌘K</kbd> (<kbd>Ctrl+K</kbd> on Windows) |
 | Preview a file | select it and press <kbd>Space</kbd> |
 | Ask about files | **Ask AI** (top right). Type `@` for a file, `#` for a folder, `/find` to search |
-| See the agent's steps | open **Agent log** above any answer |
+| See the agent's steps | click **View process** above any answer, then **Inspect** a step |
 | Undo a file action | <kbd>⌘Z</kbd>; deleted items are in the Trash |
 | Map your files | **Canvas** in the sidebar |
 
@@ -32,3 +32,4 @@ DeskMate is an AI-native file explorer that runs on your computer.
 * **"No chat model yet"**: open **Settings → AI & Models**, start Ollama, and install a model (or add a Gemini key).
 * **Search finds names but not contents**: check **Settings → Indexing**; indexing runs in the background and the status bar shows progress.
 * **A folder says DeskMate can't open it (macOS)**: grant Full Disk Access in System Settings → Privacy & Security.
+* **"An older DeskMate engine is running"**: an engine from a previous version is still open; quit it and DeskMate connects to the new one.

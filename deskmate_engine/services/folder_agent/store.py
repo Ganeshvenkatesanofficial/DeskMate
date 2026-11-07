@@ -18,7 +18,6 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Iterator
 
 from settings import get_user_data_dir
@@ -141,10 +140,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE chat_messages ADD COLUMN stats TEXT NOT NULL DEFAULT '{}'")
     if "error" not in cols:
         conn.execute("ALTER TABLE chat_messages ADD COLUMN error INTEGER NOT NULL DEFAULT 0")
-
-
-def db_path() -> Path:
-    return _DB_PATH
 
 
 # ─── Prefs ───────────────────────────────────────────────────────────────────

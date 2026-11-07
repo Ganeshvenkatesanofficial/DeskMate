@@ -8,7 +8,7 @@ engine (`deskmate_engine`) and talks to it over `/api/fa/*`,
 lib/
   main.dart                     MaterialApp with the DeskMate theme, starts the engine
   app/
-    app_settings.dart           engine discovery & health, chat model, Gemini key, theme
+    app_settings.dart           engine discovery & health (compatible engines only), theme
     backend_manager.dart        launches / reuses the bundled engine
     constants.dart
   folder_agent/
@@ -19,7 +19,7 @@ lib/
     explorer/                   grid / list / column / gallery views, Quick Look,
                                 info panel, preview, context menus, drag-and-drop
     search/                     ⌘K overlay
-    chat/                       Ask AI: composer, messages, agent log
+    chat/                       Ask AI: composer, messages, telemetry accordion
     canvas/                     knowledge-graph painter, time scrubber
     onboarding/                 first-run tour
     settings/                   settings pages and shared model widgets

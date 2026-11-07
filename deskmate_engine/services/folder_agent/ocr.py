@@ -4,7 +4,7 @@ services.folder_agent.ocr — Zero-download native OCR for pictures
 Makes screenshots, scans and photos of documents searchable without a vision
 model, using the OS's own text recogniser:
 
-* macOS   — Apple Vision through the bundled ``bin/native_screen_ocr`` helper;
+* macOS   — Apple Vision through the bundled ``bin/macos_ocr`` helper;
 * Windows — Windows.Media.Ocr through PowerShell.
 
 Elsewhere (or if the OS engine fails) pictures are indexed by name only.
@@ -23,7 +23,7 @@ logger = logging.getLogger("deskmate.folder_agent.ocr")
 
 # Packaged builds unpack bundled binaries under sys._MEIPASS; dev runs use the repo's bin/.
 _BIN_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "bin"
-_MAC_HELPER = _BIN_DIR / "native_screen_ocr"
+_MAC_HELPER = _BIN_DIR / "macos_ocr"
 _TIMEOUT_S = 8
 
 

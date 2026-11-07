@@ -390,8 +390,6 @@ class ExplorerController extends ChangeNotifier {
     cutPaths(selectedPaths);
   }
 
-  bool isCut(String path) => clipMode == ClipMode.cut && clipboard.contains(path);
-
   Future<void> paste([String? into]) async {
     if (clipboard.isEmpty) return;
     final dest = into ?? current;

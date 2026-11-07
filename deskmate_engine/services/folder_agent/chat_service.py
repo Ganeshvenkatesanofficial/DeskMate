@@ -113,10 +113,6 @@ class ChatService:
         agent.interrupt()
         return True
 
-    def is_running(self, chat_id: str) -> bool:
-        with self._lock:
-            return chat_id in self._running
-
     # ── internals ──────────────────────────────────────────────────────────
     @staticmethod
     def _history(chat_id: str) -> list[dict[str, str]]:

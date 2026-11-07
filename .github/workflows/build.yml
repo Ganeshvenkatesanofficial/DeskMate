@@ -464,8 +464,8 @@ jobs:
         run: |
           # Apple Vision OCR helper: makes pictures searchable (bundled into the engine).
           mkdir -p bin
-          swiftc -O helpers/native_screen_ocr.swift -o bin/native_screen_ocr
-          chmod +x bin/native_screen_ocr
+          swiftc -O helpers/macos_ocr.swift -o bin/macos_ocr
+          chmod +x bin/macos_ocr
           .venv/bin/pyinstaller deskmate_backend.spec --clean
 
       - name: Copy backend binary

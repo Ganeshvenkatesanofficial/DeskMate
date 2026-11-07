@@ -1,11 +1,11 @@
-// native_screen_ocr — Apple Vision text recognition for DeskMate's Folder Agent.
+// macos_ocr — Apple Vision text recognition for DeskMate's Folder Agent.
 //
-// Usage: native_screen_ocr <image-path>
+// Usage: macos_ocr <image-path>
 // Prints the recognised text lines as a JSON array of strings ("[]" when the
 // image can't be read or holds no text). Used by services/folder_agent/ocr.py
 // to make screenshots, scans and photos of documents searchable on-device.
 //
-// Build: swiftc -O helpers/native_screen_ocr.swift -o bin/native_screen_ocr
+// Build: swiftc -O helpers/macos_ocr.swift -o bin/macos_ocr
 
 import AppKit
 import Foundation

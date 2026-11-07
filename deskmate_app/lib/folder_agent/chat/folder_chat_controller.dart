@@ -134,7 +134,11 @@ class FolderChatController extends ChangeNotifier {
     error = null;
     final editOf = _takeEdit();
     messages.add(
-      ChatMessage(id: '$_localPrefix${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message),
+      ChatMessage(
+        id: '$_localPrefix${DateTime.now().microsecondsSinceEpoch}',
+        role: MessageRole.user,
+        content: message,
+      ),
     );
     sending = true;
     liveTitle = 'Thinking…';

@@ -21,11 +21,11 @@ ENV/
 build/
 dist/
 
-# Google OAuth Credentials & Tokens
+# Secrets (never commit)
 credentials.json
 token_*.json
 
-# SQLite Agent Databases
+# SQLite databases
 *.db
 
 # DeskMate local outputs

@@ -11,10 +11,6 @@ import '../widgets/file_icon.dart';
 import 'entry_interactions.dart';
 import 'explorer_common.dart';
 
-/// Legacy tile metrics still used by the tag-files page.
-const double kGridTileWidth = 132;
-const double kGridTileHeight = 132;
-
 /// FilDOS GridView tile geometry (icon size "medium"): a 128×116 tile, a
 /// 64px cover-cropped thumbnail or a 54px type logo, packed edge to edge.
 const double _tileW = 128;

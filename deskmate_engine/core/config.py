@@ -18,7 +18,6 @@ from settings import (
     DEFAULT_GEMINI_MODEL,
     generate_conversation_id,
     get_user_data_dir,
-    persist_env_variables,
 )
 
 is_frozen = IS_FROZEN
@@ -32,7 +31,6 @@ __all__ = [
     "DEFAULT_GEMINI_MODEL",
     "generate_conversation_id",
     "get_user_data_dir",
-    "persist_env_variables",
     "is_frozen",
     "base_dir",
     "NullWriter",

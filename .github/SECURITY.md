@@ -1,6 +1,6 @@
 # Security Policy
 
-DeskMate is built with a **privacy-first, local-first architecture**. All files, documents, audio recordings, SQLite databases, and Ollama reasoning models remain strictly on your local machine by design.
+DeskMate is built with a **privacy-first, local-first architecture**. Your files, the search index, chats and Ollama models stay on your machine by design; only questions you send to Gemini (if you choose it) leave it.
 
 We take the security and privacy of our users and contributors seriously.
 
@@ -53,7 +53,8 @@ DeskMate adheres to the following privacy-by-design standards:
    - Local AI models run entirely on `http://127.0.0.1:11434` via Ollama without cloud telemetry.
    - Embeddings and vector searches (Qdrant) operate locally on disk (`.qdrant_data`).
 2. **BYOK (Bring-Your-Own-Key)**:
-   - Google Gemini API keys and OAuth credentials are saved exclusively to your local device.
+   - Your Gemini API key is stored only in the local engine database and is never sent back to the app or logged.
    - Keys are never logged, tracked, or relayed to third-party analytics servers.
-3. **Local Artifacts**:
-   - Transcripts, screenshots, and PDF session reports remain strictly inside your local DeskMate application storage.
+3. **Local Data**:
+   - The index, chats, tags and thumbnails stay in your local DeskMate application storage.
+   - Secret files (keys, tokens, `.env`) and anything you hide from AI are never read or indexed.

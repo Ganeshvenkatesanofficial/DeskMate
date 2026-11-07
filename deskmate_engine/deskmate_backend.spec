@@ -1,44 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = []
 binaries = []
-hiddenimports = [
-    'tiktoken_ext.openai_public',
-    'tiktoken_ext',
-    'settings',
-    'core',
-    'core.config',
-    'core.models',
-    'core.telemetry',
-    'routers',
-    'routers.api_routes',
-    'routers.folder_routes',
-    'services',
-    'services.folder_agent',
-    'services.folder_agent.agent',
-    'services.folder_agent.embedder',
-    'services.folder_agent.events',
-    'services.folder_agent.extract',
-    'services.folder_agent.fs_service',
-    'services.folder_agent.graph',
-    'services.folder_agent.indexer',
-    'services.folder_agent.ocr',
-    'services.folder_agent.search',
-    'services.folder_agent.security',
-    'services.folder_agent.setup',
-    'services.folder_agent.store',
-    'services.folder_agent.thumbnails',
-    'services.folder_agent.tools',
-    'services.folder_agent.vector_store',
-    'services.folder_agent.watcher',
-    'send2trash',
-    'networkx',
-    'pypdf',
-    'PIL',
-    'PIL.Image',
-    'sqlite3',
-]
+# Every engine module (routers and services are imported by name at startup),
+# plus the few third-party modules loaded dynamically.
+hiddenimports = (
+    ['settings']
+    + collect_submodules('core')
+    + collect_submodules('routers')
+    + collect_submodules('services')
+    + ['tiktoken_ext', 'tiktoken_ext.openai_public', 'sqlite3']
+)
 
 packages_to_collect = [
     'uvicorn',
@@ -70,8 +43,8 @@ for pkg in packages_to_collect:
 
 import os
 # Apple Vision OCR helper (makes pictures searchable); resolved via sys._MEIPASS/bin.
-if os.path.exists('bin/native_screen_ocr'):
-    binaries.append(('bin/native_screen_ocr', 'bin'))
+if os.path.exists('bin/macos_ocr'):
+    binaries.append(('bin/macos_ocr', 'bin'))
 
 a = Analysis(
     ['backend.py'],

@@ -174,9 +174,6 @@ class CanvasScene extends ChangeNotifier {
   // ── active mask (FilDOS buildPaint) ───────────────────────────────────────
   bool _masks = false;
 
-  /// Every node is drawn; kept for callers that ask.
-  bool isVisible(int i) => graph != null && i < graph!.length;
-
   bool isActive(int i) {
     _ensureMasks();
     return i < _active.length && _active[i] == 1;
@@ -257,12 +254,6 @@ class CanvasScene extends ChangeNotifier {
     _px = px;
     _py = py;
   }
-
-  /// Screen position of node [i] (final layout).
-  Offset screenOf(int i) => camera.toScreen(graph!.x[i], graph!.y[i]);
-
-  /// Screen radius of node [i].
-  double screenRadius(int i) => graph!.radius[i] * zoomK;
 
   /// The node under [screen], if any (nearest within its radius + slop).
   int? hitTest(Offset screen) {
