@@ -28,6 +28,5 @@ token_*.json
 # SQLite databases
 *.db
 
-# DeskMate local outputs
-output/
-*.wav
+# Compiled OCR helper
+bin/
