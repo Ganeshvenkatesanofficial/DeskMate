@@ -229,6 +229,11 @@ class FaApi {
 
   // ── AI setup ─────────────────────────────────────────────────────────────
   Future<Result<AiStatus>> aiStatus() => get('/ai/status', (d) => AiStatus.fromJson(_map(d)));
+  Future<Result<AiConfig>> aiConfig() => get('/ai/config', (d) => AiConfig.fromJson(_map(d)));
+
+  /// Change the chat model and/or the Gemini key ('' removes the key). The engine owns both.
+  Future<Result<AiConfig>> setAiConfig({String? chatModel, String? geminiApiKey}) =>
+      put('/ai/config', {'chatModel': ?chatModel, 'geminiApiKey': ?geminiApiKey}, (d) => AiConfig.fromJson(_map(d)));
   Future<Result<ModelStatus>> downloadEmbedder() =>
       post('/ai/embedder/download', null, (d) => ModelStatus.fromJson(_map(d)));
   Future<Result<Map<String, dynamic>>> pullOllama(String model) => post('/ai/ollama/pull', {'model': model}, _map);

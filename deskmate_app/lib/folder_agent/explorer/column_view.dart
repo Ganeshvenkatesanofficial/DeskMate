@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/fa_theme.dart';
+import '../core/format.dart';
 import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import 'context_menu.dart';
 import 'entry_interactions.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// FilDOS ColumnView geometry.
 const double _kColumnWidth = 248;
@@ -417,13 +418,13 @@ class _PreviewColumn extends StatelessWidget {
               style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground),
             ),
             const SizedBox(height: 2),
-            Text(typeLabel(entry), style: FaText.sans(size: 12, color: c.mutedForeground)),
+            Text(entry.typeLabel, style: FaText.sans(size: 12, color: c.mutedForeground)),
             const SizedBox(height: 16),
-            _PreviewRow('Size', fdFormatSize(entry.size)),
+            _PreviewRow('Size', formatBytes(entry.size)),
             const SizedBox(height: 6),
-            _PreviewRow('Modified', fdFormatDate(entry.mtime)),
+            _PreviewRow('Modified', formatDate(entry.mtime)),
             const SizedBox(height: 6),
-            _PreviewRow('Created', fdFormatDate(entry.ctime)),
+            _PreviewRow('Created', formatDate(entry.ctime)),
           ],
         ),
       ),

@@ -17,9 +17,18 @@ import 'messages.dart';
 /// answer is in, the chips stay and the reasoning folds behind a toggle.
 class AgentLog extends StatefulWidget {
   final List<AgentStepTelemetry> steps;
+
+  /// The engine's run stats (end-to-end time etc.); empty while a turn is live.
+  final RunStats stats;
   final bool active;
   final String activeTitle;
-  const AgentLog({super.key, required this.steps, this.active = false, this.activeTitle = ''});
+  const AgentLog({
+    super.key,
+    required this.steps,
+    this.stats = const RunStats(),
+    this.active = false,
+    this.activeTitle = '',
+  });
 
   @override
   State<AgentLog> createState() => _AgentLogState();
@@ -69,7 +78,7 @@ class _AgentLogState extends State<AgentLog> {
     final c = context.fa;
     final entries = _timeline(widget.steps);
     final reasoning = entries.where((e) => !e.isTool).length;
-    final ms = widget.steps.fold<int>(0, (t, s) => t + (s.durationMs ?? 0));
+    final ms = widget.stats.durationMs;
     final all = widget.active || _showReasoning;
 
     // Keys are timeline positions, so a reasoning step that is re-sent as it
@@ -177,7 +186,7 @@ class _ToolChipState extends State<_ToolChip> {
     final result = widget.result;
     final out = (result?.rawOutput ?? result?.summary ?? '').trim();
     final done = result != null;
-    final ok = done && !_failed(out);
+    final ok = done && (result.ok ?? !_failed(out)); // engine flag; text check for old chats
     final tint = !done ? c.mutedForeground : (ok ? Scoop.mint : Scoop.strawberry);
     final args = _argsText(widget.call.arguments, home);
     final canOpen = out.isNotEmpty;

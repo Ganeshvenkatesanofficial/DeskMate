@@ -9,7 +9,7 @@ import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import 'entry_interactions.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// Legacy tile metrics still used by the tag-files page.
 const double kGridTileWidth = 132;

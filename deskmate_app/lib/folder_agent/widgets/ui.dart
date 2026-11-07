@@ -1324,7 +1324,11 @@ class MarkedText extends StatelessWidget {
   final String text;
   final TextStyle style;
   final int maxLines;
-  const MarkedText(this.text, {super.key, required this.style, this.maxLines = 1});
+
+  /// The highlight wash: Mint 25% (previews, FilDOS `bg-mint/25`) unless given
+  /// (search rows use a faint ink wash, FilDOS `bg-primary/10`).
+  final Color? markColor;
+  const MarkedText(this.text, {super.key, required this.style, this.maxLines = 1, this.markColor});
 
   @override
   Widget build(BuildContext context) {
@@ -1337,7 +1341,10 @@ class MarkedText extends StatelessWidget {
         TextSpan(
           text: m.group(1),
           // FilDOS `<mark class="bg-mint/25 text-foreground">`.
-          style: style.copyWith(background: Paint()..color = Scoop.mint.withValues(alpha: 0.25)),
+          style: style.copyWith(
+            color: markColor == null ? null : context.fa.foreground,
+            background: Paint()..color = markColor ?? Scoop.mint.withValues(alpha: 0.25),
+          ),
         ),
       );
       last = m.end;

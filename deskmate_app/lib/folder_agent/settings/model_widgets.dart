@@ -1,104 +1,49 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/constants.dart';
-import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
+import '../widgets/model_logo.dart';
 import '../widgets/ui.dart';
 import 'settings_widgets.dart';
 
 /// Model cards shared by Settings and onboarding: the on-device embedding
 /// model, the Ollama status line, and the chat-model picker with live pulls.
 
-const _logos = {
-  'llama': 'llama.webp',
-  'qwen': 'qwen.png',
-  'gemma': 'gemma.webp',
-  'phi': 'phi.webp',
-  'mistral': 'mistral.webp',
-  'deepseek': 'deepseek.png',
-  'granite': 'granite.svg',
-  'smollm': 'smollm.webp',
-  'lfm': 'lfm.png',
-};
-
-/// Model family from a catalog family or an Ollama model name ("qwen3:4b" → qwen).
-String modelFamily(String nameOrFamily) {
-  final n = nameOrFamily.toLowerCase();
-  for (final f in _logos.keys) {
-    if (n.startsWith(f)) return f;
-  }
-  return 'custom';
-}
-
 /// "phi4-mini" and "phi4-mini:latest" are the same Ollama model.
 bool sameModel(String a, String b) => a.replaceAll(':latest', '') == b.replaceAll(':latest', '');
 
-class ModelLogo extends StatelessWidget {
-  final String family;
-  final double size;
-  const ModelLogo(this.family, {super.key, this.size = 18});
-
-  @override
-  Widget build(BuildContext context) {
-    final file = _logos[modelFamily(family)] ?? 'custom.webp';
-    final path = 'assets/folder_agent/ai-logos/$file';
-    final img = file.endsWith('.svg')
-        ? SvgPicture.asset(path, width: size, height: size, fit: BoxFit.contain)
-        : Image.asset(path, width: size, height: size, fit: BoxFit.contain, filterQuality: FilterQuality.medium);
-    return ClipRRect(borderRadius: BorderRadius.circular(size * 0.22), child: img);
-  }
-}
-
 // ── chat model selection ───────────────────────────────────────────────────
 
-/// The chat model currently chosen: a pending pull (prefs.chatModel) wins so
-/// the picker shows what the user picked while it downloads.
-String? currentChatModel(FaController app, AppSettings chat) {
-  final pref = app.chatModel;
-  if (pref != null && pref.isNotEmpty) {
-    final pulling = app.ai?.catalog.where((m) => m.id == pref).firstOrNull?.pull?['state'] == 'pulling';
-    if (pulling) return pref;
-  }
-  if (chat.selectedModel.isNotEmpty) return chat.selectedModel;
-  return (pref == null || pref.isEmpty) ? null : pref;
-}
+/// The chat model the user chose (it stays chosen while it downloads), or what runs now.
+String? currentChatModel(FaController app) => app.aiConfig.chatModel ?? app.aiConfig.effectiveModel;
 
 /// Installed Ollama tag matching [id] ("phi4-mini" → "phi4-mini:latest").
 String? installedName(AiStatus? ai, String id) => ai?.ollamaModels.where((m) => sameModel(m, id)).firstOrNull;
 
-/// Applies a chat-model choice everywhere: Gemini or an installed model is
-/// selected right away; a missing catalog model starts an Ollama pull and is
-/// selected once it lands (even if the view that asked has gone).
-Future<void> chooseChatModel(FaController app, AppSettings chat, String id) async {
-  if (id == AppConstants.geminiModelId) {
-    if (!chat.hasGeminiKey) return;
-    await chat.saveAiConfiguration(model: id, geminiApiKey: chat.geminiApiKey);
-    await app.setPrefs({'chatModel': id});
+/// Choose the chat model. The engine owns the choice: an installed model or
+/// Gemini is used from the next turn; a missing catalog model starts an Ollama
+/// pull and stays the choice — turns use it as soon as it lands.
+Future<void> chooseChatModel(FaController app, String id) async {
+  final config = app.aiConfig;
+  if (id == config.geminiChoice) {
+    if (config.hasGeminiKey) await app.setChatModel(id);
     return;
   }
   final installed = installedName(app.ai, id);
-  if (installed != null) {
-    await chat.setSelectedLocalModel(installed);
-    await app.setPrefs({'chatModel': installed});
-    return;
+  if (installed == null) {
+    final r = await app.api.pullOllama(id);
+    if (!r.ok) return app.toastError(r.error);
+    _announceWhenPulled(app, id);
   }
-  final r = await app.api.pullOllama(id);
-  if (!r.ok) {
-    app.toastError(r.error);
-    return;
-  }
-  await app.setPrefs({'chatModel': id});
-  await app.refreshAi();
-  _selectWhenPulled(app, chat, id);
+  await app.setChatModel(installed ?? id);
 }
 
 final Set<String> _watching = {};
 
-void _selectWhenPulled(FaController app, AppSettings chat, String id) {
+/// Tell the user when a download finishes or fails (selection needs no client logic).
+void _announceWhenPulled(FaController app, String id) {
   if (!_watching.add(id)) return;
   late final VoidCallback listener;
   void stop() {
@@ -114,11 +59,6 @@ void _selectWhenPulled(FaController app, AppSettings chat, String id) {
       app.toast('${m?.label ?? id}: ${m?.pull?['error'] ?? 'download failed'}', kind: ToastKind.error);
     } else if (state == 'done' || (m?.installed == true && state != 'pulling')) {
       stop();
-      final name = installedName(app.ai, id) ?? id;
-      if (app.chatModel == null || sameModel(app.chatModel!, id)) {
-        chat.fetchAvailableModels().whenComplete(() => chat.setSelectedLocalModel(name));
-        app.setPrefs({'chatModel': name});
-      }
       app.toast('${m?.label ?? id} is ready to chat', kind: ToastKind.success);
     }
   };
@@ -326,10 +266,9 @@ class OllamaStatus extends StatefulWidget {
 class _OllamaStatusState extends State<OllamaStatus> {
   bool _checking = false;
 
-  Future<void> _check(FaController app, AppSettings chat) async {
+  Future<void> _check(FaController app) async {
     setState(() => _checking = true);
     await app.refreshAi();
-    await chat.fetchAvailableModels();
     if (mounted) setState(() => _checking = false);
   }
 
@@ -337,7 +276,6 @@ class _OllamaStatusState extends State<OllamaStatus> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
-    final chat = context.read<AppSettings>();
     final status = app.ai?.ollamaStatus ?? 'offline';
     final n = app.ai?.ollamaModels.length ?? 0;
     final (title, sub) = switch (status) {
@@ -371,7 +309,7 @@ class _OllamaStatusState extends State<OllamaStatus> {
           SmallButton(
             label: _checking ? 'Checking…' : 'Check again',
             variant: FaButtonVariant.secondary,
-            onPressed: _checking ? null : () => _check(app, chat),
+            onPressed: _checking ? null : () => _check(app),
           ),
         ],
       ),
@@ -401,12 +339,10 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
     super.dispose();
   }
 
-  Future<void> _saveKey(FaController app, AppSettings chat) async {
+  Future<void> _saveKey(FaController app) async {
     final key = _key.text.trim();
     if (key.isEmpty) return;
-    await chat.setGeminiApiKey(key);
-    await chat.saveAiConfiguration(model: AppConstants.geminiModelId, geminiApiKey: key);
-    await app.setPrefs({'chatModel': AppConstants.geminiModelId});
+    if (!await app.setGeminiKey(key, select: true)) return;
     _key.clear();
     if (mounted) setState(() => _geminiOpen = false);
     app.toast('Gemini key saved', kind: ToastKind.success);
@@ -416,9 +352,9 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
-    final chat = context.watch<AppSettings>();
     final ai = app.ai;
-    final selected = currentChatModel(app, chat);
+    final config = app.aiConfig;
+    final selected = currentChatModel(app);
     final offline = (ai?.ollamaStatus ?? 'offline') == 'offline';
     bool isSel(String id) => selected != null && sameModel(selected, id);
 
@@ -439,7 +375,7 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
           logo: ModelLogo(name),
           title: name,
           badges: const [FaBadge('Installed')],
-          onTap: () => chooseChatModel(app, chat, name),
+          onTap: () => chooseChatModel(app, name),
         ),
       for (final m in ordered)
         _ModelRow(
@@ -454,24 +390,24 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
           ],
           pull: m.installed ? null : m.pull,
           disabled: offline && !m.installed,
-          onTap: () => chooseChatModel(app, chat, m.id),
+          onTap: () => chooseChatModel(app, m.id),
         ),
       _ModelRow(
-        active: isSel(AppConstants.geminiModelId),
+        active: config.usesGemini || selected == config.geminiChoice,
         logo: Icon(Icons.cloud_outlined, size: 17, color: c.mutedForeground),
         title: 'Use Gemini (cloud)',
-        desc: chat.hasGeminiKey
+        desc: config.hasGeminiKey
             ? 'Key saved. Files you ask about are sent to Google to answer.'
             : 'Runs in Google\'s cloud — needs an API key. Files you ask about are sent to Google.',
-        badges: [if (chat.hasGeminiKey) const FaBadge('Key saved')],
+        badges: [if (config.hasGeminiKey) const FaBadge('Key saved')],
         onTap: () {
-          if (chat.hasGeminiKey) {
-            chooseChatModel(app, chat, AppConstants.geminiModelId);
+          if (config.hasGeminiKey) {
+            chooseChatModel(app, config.geminiChoice);
           } else {
             setState(() => _geminiOpen = true);
           }
         },
-        trailing: chat.hasGeminiKey
+        trailing: config.hasGeminiKey
             ? SmallButton(
                 label: _geminiOpen ? 'Cancel' : 'Change key',
                 variant: FaButtonVariant.ghost,
@@ -488,11 +424,11 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
                       dense: true,
                       mono: true,
                       autofocus: true,
-                      onSubmitted: (_) => _saveKey(app, chat),
+                      onSubmitted: (_) => _saveKey(app),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SmallButton(label: 'Save', variant: FaButtonVariant.primary, onPressed: () => _saveKey(app, chat)),
+                  SmallButton(label: 'Save', variant: FaButtonVariant.primary, onPressed: () => _saveKey(app)),
                 ],
               )
             : null,

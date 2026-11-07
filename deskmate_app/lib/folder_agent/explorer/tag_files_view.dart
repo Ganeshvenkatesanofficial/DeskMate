@@ -13,7 +13,7 @@ import '../state/fa_controller.dart';
 import '../widgets/ui.dart';
 import 'recents_view.dart'
     show PageEscape, PageGrid, PageGridTile, PageList, PageListRow, PageSpinner, PageStateText, PageViewToggle;
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// Every file carrying one tag (port of FilDOS TagFilesView): a note line,
 /// a flat list or tile grid, double-click to open, right-click for Open /

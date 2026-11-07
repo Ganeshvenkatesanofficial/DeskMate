@@ -131,15 +131,15 @@ class _AssistantMessageState extends State<_AssistantMessage> {
   @override
   Widget build(BuildContext context) {
     final m = widget.message;
-    final isError = m.content.startsWith('⚠️');
+    final isError = m.isError;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (m.telemetry.isNotEmpty) AgentLog(key: ValueKey('fa_log_${m.id}'), steps: m.telemetry),
-          if (isError) _ErrorNote(text: m.content.replaceFirst('⚠️', '').trim()) else AnswerMarkdown(text: m.content),
+          if (m.telemetry.isNotEmpty) AgentLog(key: ValueKey('fa_log_${m.id}'), steps: m.telemetry, stats: m.stats),
+          if (isError) _ErrorNote(text: m.content.trim()) else AnswerMarkdown(text: m.content),
           if (!isError && m.content.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),

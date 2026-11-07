@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/fa_theme.dart';
 import '../core/format.dart';
@@ -11,7 +10,7 @@ import 'composer_logic.dart';
 import 'folder_chat_controller.dart';
 
 /// Small leaf pieces of the Ask AI surface: mention chips, keycaps, the
-/// empty state, history list, callouts and model logos.
+/// empty state, history list and callouts.
 
 /// A small pill for one attached file/folder mention (FilDOS `MentionChip`:
 /// `max-w-44 gap-1.5 rounded-md border px-1.5 py-0.5 text-2xs`).
@@ -559,45 +558,5 @@ class _CalloutButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-// ── model logos ────────────────────────────────────────────────────────────
-
-const _families = {
-  'llama': 'llama.webp',
-  'qwen': 'qwen.png',
-  'gemma': 'gemma.webp',
-  'phi': 'phi.webp',
-  'mistral': 'mistral.webp',
-  'deepseek': 'deepseek.png',
-  'granite': 'granite.svg',
-  'smollm': 'smollm.webp',
-  'lfm': 'lfm.png',
-};
-
-/// Logo asset for a model id, by family substring (fallback: custom).
-String modelLogoAsset(String modelId) {
-  final id = modelId.toLowerCase();
-  for (final key in ['smollm', 'deepseek', 'granite', 'mistral', 'gemma', 'llama', 'qwen', 'phi', 'lfm']) {
-    if (id.contains(key)) return 'assets/folder_agent/ai-logos/${_families[key]}';
-  }
-  return 'assets/folder_agent/ai-logos/custom.webp';
-}
-
-class ModelLogo extends StatelessWidget {
-  final String modelId;
-  final bool cloud;
-  final double size;
-  const ModelLogo({super.key, required this.modelId, this.cloud = false, this.size = 14});
-
-  @override
-  Widget build(BuildContext context) {
-    if (cloud || modelId.isEmpty) return DeskMateMark(size: size);
-    final asset = modelLogoAsset(modelId);
-    final child = asset.endsWith('.svg')
-        ? SvgPicture.asset(asset, width: size, height: size, fit: BoxFit.contain)
-        : Image.asset(asset, width: size, height: size, fit: BoxFit.contain, filterQuality: FilterQuality.medium);
-    return ClipRRect(borderRadius: BorderRadius.circular(3), child: child);
   }
 }

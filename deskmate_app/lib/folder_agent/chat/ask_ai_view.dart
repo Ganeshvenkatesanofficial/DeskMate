@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'messages.dart';
-import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../shell/pane_header.dart';
 import '../state/fa_controller.dart';
@@ -118,7 +117,6 @@ class _AskAiViewState extends State<AskAiView> {
     final c = context.fa;
     final chat = context.watch<FolderChatController>();
     final app = context.watch<FaController>();
-    final provider = context.watch<AppSettings>();
     final showHistory = _session.showHistory;
     final title = chat.chatId == null ? null : chat.history.where((h) => h.id == chat.chatId).firstOrNull?.title;
     final count = chat.messages.length;
@@ -175,10 +173,7 @@ class _AskAiViewState extends State<AskAiView> {
           child: showHistory
               ? AskAiHistory(chat: chat, onOpen: _openChat)
               : (chat.messages.isEmpty && !chat.sending)
-              ? AskAiEmptyState(
-                  cloud: provider.isUsingGemini,
-                  onPick: (id) => _composerKey.currentState?.applySuggestion(id),
-                )
+              ? AskAiEmptyState(cloud: chat.usesGemini, onPick: (id) => _composerKey.currentState?.applySuggestion(id))
               : _conversation(chat),
         ),
         if (!showHistory)
@@ -189,7 +184,7 @@ class _AskAiViewState extends State<AskAiView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ..._callouts(chat, app, provider),
+                  ..._callouts(chat, app),
                   AskAiComposer(key: _composerKey, chat: chat),
                 ],
               ),
@@ -199,7 +194,7 @@ class _AskAiViewState extends State<AskAiView> {
     );
   }
 
-  List<Widget> _callouts(FolderChatController chat, FaController app, AppSettings provider) {
+  List<Widget> _callouts(FolderChatController chat, FaController app) {
     void toSettings() => app.showSection(FaSection.settings);
     if (!chat.hasModel) {
       return [
@@ -213,7 +208,7 @@ class _AskAiViewState extends State<AskAiView> {
         ),
       ];
     }
-    if (!provider.isUsingGemini && !provider.isLocalLlmOnline) {
+    if (!chat.usesGemini && app.ai?.ollamaStatus == 'offline') {
       return [
         AskAiCallout(
           icon: Icons.power_off_outlined,

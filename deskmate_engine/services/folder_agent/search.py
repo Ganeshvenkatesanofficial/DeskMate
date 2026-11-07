@@ -93,7 +93,14 @@ def search(
     merged: dict[str, dict[str, Any]] = {}
 
     # ── name lane ───────────────────────────────────────────────────────────
-    for hit in fs_service.name_search(q, search_root, limit=150, deadline_s=1.5):
+    # "Everywhere" sweeps the folder in view first (FilDOS), then the home folder.
+    roots = [search_root]
+    if scope != "folder" and root and root != search_root:
+        roots.insert(0, root)
+    name_hits = [h for r in roots for h in fs_service.name_search(q, r, limit=150, deadline_s=1.5 / len(roots))]
+    for hit in name_hits:
+        if hit["path"] in merged:
+            continue
         merged[hit["path"]] = {
             **hit,
             "lanes": ["name"],
@@ -182,3 +189,11 @@ def search_passages(query: str, limit: int = 6, root: str | None = None) -> list
         for r in res["results"]
         if "meaning" in r["lanes"] or r.get("nameTier")
     ][:limit]
+
+
+def passages_in_file(path: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    """The passages of one indexed file that best cover the query (preview highlighting / open at page)."""
+    terms = query_terms(query)
+    chunks = vector_store.file_chunks(path)
+    ranked = sorted(chunks, key=lambda c: -_coverage(terms, c.get("text", "")))
+    return [{"page": c.get("page"), "snippet": mark_snippet(c.get("text", ""), terms)} for c in ranked[:limit]]

@@ -117,13 +117,13 @@ curl.exe -fsSL https://raw.githubusercontent.com/Ganeshvenkatesanofficial/DeskMa
 
 ```text
 deskmate_app/                Flutter desktop app
-  lib/app/                   engine launcher, app settings (model, theme)
+  lib/app/                   engine launcher and discovery, theme
   lib/folder_agent/          the UI: shell, explorer views, search, Ask AI,
                              Canvas, onboarding tour, settings
 deskmate_engine/             Python engine (bundled with the app)
   backend.py                 FastAPI entry point
-  core/                      LLM adapters (Ollama / Gemini) and agent telemetry
-  routers/                   /api/health, /api/fa/* REST, /ws/folder-events, /ws/folder-agent
+  core/                      LLM adapters (Ollama / Gemini), agent telemetry, chat history
+  routers/folder_agent/      /api/fa/* REST by area, /ws/folder-events, /ws/folder-agent
   services/folder_agent/     filesystem, index, search, graph and the SmolAgents Folder Agent
 ```
 
@@ -133,7 +133,8 @@ deskmate_engine/             Python engine (bundled with the app)
 | Index | `indexer.py` walks the folders you grant, re-reading only files whose size or date changed; text is chunked and embedded on-device with FastEmbed (BGE Small) into an embedded Qdrant |
 | Search | `search.py` fuses filename and meaning hits; meaning hits must stand out from the query's own score distribution |
 | Canvas | `graph.py` builds file links (k-NN similarity, shared entities, tags, sessions), Louvain clusters and the layout |
-| Agent | `agent.py` / `tools.py`: a SmolAgents `ToolCallingAgent` whose steps stream over `/ws/folder-agent` |
+| Models | `ai_config.py`: the engine stores the chosen chat model and Gemini key (set from Settings via `PUT /api/fa/ai/config`; the key is never returned) |
+| Agent | `chat_service.py` runs a turn (history, `/find` / `/summarize`, model, persistence); `agent.py` / `tools.py` are the SmolAgents `ToolCallingAgent`; `core/telemetry.py` streams every step over `/ws/folder-agent` with one event schema (see [engine README](deskmate_engine/README.md#agent-telemetry)) |
 
 The file-explorer design is adapted from [FilDOS](https://github.com/ahmedfahim21/FilDOS) (MIT); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The engine is DeskMate's own.
 

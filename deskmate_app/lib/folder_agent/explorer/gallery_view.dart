@@ -9,7 +9,7 @@ import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import 'entry_interactions.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// FilDOS GalleryView geometry (icon size "medium"): 136px square tiles with
 /// 2px grout, inside the pane's 8px padding.

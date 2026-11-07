@@ -311,4 +311,3 @@ def build_tools(cwd: str) -> list[Tool]:
         CreateFileTool(cwd), CreateFolderTool(cwd), CopyFilesTool(cwd), MoveFilesTool(cwd),
         RenameFileTool(cwd), TrashFilesTool(cwd),
     ]
-

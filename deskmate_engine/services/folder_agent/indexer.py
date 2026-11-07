@@ -263,6 +263,45 @@ class Indexer:
 INDEXER = Indexer()
 
 
+class IndexSettings:
+    """What the indexer may read: granted folders, paths and extensions hidden from AI."""
+
+    @staticmethod
+    def set_roots(roots: list[str]) -> dict[str, Any]:
+        store.set_prefs({"indexRoots": sorted(set(roots))})
+        return INDEXER.start()
+
+    @staticmethod
+    def add_excludes(paths: list[str]) -> list[str]:
+        current = store.get_pref("excludes") or []
+        store.set_prefs({"excludes": sorted(set(current) | set(paths))})
+        IndexSettings._forget_hidden()
+        return store.get_pref("excludes")
+
+    @staticmethod
+    def remove_exclude(path: str) -> list[str]:
+        current = store.get_pref("excludes") or []
+        store.set_prefs({"excludes": [p for p in current if p != path]})
+        INDEXER.start()  # make the folder searchable again
+        return store.get_pref("excludes")
+
+    @staticmethod
+    def set_exclude_extensions(extensions: list[str]) -> list[str]:
+        exts = sorted({"." + e.lower().strip().lstrip(".") for e in extensions if e.strip()})
+        store.set_prefs({"excludeExtensions": exts})
+        IndexSettings._forget_hidden()
+        return exts
+
+    @staticmethod
+    def _forget_hidden() -> None:
+        """Hiding takes effect now: drop already-indexed files that are now hidden."""
+        hidden = [p for p in store.all_index_states() if is_hidden_from_ai(p)]
+        if hidden:
+            vector_store.remove_files(hidden)
+            store.delete_index_state(hidden)
+            events.publish("index.changed", added=0, removed=len(hidden))
+
+
 def estimate(roots: list[str], deadline_s: float = 4.0) -> dict[str, Any]:
     """Rough count of indexable files under ``roots`` for the onboarding/settings UI."""
     files = 0

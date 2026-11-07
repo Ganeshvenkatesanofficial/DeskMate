@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app/constants.dart';
 import '../core/fa_api.dart';
 import '../core/fa_events.dart';
 import '../core/models.dart';
@@ -51,7 +53,9 @@ class FaController extends ChangeNotifier {
   List<String> get excludes => ((prefs['excludes'] as List?) ?? const []).cast<String>();
   List<String> get excludeExtensions => ((prefs['excludeExtensions'] as List?) ?? const []).cast<String>();
   bool get showHidden => prefs['showHidden'] == true;
-  String? get chatModel => prefs['chatModel'] as String?;
+
+  /// The engine-owned chat-model configuration (model choice, Gemini key presence, what runs now).
+  AiConfig get aiConfig => ai?.config ?? AiConfig.none;
 
   List<Place> quickAccess = const [];
   List<Drive> drives = const [];
@@ -78,6 +82,7 @@ class FaController extends ChangeNotifier {
     sep = h.value!['sep'] as String? ?? '/';
     platform = h.value!['platform'] as String? ?? '';
     await Future.wait([refreshPrefs(), refreshSidebar(), refreshIndex(), refreshAi()]);
+    await _migrateLegacyAiSettings();
     ready = true;
     notifyListeners();
   }
@@ -129,6 +134,41 @@ class FaController extends ChangeNotifier {
     if (r.ok) {
       ai = r.value!;
       notifyListeners();
+    }
+  }
+
+  /// Choose the chat model: an Ollama id (installed or still downloading) or the Gemini choice.
+  Future<bool> setChatModel(String id) => _updateAiConfig(chatModel: id);
+
+  /// Save the Gemini key ('' removes it); optionally make Gemini the chat model.
+  Future<bool> setGeminiKey(String key, {bool select = false}) =>
+      _updateAiConfig(geminiApiKey: key, chatModel: select && key.trim().isNotEmpty ? aiConfig.geminiChoice : null);
+
+  Future<bool> _updateAiConfig({String? chatModel, String? geminiApiKey}) async {
+    final r = await api.setAiConfig(chatModel: chatModel, geminiApiKey: geminiApiKey);
+    if (!r.ok) {
+      toastError(r.error);
+      return false;
+    }
+    await refreshAi();
+    return true;
+  }
+
+  /// Older builds kept the chat model and Gemini key in the app's own storage;
+  /// hand them to the engine (the single owner now) once, then forget them.
+  Future<void> _migrateLegacyAiSettings() async {
+    final store = await SharedPreferences.getInstance();
+    final model = store.getString(LegacyPrefsKeys.selectedModel);
+    final key = store.getString(LegacyPrefsKeys.geminiApiKey);
+    if ((model == null || model.isEmpty) && (key == null || key.isEmpty)) return;
+    final r = await api.setAiConfig(
+      geminiApiKey: (key != null && key.isNotEmpty && !aiConfig.hasGeminiKey) ? key : null,
+      chatModel: (model != null && model.isNotEmpty && aiConfig.chatModel == null) ? model : null,
+    );
+    if (r.ok) {
+      await store.remove(LegacyPrefsKeys.selectedModel);
+      await store.remove(LegacyPrefsKeys.geminiApiKey);
+      await refreshAi();
     }
   }
 

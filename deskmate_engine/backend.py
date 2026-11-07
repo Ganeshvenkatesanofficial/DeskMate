@@ -34,7 +34,7 @@ setup_clean_logging()
 start_parent_watchdog()
 
 from routers.api_routes import router as api_router
-from routers.folder_routes import router as folder_router, ws_router as ws_folder_router
+from routers.folder_agent import routers as folder_agent_routers
 
 # Configure logging
 logging.basicConfig(
@@ -81,8 +81,8 @@ app.add_middleware(
 
 # Mount WebSockets & REST Endpoints
 app.include_router(api_router)
-app.include_router(folder_router)
-app.include_router(ws_folder_router)
+for folder_agent_router in folder_agent_routers():
+    app.include_router(folder_agent_router)
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:

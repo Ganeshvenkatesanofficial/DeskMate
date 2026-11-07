@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
     telemetry  TEXT NOT NULL DEFAULT '[]',
+    stats      TEXT NOT NULL DEFAULT '{}',
+    error      INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, created_at);
@@ -121,6 +123,7 @@ def db() -> Iterator[sqlite3.Connection]:
         try:
             if not _initialized:
                 conn.executescript(_SCHEMA)
+                _migrate(conn)
                 _initialized = True
             yield conn
             conn.commit()
@@ -129,6 +132,15 @@ def db() -> Iterator[sqlite3.Connection]:
             raise
         finally:
             conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after a database was created."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)")}
+    if "stats" not in cols:
+        conn.execute("ALTER TABLE chat_messages ADD COLUMN stats TEXT NOT NULL DEFAULT '{}'")
+    if "error" not in cols:
+        conn.execute("ALTER TABLE chat_messages ADD COLUMN error INTEGER NOT NULL DEFAULT 0")
 
 
 def db_path() -> Path:
@@ -382,12 +394,30 @@ def ensure_chat(chat_id: str | None, first_message: str) -> str:
     return chat_id
 
 
-def add_chat_message(chat_id: str, role: str, content: str, telemetry: list[dict[str, Any]] | None = None) -> str:
+def add_chat_message(
+    chat_id: str,
+    role: str,
+    content: str,
+    telemetry: list[dict[str, Any]] | None = None,
+    *,
+    stats: dict[str, Any] | None = None,
+    error: bool = False,
+) -> str:
     msg_id = uuid.uuid4().hex
     with db() as conn:
         conn.execute(
-            "INSERT INTO chat_messages(id, chat_id, role, content, telemetry, created_at) VALUES(?, ?, ?, ?, ?, ?)",
-            (msg_id, chat_id, role, content, json.dumps(telemetry or [], default=str), time.time()),
+            "INSERT INTO chat_messages(id, chat_id, role, content, telemetry, stats, error, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                msg_id,
+                chat_id,
+                role,
+                content,
+                json.dumps(telemetry or [], default=str),
+                json.dumps(stats or {}, default=str),
+                int(error),
+                time.time(),
+            ),
         )
         conn.execute("UPDATE chats SET updated_at = ? WHERE id = ?", (time.time(), chat_id))
     return msg_id
@@ -405,13 +435,16 @@ def list_chats() -> list[dict[str, Any]]:
 def chat_messages(chat_id: str) -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
-            "SELECT id, role, content, telemetry, created_at FROM chat_messages WHERE chat_id = ? ORDER BY created_at",
+            "SELECT id, role, content, telemetry, stats, error, created_at FROM chat_messages "
+            "WHERE chat_id = ? ORDER BY created_at",
             (chat_id,),
         ).fetchall()
     out = []
     for r in rows:
         item = dict(r)
         item["telemetry"] = json.loads(item["telemetry"] or "[]")
+        item["stats"] = json.loads(item["stats"] or "{}")
+        item["error"] = bool(item["error"])
         out.append(item)
     return out
 

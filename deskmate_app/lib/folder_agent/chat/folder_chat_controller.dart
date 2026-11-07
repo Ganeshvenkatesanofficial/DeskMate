@@ -4,27 +4,26 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import 'messages.dart';
-import '../../app/app_settings.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
+import 'messages.dart';
 
-/// Ask AI state: the open conversation, live agent telemetry, saved chats and
-/// the `/ws/folder-agent` socket.
+/// Ask AI state: the open conversation, the live agent log of the turn in
+/// flight, saved chats, and the `/ws/folder-agent` socket.
 ///
-/// Messages reuse DeskMate's [ChatMessage] / [AgentStepTelemetry] so the
-/// shared telemetry accordion renders the agent's logs unchanged.
+/// The engine owns the model, the Gemini key, the conversation history and the
+/// system prompt; a turn sends only what the user typed and the explorer
+/// context, and receives the engine's `AgentTelemetry` events.
 class FolderChatController extends ChangeNotifier {
   final FaController app;
-  final AppSettings provider;
 
-  FolderChatController(this.app, this.provider);
+  FolderChatController(this.app);
 
   // ── conversation ─────────────────────────────────────────────────────────
   String? chatId;
   final List<ChatMessage> messages = [];
 
-  /// Steps streamed for the turn in flight (rendered live, then attached to the reply).
+  /// Steps of the turn in flight (live reasoning replaces its slot).
   final List<AgentStepTelemetry> liveTelemetry = [];
   String liveTitle = '';
   bool sending = false;
@@ -32,13 +31,11 @@ class FolderChatController extends ChangeNotifier {
 
   List<ChatSummary> history = const [];
 
-  /// Model used for turns: DeskMate's global selection (Ollama model or Gemini).
-  String get modelLabel => provider.isUsingGemini
-      ? 'Gemini 2.5 Flash'
-      : (provider.selectedLocalModel.isNotEmpty
-            ? provider.selectedLocalModel
-            : (provider.availableLocalModels.firstOrNull ?? 'No model'));
-  bool get hasModel => provider.isUsingGemini || provider.availableLocalModels.isNotEmpty;
+  /// What turns run on, per the engine's configuration.
+  AiConfig get _config => app.aiConfig;
+  String get modelLabel => _config.effectiveModel ?? 'No model';
+  bool get hasModel => _config.hasModel;
+  bool get usesGemini => _config.usesGemini;
 
   // ── socket ───────────────────────────────────────────────────────────────
   WebSocket? _socket;
@@ -66,80 +63,64 @@ class FolderChatController extends ChangeNotifier {
   void _onClosed() {
     _socket = null;
     _sub?.cancel();
-    if (sending) _fail('Lost connection to the DeskMate engine.');
+    if (sending) _endTurn(_localError('Lost connection to the DeskMate engine.'));
   }
 
   void _onEvent(Map<String, dynamic> e) {
     switch (e['type']) {
       case 'chat':
-        chatId = e['chat_id'] as String?;
+        chatId = e['chat_id'] as String? ?? chatId;
       case 'status':
-        liveTitle = (e['title'] ?? e['message'] ?? liveTitle).toString();
+        liveTitle = e['title']?.toString() ?? liveTitle;
       case 'telemetry':
         final step = AgentStepTelemetry.fromJson(e);
-        // Reasoning tokens arrive as repeated updates of the same step: replace, don't append.
-        final i = liveTelemetry.lastIndexWhere(
-          (t) => t.step == step.step && t.phase == step.phase && t.tool == step.tool,
-        );
-        if (i >= 0 && (step.phase == 'reasoning' || step.phase == 'thought')) {
+        final i = step.isReasoning ? liveTelemetry.lastIndexWhere(step.sameSlot) : -1;
+        if (i >= 0) {
           liveTelemetry[i] = step;
         } else {
           liveTelemetry.add(step);
         }
-        if (step.title != null) liveTitle = step.title!;
       case 'done':
-        final steps = ((e['telemetry'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((m) => AgentStepTelemetry.fromJson(m.cast<String, dynamic>()))
-            .toList();
-        messages.add(
-          ChatMessage(
-            id: 'a${DateTime.now().microsecondsSinceEpoch}',
-            role: MessageRole.assistant,
-            content: (e['reply'] ?? '').toString(),
-            telemetry: steps.isNotEmpty ? steps : List.of(liveTelemetry),
-          ),
-        );
-        _finish();
-        unawaited(refreshHistory());
       case 'error':
-        _fail((e['error'] ?? 'The agent hit an error.').toString());
+        final message = ChatMessage.fromTurnEnd(e);
+        if (message.isError) error = message.content;
+        _endTurn(message.telemetry.isEmpty && liveTelemetry.isNotEmpty ? _withLive(message) : message);
+        unawaited(refreshHistory());
+        return;
+      default:
+        return; // run start / pong: nothing to show
     }
     notifyListeners();
   }
 
-  void _finish() {
+  ChatMessage _withLive(ChatMessage m) => ChatMessage(
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    telemetry: liveTelemetry.where((s) => !s.partial).toList(),
+    stats: m.stats,
+    isError: m.isError,
+  );
+
+  ChatMessage _localError(String message) => ChatMessage.fromTurnEnd({'type': 'error', 'error': message});
+
+  void _endTurn(ChatMessage reply) {
+    messages.add(reply);
     sending = false;
     liveTelemetry.clear();
     liveTitle = '';
     _turn?.complete();
     _turn = null;
-  }
-
-  void _fail(String message) {
-    error = message;
-    messages.add(
-      ChatMessage(
-        id: 'e${DateTime.now().microsecondsSinceEpoch}',
-        role: MessageRole.assistant,
-        content: '⚠️ $message',
-        telemetry: List.of(liveTelemetry),
-      ),
-    );
-    _finish();
     notifyListeners();
   }
 
   // ── actions ──────────────────────────────────────────────────────────────
-  /// Send a message. [files] are `@file` attachments, [folders] `#folder` ones.
+  /// Send what the user typed (slash commands included). [files] are `@file`
+  /// attachments, [folders] `#folder` ones.
   Future<void> send(String text, {List<String> files = const [], List<String> folders = const []}) async {
     final message = text.trim();
     if (message.isEmpty || sending) return;
     error = null;
-    final history = messages
-        .where((m) => !m.content.startsWith('⚠️'))
-        .map((m) => {'role': m.role == MessageRole.user ? 'user' : 'assistant', 'content': m.content})
-        .toList();
     messages.add(
       ChatMessage(id: 'u${DateTime.now().microsecondsSinceEpoch}', role: MessageRole.user, content: message),
     );
@@ -154,18 +135,12 @@ class FolderChatController extends ChangeNotifier {
           'action': 'chat',
           'message': message,
           'chat_id': chatId,
-          'history': history,
-          if (provider.isUsingGemini) 'api_key': provider.geminiApiKey,
-          if (provider.isUsingGemini)
-            'model': 'gemini/gemini-2.5-flash'
-          else if (provider.selectedLocalModel.isNotEmpty)
-            'model': provider.selectedLocalModel,
           'context': {'cwd': app.currentFolder, 'files': files, 'folders': folders},
         }),
       );
       await _turn!.future;
     } catch (_) {
-      if (sending) _fail('Couldn\'t reach the DeskMate engine. Is it still starting?');
+      if (sending) _endTurn(_localError('Couldn\'t reach the DeskMate engine. Is it still starting?'));
     }
   }
 
@@ -199,20 +174,7 @@ class FolderChatController extends ChangeNotifier {
     chatId = id;
     messages
       ..clear()
-      ..addAll(
-        r.value!.map(
-          (m) => ChatMessage(
-            id: m['id'] as String,
-            role: m['role'] == 'user' ? MessageRole.user : MessageRole.assistant,
-            content: m['content'] as String? ?? '',
-            telemetry: ((m['telemetry'] as List?) ?? const [])
-                .whereType<Map>()
-                .map((t) => AgentStepTelemetry.fromJson(t.cast<String, dynamic>()))
-                .toList(),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(((m['created_at'] as num) * 1000).round()),
-          ),
-        ),
-      );
+      ..addAll(r.value!.map(ChatMessage.fromStored));
     notifyListeners();
   }
 

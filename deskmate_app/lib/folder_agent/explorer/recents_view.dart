@@ -12,7 +12,7 @@ import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import '../widgets/ui.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// One recently opened item: the entry plus when it was opened.
 class _Recent {
@@ -227,10 +227,7 @@ class PageSpinner extends StatelessWidget {
     child: SizedBox(
       width: 16,
       height: 16,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: context.fa.mutedForeground.withValues(alpha: 0.5),
-      ),
+      child: CircularProgressIndicator(strokeWidth: 2, color: context.fa.mutedForeground.withValues(alpha: 0.5)),
     ),
   );
 }
@@ -301,7 +298,12 @@ class PageListRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: FaText.sans(color: c.foreground)),
+                    Text(
+                      entry.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FaText.sans(color: c.foreground),
+                    ),
                     Text(
                       entry.path,
                       maxLines: 1,

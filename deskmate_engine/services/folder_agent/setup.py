@@ -21,6 +21,7 @@ import requests
 
 from core.models import check_local_llm_status
 from services.folder_agent import embedder, events
+from services.folder_agent.ai_config import AI_CONFIG
 from settings import OLLAMA_BASE_URL
 
 logger = logging.getLogger("deskmate.folder_agent.setup")
@@ -80,7 +81,7 @@ def ai_status() -> dict[str, Any]:
     return {
         "embedder": embedder.status(),
         "ollama": {"status": llm["status"], "models": llm.get("models") or [], "url": OLLAMA_BASE_URL},
-        "gemini": bool(os.getenv("GEMINI_API_KEY")),
+        "config": AI_CONFIG.snapshot(llm.get("models") or []),
         "catalog": catalog,
         "recommended": recommended_model(specs["ramGb"]),
         "specs": specs,

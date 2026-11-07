@@ -5,13 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/constants.dart';
-import '../../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
+import '../widgets/model_logo.dart';
 import '../widgets/ui.dart';
 import 'chat_widgets.dart';
 import 'composer_logic.dart';
@@ -94,11 +93,7 @@ class AskAiComposerState extends State<AskAiComposer> {
   void applySuggestion(String id) {
     switch (id) {
       case 'summarize':
-        final folder = _app.currentFolder;
-        if (folder.isEmpty) return _prefill('/summarize ');
-        final m = ChatMention.forPath(folder, isDir: true);
-        _addMention(m);
-        _prefill('Summarize ${m.token} ');
+        _prefill('/summarize ');
       case 'find':
         _prefill('/find ');
       case 'explain':
@@ -331,10 +326,8 @@ class AskAiComposerState extends State<AskAiComposer> {
 
   void _submit() {
     if (!_canSend) return;
-    final raw = _text.text.trim();
-    final live = pruneMentions(raw, _mentions);
-    var message = raw;
-    var sentMentions = live;
+    final message = _text.text.trim();
+    final live = pruneMentions(message, _mentions);
     final files = [
       for (final m in live)
         if (!m.isFolder) m.path,
@@ -344,26 +337,13 @@ class AskAiComposerState extends State<AskAiComposer> {
         if (m.isFolder) m.path,
     ];
 
-    final cmd = RegExp(r'^/(\S+)\s*').firstMatch(raw);
-    switch (cmd?.group(1)?.toLowerCase()) {
-      case 'clear':
-        widget.chat.newChat();
-        _clear();
-        return;
-      case 'summarize':
-        final body = raw.substring(cmd!.end).trim();
-        final target = folders.isNotEmpty ? folders.first : _app.currentFolder;
-        if (target.isEmpty) break;
-        if (folders.isEmpty) {
-          folders.add(target);
-          sentMentions = [...live, ChatMention.forPath(target, isDir: true)];
-        }
-        final name = baseName(target);
-        message =
-            'Summarize the folder "$name" ($target): what it contains, how it is organised and what stands out.'
-            '${body.isNotEmpty ? ' Focus: $body' : ''}';
+    // `/clear` is a UI action; every other command (/find, /summarize) is the engine's.
+    if (RegExp(r'^/clear\b', caseSensitive: false).hasMatch(message)) {
+      widget.chat.newChat();
+      _clear();
+      return;
     }
-    _session.sentMentions[message.trim()] = sentMentions;
+    _session.sentMentions[message] = live;
     widget.chat.send(message, files: files, folders: folders);
     _clear();
   }
@@ -699,14 +679,14 @@ class _ModelChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final provider = context.watch<AppSettings>();
-    final cloud = provider.isUsingGemini;
+    final config = context.select<FaController, AiConfig>((a) => a.aiConfig);
+    final cloud = config.usesGemini;
     final label = chat.modelLabel;
-    final currentId = cloud ? '' : (provider.selectedLocalModel.isNotEmpty ? provider.selectedLocalModel : label);
+    final currentId = cloud ? '' : (config.effectiveModel ?? '');
     return Tooltip(
       message: 'Choose the chat model',
       child: Hoverable(
-        onTap: () => _open(context, provider),
+        onTap: () => _open(context, config),
         // `gap-1.5 rounded-md px-1.5 py-1 text-2xs font-medium`, muted → foreground.
         builder: (context, hover) => AnimatedContainer(
           duration: FaMotion.fast,
@@ -719,7 +699,7 @@ class _ModelChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (chat.hasModel)
-                ModelLogo(modelId: currentId, cloud: cloud, size: 14)
+                ModelLogo(currentId, cloud: cloud, size: 14)
               else
                 ScoopDot(c.mutedForeground.withValues(alpha: 0.4), size: 6),
               const SizedBox(width: 6),
@@ -748,28 +728,23 @@ class _ModelChip extends StatelessWidget {
     );
   }
 
-  void _open(BuildContext context, AppSettings provider) {
-    final cloud = provider.isUsingGemini;
-    final selected = provider.selectedLocalModel.isNotEmpty
-        ? provider.selectedLocalModel
-        : provider.availableLocalModels.firstOrNull;
+  void _open(BuildContext context, AiConfig config) {
+    final app = chat.app;
     final items = <FaMenuItem>[
-      if (provider.availableLocalModels.isEmpty && !provider.hasGeminiKey)
-        const FaMenuItem('No models on this device yet'),
-      for (final m in provider.availableLocalModels)
+      if (config.installedModels.isEmpty && !config.hasGeminiKey) const FaMenuItem('No models on this device yet'),
+      for (final m in config.installedModels)
         FaMenuItem(
           m,
-          leading: ModelLogo(modelId: m, size: 15),
-          shortcut: !cloud && m == selected ? '✓' : null,
-          onTap: () => provider.setSelectedLocalModel(m),
+          leading: ModelLogo(m, size: 15),
+          shortcut: !config.usesGemini && m == config.effectiveModel ? '✓' : null,
+          onTap: () => app.setChatModel(m),
         ),
-      if (provider.hasGeminiKey)
+      if (config.hasGeminiKey)
         FaMenuItem(
-          'Gemini 2.5 Flash (Cloud)',
-          leading: const ModelLogo(modelId: '', cloud: true, size: 15),
-          shortcut: cloud ? '✓' : null,
-          onTap: () =>
-              provider.saveAiConfiguration(model: AppConstants.geminiModelId, geminiApiKey: provider.geminiApiKey),
+          config.geminiLabel,
+          leading: const ModelLogo('', cloud: true, size: 15),
+          shortcut: config.usesGemini ? '✓' : null,
+          onTap: () => app.setChatModel(config.geminiChoice),
         ),
       const FaMenuItem.divider(),
       FaMenuItem(

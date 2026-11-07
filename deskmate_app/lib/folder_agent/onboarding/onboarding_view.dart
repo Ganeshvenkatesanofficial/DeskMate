@@ -7,7 +7,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_settings.dart';
-import '../../app/constants.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../core/models.dart';
@@ -15,6 +14,7 @@ import '../settings/model_widgets.dart';
 import '../settings/settings_widgets.dart';
 import '../state/fa_controller.dart';
 import '../widgets/logo.dart';
+import '../widgets/model_logo.dart';
 import '../widgets/ui.dart';
 import 'onboarding_parts.dart';
 import 'onboarding_steps.dart';
@@ -117,7 +117,6 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
         _initRoots();
       case OnboardingStep.assistant:
         _app.refreshAi();
-        context.read<AppSettings>().fetchAvailableModels();
       default:
         break;
     }
@@ -156,7 +155,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   bool get _hasChatChoice {
     final id = _llmChoice;
     if (id == null) return false;
-    return id != AppConstants.geminiModelId || context.read<AppSettings>().hasGeminiKey;
+    return id != _app.aiConfig.geminiChoice || _app.aiConfig.hasGeminiKey;
   }
 
   String? get _blocker => onboardingBlocker(_step, agreedToTerms: _agreed, hasChatModel: _hasChatChoice);
@@ -299,12 +298,12 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
 
   /// FilDOS: "The pick is mandatory, so the recommendation preselects itself
   /// unless the user already chose." — once, when the hardware probe lands.
-  void _preselect(AppSettings chat) {
+  void _preselect() {
     if (_llmPreselected || _llmChoice != null) return;
     final ai = _app.ai;
     if (ai == null) return;
     _llmPreselected = true;
-    final current = currentChatModel(_app, chat);
+    final current = currentChatModel(_app);
     _llmChoice = current ?? (ai.recommended.isEmpty ? null : ai.recommended);
   }
 
@@ -314,19 +313,18 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   void _kickChoice() {
     final id = _llmChoice;
     if (id == null || !_hasChatChoice || !_kicked.add(id)) return;
-    final chat = context.read<AppSettings>();
-    if (id != AppConstants.geminiModelId && (_app.ai?.ollamaStatus ?? 'offline') == 'offline') {
+    if (id != _app.aiConfig.geminiChoice && (_app.ai?.ollamaStatus ?? 'offline') == 'offline') {
       // Nothing to pull from yet — remember the pick; Settings can download it later.
-      _app.setPrefs({'chatModel': id});
+      unawaited(_app.setChatModel(id));
       return;
     }
-    unawaited(chooseChatModel(_app, chat, id));
+    unawaited(chooseChatModel(_app, id));
   }
 
   Future<void> _saveGeminiKey() async {
     final key = _geminiKey.text.trim();
     if (key.isEmpty) return;
-    await context.read<AppSettings>().setGeminiApiKey(key);
+    if (!await _app.setGeminiKey(key)) return;
     _geminiKey.clear();
     if (mounted) setState(() {});
   }
@@ -360,13 +358,13 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    // Rebuild on backend state (AI status, prefs, quick access) and chat settings.
+    // Rebuild on engine state (AI status and config, prefs, quick access) and the theme.
     context.watch<FaController>();
-    final chat = context.watch<AppSettings>();
+    context.watch<AppSettings>();
     final steps = _steps;
     if (_ix >= steps.length) _ix = steps.length - 1;
     final step = _step;
-    if (step == OnboardingStep.assistant) _preselect(chat);
+    if (step == OnboardingStep.assistant) _preselect();
     final blocker = _blocker;
 
     return Focus(
@@ -874,7 +872,6 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
 
   Widget _assistantStep(BuildContext context) {
     final c = context.fa;
-    final chat = context.read<AppSettings>();
     final ai = _app.ai;
     final rec = ai?.catalog.where((m) => m.id == ai.recommended).firstOrNull;
     bool isSel(String id) => _llmChoice != null && sameModel(_llmChoice!, id);
@@ -908,13 +905,13 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
           ),
       if (matches('gemini google cloud'))
         OptionRow(
-          active: isSel(AppConstants.geminiModelId),
-          onTap: () => setState(() => _llmChoice = AppConstants.geminiModelId),
+          active: isSel(_app.aiConfig.geminiChoice),
+          onTap: () => setState(() => _llmChoice = _app.aiConfig.geminiChoice),
           title: 'Gemini 2.5 Flash',
           badge: 'Cloud',
           desc: 'Runs in Google\'s cloud with your API key — files you ask about are sent to Google.',
           logo: Icon(Icons.cloud_outlined, size: 15, color: c.mutedForeground),
-          below: isSel(AppConstants.geminiModelId) && !chat.hasGeminiKey
+          below: isSel(_app.aiConfig.geminiChoice) && !_app.aiConfig.hasGeminiKey
               ? Padding(
                   padding: const EdgeInsets.only(left: 28),
                   child: Row(
@@ -1090,10 +1087,10 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   // ── models ───────────────────────────────────────────────────────────────
 
   /// Status of the chosen chat model: ready | downloading | error | missing | offline.
-  (String, double, String) _chatState(AppSettings chat) {
-    final id = _llmChoice ?? currentChatModel(_app, chat);
+  (String, double, String) _chatState() {
+    final id = _llmChoice ?? currentChatModel(_app);
     if (id == null) return ('none', 0, 'Not chosen');
-    if (id == AppConstants.geminiModelId) return ('ready', 1, AppConstants.geminiModelLabel);
+    if (id == _app.aiConfig.geminiChoice) return ('ready', 1, _app.aiConfig.geminiLabel);
     final ai = _app.ai;
     final m = ai?.catalog.where((m) => sameModel(m.id, id)).firstOrNull;
     final label = m?.label ?? id;
@@ -1166,7 +1163,6 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   }
 
   Widget _modelsStep(BuildContext context) {
-    final chat = context.read<AppSettings>();
     final emb = _app.ai?.embedder;
     final embState = switch (emb?.state) {
       'ready' => 'ready',
@@ -1175,7 +1171,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
       _ => 'missing',
     };
     final embLabel = (emb?.label.isNotEmpty ?? false) ? emb!.label : 'BGE Small (English)';
-    final (chatState, chatProgress, chatLabel) = _chatState(chat);
+    final (chatState, chatProgress, chatLabel) = _chatState();
     final chatModel = _app.ai?.catalog.where((m) => _llmChoice != null && sameModel(m.id, _llmChoice!)).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1206,7 +1202,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
                 trailing: _modelStatus(
                   chatState,
                   chatProgress,
-                  onDownload: _llmChoice == null ? null : () => chooseChatModel(_app, chat, _llmChoice!),
+                  onDownload: _llmChoice == null ? null : () => chooseChatModel(_app, _llmChoice!),
                 ),
               ),
             ],
@@ -1321,7 +1317,6 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
   // ── ready ────────────────────────────────────────────────────────────────
 
   Widget _readyStep(BuildContext context) {
-    final chat = context.read<AppSettings>();
     final mod = _app.isMac ? '⌘' : 'Ctrl';
     final shortcuts = Reveal(
       order: 3,
@@ -1347,7 +1342,7 @@ class _OnboardingViewState extends State<OnboardingView> with WidgetsBindingObse
       );
     }
     final emb = _app.ai?.embedder;
-    final (chatState, chatProgress, chatLabel) = _chatState(chat);
+    final (chatState, chatProgress, chatLabel) = _chatState();
     final roots = _rootsInit ? _roots.toList() : _app.indexRoots;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

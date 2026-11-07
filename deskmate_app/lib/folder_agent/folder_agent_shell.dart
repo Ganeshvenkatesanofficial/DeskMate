@@ -49,7 +49,7 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
     final provider = context.read<AppSettings>();
     _app = FaController(provider.backendUrl);
     _explorer = ExplorerController(_app);
-    _chat = FolderChatController(_app, provider);
+    _chat = FolderChatController(_app);
     _app.addListener(_openInitialFolder);
   }
 

@@ -800,7 +800,7 @@ class _SearchOverlayState extends State<SearchOverlay> with TickerProviderStateM
   Widget _rowTile(FaColors c, FaController app, _Row row, int i) {
     final active = i == _active;
     // The subline names the folder compactly ("~/Books", "…/Trips/2024") when there is no snippet.
-    final sub = row.snippet ?? _compactDir(parentDir(row.entry.path), app.home);
+    final sub = row.snippet ?? compactDir(parentDir(row.entry.path), app.home);
     return SizedBox(
       key: ValueKey('row:${row.entry.path}'),
       height: _rowH,
@@ -837,7 +837,11 @@ class _SearchOverlayState extends State<SearchOverlay> with TickerProviderStateM
                           style: FaText.sans(size: 14, color: c.foreground, height: 20 / 14),
                         ),
                       ),
-                      _Marked(sub, style: FaText.sans(size: 11, color: c.mutedForeground, height: 1.5)),
+                      MarkedText(
+                        sub,
+                        style: FaText.sans(size: 11, color: c.mutedForeground, height: 1.5),
+                        markColor: c.primary.withValues(alpha: 0.10),
+                      ),
                     ],
                   ),
                 ),
@@ -980,44 +984,8 @@ List<String> markedWords(String text) => {
 
 /// A folder path short enough to read at a glance: home becomes "~", and a
 /// deep path keeps only its last two folders ("…/Books/Birds").
-String _compactDir(String dir, String home) {
-  final sep = Platform.pathSeparator;
-  final underHome = home.isNotEmpty && (dir == home || dir.startsWith('$home$sep'));
-  final shown = underHome ? '~${dir.substring(home.length)}' : dir;
-  final parts = shown.split(sep).where((p) => p.isNotEmpty).toList();
-  final lead = underHome ? 1 : 0; // "~" counts as a part
-  if (parts.length - lead <= 3) return shown;
-  return ['…', ...parts.sublist(parts.length - 2)].join(sep);
-}
 
 // ── pieces ───────────────────────────────────────────────────────────────────
-
-/// A snippet with its marked words highlighted — a light wash, not weight.
-class _Marked extends StatelessWidget {
-  final String text;
-  final TextStyle style;
-  const _Marked(this.text, {required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fa;
-    final mark = TextStyle(color: c.foreground, backgroundColor: c.primary.withValues(alpha: 0.10));
-    final spans = <TextSpan>[];
-    var last = 0;
-    for (final m in RegExp('«([^«»]*)»').allMatches(text)) {
-      if (m.start > last) spans.add(TextSpan(text: text.substring(last, m.start)));
-      spans.add(TextSpan(text: m.group(1), style: mark));
-      last = m.end;
-    }
-    if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
-    return Text.rich(
-      TextSpan(style: style, children: spans),
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-}
 
 /// Radix radio-item indicator (a filled 8px circle at the left) plus an optional tag dot.
 class _RadioMark extends StatelessWidget {
@@ -1253,7 +1221,7 @@ class _PreviewPane extends StatelessWidget {
                             message: folder,
                             waitDuration: const Duration(milliseconds: 800),
                             child: Text(
-                              _compactDir(folder, home),
+                              compactDir(folder, home),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: meta,

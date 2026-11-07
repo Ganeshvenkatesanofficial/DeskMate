@@ -1,3 +1,5 @@
+import 'format.dart';
+
 // Data models for the Folder Agent REST contract (`/api/fa/*`).
 
 double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
@@ -43,6 +45,9 @@ class FsEntry {
     isSymlink: j['isSymlink'] == true,
     kind: j['kind'] as String? ?? 'file',
   );
+
+  /// FilDOS type label: "Folder", "Alias", "PDF file", "File".
+  String get typeLabel => kindLabel(kind, ext, isSymlink: isSymlink);
 
   /// Raster/vector images, PDFs and videos get a live thumbnail.
   bool get hasThumbnail => !isDir && const {'image', 'pdf', 'video', 'presentation'}.contains(kind);
@@ -260,11 +265,55 @@ class CatalogModel {
   );
 }
 
+/// The engine-owned chat-model configuration (`/api/fa/ai/config`).
+class AiConfig {
+  /// The user's choice: an Ollama model id, [geminiChoice], or null (automatic).
+  final String? chatModel;
+
+  /// What turns actually run on now (null: nothing usable yet).
+  final String? effectiveModel;
+  final String provider; // ollama | gemini
+  final bool hasGeminiKey;
+  final String geminiChoice;
+  final String geminiLabel;
+  final List<String> installedModels;
+  const AiConfig({
+    required this.chatModel,
+    required this.effectiveModel,
+    required this.provider,
+    required this.hasGeminiKey,
+    required this.geminiChoice,
+    required this.geminiLabel,
+    required this.installedModels,
+  });
+  factory AiConfig.fromJson(Map<String, dynamic> j) => AiConfig(
+    chatModel: j['chatModel'] as String?,
+    effectiveModel: j['effectiveModel'] as String?,
+    provider: j['provider'] as String? ?? 'ollama',
+    hasGeminiKey: j['hasGeminiKey'] == true,
+    geminiChoice: j['geminiChoice'] as String? ?? 'gemini-2.5-flash',
+    geminiLabel: j['geminiLabel'] as String? ?? 'Gemini 2.5 Flash (Cloud)',
+    installedModels: ((j['installedModels'] as List?) ?? const []).cast<String>(),
+  );
+  static const none = AiConfig(
+    chatModel: null,
+    effectiveModel: null,
+    provider: 'ollama',
+    hasGeminiKey: false,
+    geminiChoice: 'gemini-2.5-flash',
+    geminiLabel: 'Gemini 2.5 Flash (Cloud)',
+    installedModels: [],
+  );
+  bool get usesGemini => provider == 'gemini';
+  bool get hasModel => effectiveModel != null;
+  bool isChosen(String id) => chatModel == id || (chatModel != null && chatModel!.split(':latest').first == id);
+}
+
 class AiStatus {
   final ModelStatus embedder;
   final String ollamaStatus; // online | no_models | offline
   final List<String> ollamaModels;
-  final bool gemini;
+  final AiConfig config;
   final List<CatalogModel> catalog;
   final String recommended;
   final int? ramGb;
@@ -274,7 +323,7 @@ class AiStatus {
     required this.embedder,
     required this.ollamaStatus,
     required this.ollamaModels,
-    required this.gemini,
+    required this.config,
     required this.catalog,
     required this.recommended,
     required this.ramGb,
@@ -288,7 +337,7 @@ class AiStatus {
       embedder: ModelStatus.fromJson((j['embedder'] as Map).cast<String, dynamic>()),
       ollamaStatus: ollama['status'] as String? ?? 'offline',
       ollamaModels: ((ollama['models'] as List?) ?? const []).cast<String>(),
-      gemini: j['gemini'] == true,
+      config: j['config'] is Map ? AiConfig.fromJson((j['config'] as Map).cast<String, dynamic>()) : AiConfig.none,
       catalog: ((j['catalog'] as List?) ?? const [])
           .map((e) => CatalogModel.fromJson((e as Map).cast<String, dynamic>()))
           .toList(),

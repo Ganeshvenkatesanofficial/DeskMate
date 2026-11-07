@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/fa_theme.dart';
+import '../core/format.dart';
 import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import 'entry_interactions.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// FilDOS FileList geometry: 32px rows; Name fills, then Size 100 · Type 140 ·
 /// Modified 200 (FilDOS's default column widths).
@@ -192,9 +193,9 @@ class _Row extends StatelessWidget {
                     ),
                   ),
                 ),
-                meta(entry.isDir ? '—' : fdFormatSize(entry.size), _sizeW),
-                meta(typeLabel(entry), _typeW),
-                meta(fdFormatDate(entry.mtime), _modifiedW),
+                meta(entry.isDir ? '—' : formatBytes(entry.size), _sizeW),
+                meta(entry.typeLabel, _typeW),
+                meta(formatDate(entry.mtime), _modifiedW),
               ],
             ),
           ),

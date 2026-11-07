@@ -170,10 +170,11 @@ def test_rest_envelope(sandbox: Path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from routers.folder_routes import router
+    from routers.folder_agent import routers
 
     app = FastAPI()
-    app.include_router(router)
+    for r in routers():
+        app.include_router(r)
     client = TestClient(app)
 
     ok = client.get("/api/fa/fs/list", params={"path": str(sandbox)}).json()

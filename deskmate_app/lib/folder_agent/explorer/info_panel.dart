@@ -10,7 +10,7 @@ import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import '../widgets/ui.dart';
-import 'x_common.dart';
+import 'explorer_common.dart';
 
 /// Right-hand Info panel (FilDOS `InfoPanel`): an "Info" header, the item's
 /// preview (or type logo) and name, its tags, then labelled rows — Type, Size,
@@ -199,7 +199,7 @@ class _InfoPanelState extends State<InfoPanel> {
           ),
         ),
         _TagsRow(path: path),
-        _Row('Type', _typeLabel(e)),
+        _Row('Type', e.typeLabel),
         _Row('Size', size),
         _Row('Where', path, mono: true),
         if (linksTo != null) _Row('Links to', linksTo, mono: true),
@@ -219,13 +219,6 @@ class _InfoPanelState extends State<InfoPanel> {
 
 DateTime? _date(Object? seconds) =>
     seconds is num ? DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round()) : null;
-
-/// FilDOS `typeLabel`: Folder, Alias, "PDF file", File.
-String _typeLabel(FsEntry e) {
-  if (e.isDir) return 'Folder';
-  if (e.isSymlink) return 'Alias';
-  return e.ext.isEmpty ? 'File' : '${e.ext.toUpperCase()} file';
-}
 
 /// A live preview (max-h-32 rounded-md object-contain) for previewable files, else the 40px type logo.
 class _Hero extends StatelessWidget {
@@ -424,7 +417,7 @@ class _MultiInfo extends StatelessWidget {
     final total = files.fold<int>(0, (s, e) => s + e.size);
     final kinds = <String, int>{};
     for (final e in entries) {
-      final k = _typeLabel(e);
+      final k = e.typeLabel;
       kinds[k] = (kinds[k] ?? 0) + 1;
     }
     return Column(
