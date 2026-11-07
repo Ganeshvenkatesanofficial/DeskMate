@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../app/app_settings.dart';
+import 'app/app_settings.dart';
 import 'canvas/canvas_view.dart';
 import 'chat/ask_ai_view.dart';
 import 'chat/folder_chat_controller.dart';
@@ -30,13 +30,13 @@ import 'widgets/ui.dart';
 /// Owns the Folder Agent controllers and lays out the FilDOS-style window:
 /// top bar, sidebar, the active section, a status bar, plus the search
 /// overlay, toasts and first-run onboarding.
-class FolderAgentShell extends StatefulWidget {
-  const FolderAgentShell({super.key});
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
   @override
-  State<FolderAgentShell> createState() => _FolderAgentShellState();
+  State<AppShell> createState() => _AppShellState();
 }
 
-class _FolderAgentShellState extends State<FolderAgentShell> {
+class _AppShellState extends State<AppShell> {
   late final FaController _app;
   late final ExplorerController _explorer;
   late final FolderChatController _chat;

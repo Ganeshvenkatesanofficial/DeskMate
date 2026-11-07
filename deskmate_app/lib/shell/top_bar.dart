@@ -43,9 +43,10 @@ class TopBar extends StatelessWidget {
     final ex = context.watch<ExplorerController>();
     final canBack = app.onPage || ex.canGoBack;
     final canForward = app.canForwardToPage || (!app.onPage && ex.canGoForward);
+    final isMac = Theme.of(context).platform == TargetPlatform.macOS;
     return Container(
       height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.only(left: isMac ? 88 : 12, right: 12),
       decoration: BoxDecoration(
         color: c.card,
         border: Border(bottom: BorderSide(color: c.border)),

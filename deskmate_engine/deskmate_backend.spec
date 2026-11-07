@@ -3,13 +3,11 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = []
 binaries = []
-# Every engine module (routers and services are imported by name at startup),
+# Every engine module (the api package imports the rest by name at startup),
 # plus the few third-party modules loaded dynamically.
 hiddenimports = (
     ['settings']
-    + collect_submodules('core')
-    + collect_submodules('routers')
-    + collect_submodules('services')
+    + [m for pkg in ('core', 'api', 'agent', 'files', 'knowledge', 'db') for m in collect_submodules(pkg)]
     + ['tiktoken_ext', 'tiktoken_ext.openai_public', 'sqlite3']
 )
 
@@ -48,7 +46,7 @@ if os.path.exists('bin/macos_ocr'):
 
 a = Analysis(
     ['backend.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

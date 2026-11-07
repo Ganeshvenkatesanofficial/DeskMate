@@ -1,5 +1,5 @@
-import 'package:deskmate_app/folder_agent/chat/messages.dart';
-import 'package:deskmate_app/folder_agent/chat/telemetry_accordion.dart';
+import 'package:deskmate_app/chat/messages.dart';
+import 'package:deskmate_app/chat/telemetry_accordion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

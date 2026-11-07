@@ -1,4 +1,4 @@
-import 'package:deskmate_app/folder_agent/onboarding/onboarding_steps.dart';
+import 'package:deskmate_app/onboarding/onboarding_steps.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

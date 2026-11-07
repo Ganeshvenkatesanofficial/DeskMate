@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/app_settings.dart';
+import '../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../core/models.dart';

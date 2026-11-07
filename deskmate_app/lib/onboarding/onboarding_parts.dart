@@ -293,7 +293,9 @@ class ModelProgressRow extends StatelessWidget {
             ],
           )
         else if (state == 'error')
-          Text(text ?? 'Will retry from Settings', style: muted)
+          Expanded(
+            child: Text(text ?? 'Will retry from Settings', maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+          )
         else if (state == 'text')
           Expanded(
             child: Text(text ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
@@ -370,7 +372,7 @@ class DemoCard extends StatelessWidget {
               color: c.muted.withValues(alpha: 0.4),
               border: Border(bottom: BorderSide(color: c.border)),
             ),
-            child: child,
+            child: ClipRect(child: child),
           ),
           Padding(
             padding: const EdgeInsets.all(12),
@@ -397,12 +399,13 @@ class SearchDemo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    const hits = [('invoice-march.pdf', 0.92), ('whole-foods-scan.jpg', 0.78), ('reimbursements.xlsx', 0.61)];
+    const hits = [('invoice-march.pdf', 0.92), ('whole-foods-scan.jpg', 0.78)];
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: c.background,
             borderRadius: BorderRadius.circular(999),
@@ -490,8 +493,8 @@ class ChatDemo extends StatelessWidget {
               ),
             ),
             child: Text(
-              'What changed across my lease drafts?',
-              style: FaText.sans(size: 10, color: c.primaryForeground, height: 1.4),
+              'What changed in my lease drafts?',
+              style: FaText.sans(size: 9.5, color: c.primaryForeground, height: 1.3),
             ),
           ),
         ),
@@ -499,7 +502,7 @@ class ChatDemo extends StatelessWidget {
         Align(
           alignment: Alignment.centerLeft,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
               color: c.background,
               border: Border.all(color: c.border),
@@ -514,16 +517,16 @@ class ChatDemo extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'The rent clause changed twice v3 removed the break fee.',
-                  style: FaText.sans(size: 10, color: c.foreground.withValues(alpha: 0.8), height: 1.375),
+                  'The rent clause changed twice; v3 removed the break fee.',
+                  style: FaText.sans(size: 9.5, color: c.foreground.withValues(alpha: 0.8), height: 1.3),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                const SizedBox(height: 5),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
                   children: [
-                    for (final f in const ['lease-v2.docx', 'lease-v3.docx']) ...[
+                    for (final f in const ['lease-v2.docx', 'lease-v3.docx'])
                       Container(
-                        margin: const EdgeInsets.only(right: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(4)),
                         child: Row(
@@ -535,7 +538,6 @@ class ChatDemo extends StatelessWidget {
                           ],
                         ),
                       ),
-                    ],
                   ],
                 ),
               ],

@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 
 import 'app/app_settings.dart';
 import 'app/backend_manager.dart';
-import 'folder_agent/core/fa_theme.dart';
-import 'folder_agent/folder_agent_shell.dart';
+import 'core/fa_theme.dart';
+import 'app_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,7 +62,7 @@ class _DeskMateAppState extends State<DeskMateApp> {
         style: FaText.sans(size: 13, color: context.fa.foreground),
         child: child!,
       ),
-      home: const Scaffold(body: FolderAgentShell()),
+      home: const Scaffold(body: AppShell()),
     );
   }
 }

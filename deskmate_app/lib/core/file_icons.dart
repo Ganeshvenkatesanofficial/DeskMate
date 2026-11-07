@@ -1,8 +1,8 @@
 // GENERATED from FilDOS src/renderer/src/lib/fileLogo.ts (MIT, (c) Fahim Ahmed).
 // Maps a file to one of the folded-sheet file-type icons in
-// assets/folder_agent/file-icons/. Regenerate rather than hand-edit.
+// assets/file-icons/. Regenerate rather than hand-edit.
 
-const String _base = 'assets/folder_agent/file-icons';
+const String _base = 'assets/file-icons';
 
 const Map<String, String> _byExt = {
   'jpg': 'image',

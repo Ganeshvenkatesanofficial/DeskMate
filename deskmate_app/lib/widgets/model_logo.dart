@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/fa_theme.dart';
 
-/// Logo files by model family (assets/folder_agent/ai-logos/).
+/// Logo files by model family (assets/ai-logos/).
 const _logos = {
   'smollm': 'smollm.webp',
   'deepseek': 'deepseek.png',
@@ -35,7 +35,7 @@ class ModelLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cloud) return Icon(Icons.cloud_outlined, size: size, color: context.fa.mutedForeground);
-    final path = 'assets/folder_agent/ai-logos/${_logos[modelFamily(modelId)] ?? 'custom.webp'}';
+    final path = 'assets/ai-logos/${_logos[modelFamily(modelId)] ?? 'custom.webp'}';
     final img = path.endsWith('.svg')
         ? SvgPicture.asset(path, width: size, height: size, fit: BoxFit.contain)
         : Image.asset(path, width: size, height: size, fit: BoxFit.contain, filterQuality: FilterQuality.medium);

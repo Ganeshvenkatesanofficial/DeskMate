@@ -1,7 +1,7 @@
 import 'dart:ui';
 
-import 'package:deskmate_app/folder_agent/canvas/graph_model.dart';
-import 'package:deskmate_app/folder_agent/core/models.dart';
+import 'package:deskmate_app/canvas/graph_model.dart';
+import 'package:deskmate_app/core/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

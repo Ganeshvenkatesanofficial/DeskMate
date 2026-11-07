@@ -1,6 +1,6 @@
-import 'package:deskmate_app/folder_agent/chat/messages.dart';
-import 'package:deskmate_app/folder_agent/core/format.dart';
-import 'package:deskmate_app/folder_agent/core/models.dart';
+import 'package:deskmate_app/chat/messages.dart';
+import 'package:deskmate_app/core/format.dart';
+import 'package:deskmate_app/core/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

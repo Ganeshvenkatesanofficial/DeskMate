@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/app_settings.dart';
+import '../app/app_settings.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../state/fa_controller.dart';

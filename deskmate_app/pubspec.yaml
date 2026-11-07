@@ -86,8 +86,8 @@ flutter:
     - assets/backend/deskmate_backend.exe
     - assets/backend/deskmate_backend
     - assets/brand/
-    - assets/folder_agent/file-icons/
-    - assets/folder_agent/ai-logos/
+    - assets/file-icons/
+    - assets/ai-logos/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

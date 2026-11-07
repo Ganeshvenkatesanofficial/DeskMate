@@ -1,0 +1,89 @@
+name: CI
+
+# Every push and pull request: the engine, the app and the security scans.
+# Each check fails the run when it fails. release.yml reuses this workflow.
+
+on:
+  push:
+    branches: [main, dev, "feat/**"]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Engine (lint + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-engine
+        with:
+          extras: pytest flake8
+
+      - name: Lint
+        working-directory: deskmate_engine
+        run: |
+          flake8 . --select=E9,F63,F7,F82,F --exclude=.venv,build,dist,__pycache__
+
+      - name: Tests
+        working-directory: deskmate_engine
+        run: pytest -q
+
+  app:
+    name: App (analyze + format + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deskmate_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter test
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for secret scanning
+
+      - uses: ./.github/actions/setup-engine
+        with:
+          extras: bandit pip-audit
+
+      - name: Bandit (engine code)
+        run: bandit -r deskmate_engine -x deskmate_engine/tests,deskmate_engine/.venv -ll -ii
+
+      - name: pip-audit (engine dependencies)
+        run: pip-audit
+
+      - name: Gitleaks (secrets in history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy (filesystem)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

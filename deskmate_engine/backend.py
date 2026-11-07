@@ -14,6 +14,11 @@ import socket
 import sys
 import warnings
 
+# ── Make src/ the application root ───────────────────────────────────────────
+_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
 # Suppress early third-party warnings & set environment filters before heavy module imports
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -33,8 +38,7 @@ setup_stdio_logging()
 setup_clean_logging()
 start_parent_watchdog()
 
-from routers.api_routes import router as api_router
-from routers.folder_agent import routers as folder_agent_routers
+from api import routers
 
 # Configure logging
 logging.basicConfig(
@@ -50,7 +54,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"[STARTUP] DeskMate AI Server v{APP_VERSION} initialized successfully.")
     logger.info("[INIT] Folder Agent ready.")
     logger.info("[READY] Server accepting incoming WebSocket and REST connections.")
-    from services.folder_agent.indexer import INDEXER
+    from knowledge.indexer import INDEXER
     INDEXER.ensure_running()  # resumes background indexing of granted folders
     yield
     logger.info("[SHUTDOWN] DeskMate Backend Server shutting down cleanly...")
@@ -80,9 +84,8 @@ app.add_middleware(
 )
 
 # Mount WebSockets & REST Endpoints
-app.include_router(api_router)
-for folder_agent_router in folder_agent_routers():
-    app.include_router(folder_agent_router)
+for router in routers():
+    app.include_router(router)
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -132,6 +135,6 @@ if __name__ == "__main__":
             port=port,
             reload=True,
             reload_dirs=[root_dir],
-            reload_excludes=[".venv*", "output*", "__pycache__*", "*.db", "assets*"],
+            reload_excludes=[".venv*", "__pycache__*", "*.db", "bin*"],
             log_config=log_cfg,
         )

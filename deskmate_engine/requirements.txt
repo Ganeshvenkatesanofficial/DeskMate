@@ -18,5 +18,5 @@ networkx>=3.2
 
 # File reading, thumbnails, Trash
 pypdf>=6.21.2
-Pillow>=10.0.0
+Pillow>=13.0.0
 send2trash>=1.8.3

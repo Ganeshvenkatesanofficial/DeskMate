@@ -1,0 +1,158 @@
+name: Release
+
+# Builds the macOS and Windows apps after CI passes.
+# - push to main     → the rolling "continuous" pre-release
+# - tag v*           → a versioned release
+# - manual run       → build artifacts only (choose the platform)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        type: choice
+        default: all
+        options: [all, macos, windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  build-macos:
+    name: Build macOS
+    needs: checks
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-engine
+        with:
+          extras: pyinstaller
+
+      - name: Build the engine (with the Apple Vision OCR helper)
+        working-directory: deskmate_engine
+        run: |
+          mkdir -p bin
+          swiftc -O native/macos_ocr.swift -o bin/macos_ocr
+          pyinstaller deskmate_backend.spec --clean
+          install -m 755 dist/deskmate_backend ../deskmate_app/assets/backend/deskmate_backend
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build the app
+        working-directory: deskmate_app
+        run: |
+          flutter pub get
+          flutter build macos --release
+
+      - name: Package DMG and ZIP
+        run: |
+          app_dir=deskmate_app/build/macos/Build/Products/Release
+          mkdir -p dmg
+          cp -R "$app_dir"/*.app dmg/
+          ln -s /Applications dmg/Applications
+          cp .github/scripts/install_macos.command "dmg/Install DeskMate.command"
+          chmod +x "dmg/Install DeskMate.command"
+          xattr -cr dmg/*.app
+          codesign --force --deep --sign - dmg/*.app   # ad-hoc signature for Gatekeeper
+          hdiutil create -volname DeskMate -srcfolder dmg -ov -format UDZO DeskMate-macOS.dmg
+          (cd "$app_dir" && zip -qry "$GITHUB_WORKSPACE/DeskMate-macOS.zip" *.app)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            DeskMate-macOS.dmg
+            DeskMate-macOS.zip
+
+  build-windows:
+    name: Build Windows
+    needs: checks
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-engine
+        with:
+          extras: pyinstaller
+
+      - name: Build the engine
+        working-directory: deskmate_engine
+        shell: pwsh
+        run: |
+          pyinstaller deskmate_backend.spec --clean
+          Copy-Item dist\deskmate_backend.exe ..\deskmate_app\assets\backend\deskmate_backend.exe -Force
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build the app
+        working-directory: deskmate_app
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          Copy-Item deskmate_app\build\windows\x64\runner\Release DeskMate -Recurse
+          Compress-Archive -Path DeskMate -DestinationPath DeskMate-Windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: DeskMate-Windows.zip
+
+  publish:
+    name: Publish
+    needs: [build-macos, build-windows]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Continuous pre-release (main)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          target_commitish: ${{ github.sha }}
+          name: DeskMate Continuous Build
+          body: Automated build of main at ${{ github.sha }}.
+          prerelease: true
+          make_latest: false
+          files: |
+            DeskMate-macOS.dmg
+            DeskMate-macOS.zip
+            DeskMate-Windows.zip
+
+      - name: Versioned release (tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            DeskMate-macOS.dmg
+            DeskMate-macOS.zip
+            DeskMate-Windows.zip

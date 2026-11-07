@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../app/constants.dart';
+import '../app/constants.dart';
 import '../core/fa_api.dart';
 import '../core/fa_events.dart';
 import '../core/models.dart';
