@@ -1,14 +1,23 @@
 // Canvas scene state + painter.
 //
+// Paint semantics follow FilDOS graphViz.buildPaint exactly:
+//  - every node is always drawn; the edge-kind chips only remove links;
+//  - a node is "active" when it matches the search, its file mtime is inside
+//    the scrubber window, and (with a selection) it is the selected node or
+//    one of its neighbours. Active nodes draw at alpha 0.96, the rest at 0.08;
+//  - a link is lit when both ends are active — Blueberry similar links at
+//    0.12 + 0.3·weight (width 0.6 + weight), other kinds at 0.22 (width 0.8)
+//    — otherwise 0.02;
+//  - hovering never repaints the graph: it only adds the Ink hover ring (the
+//    cosmos `renderHoveredPointRing`) and the hover card.
+//
 // Performance model: the snapshot is flattened once ([CanvasGraph]). A
-// [_RenderPlan] (world-space Float32List batches: edge lines per kind, node
-// points per colour/size bucket) is rebuilt only when what's *shown* changes
-// (filters, hover/selection, time range, intro frames) — never on pan/zoom,
-// which only changes the canvas transform. Edges go out as one
-// `drawRawPoints(PointMode.lines)` per kind/state, nodes as round-capped
-// `drawRawPoints(PointMode.points)` per bucket: ~a few dozen draw calls for
-// 4k nodes / 20k edges. Nothing animates unless the user (or the intro /
-// replay) is driving it.
+// [_RenderPlan] (world-space Float32List batches: link lines per kind ×
+// weight bucket, node points per colour/size bucket) is rebuilt only when
+// what's *lit* changes (filters, selection, search, time range, intro
+// frames) — never on pan/zoom or hover, which only change the transform or
+// the ring. Edges go out as one `drawRawPoints(PointMode.lines)` per batch,
+// nodes as round-capped `drawRawPoints(PointMode.points)` per bucket.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -19,12 +28,20 @@ import 'package:flutter/material.dart';
 import '../core/fa_theme.dart';
 import 'graph_model.dart';
 
+/// Edge kind → scoop, matching the filter chips (one scoop, one meaning).
 const edgeColors = {
   EdgeKind.similar: Scoop.blueberry,
   EdgeKind.entity: Scoop.mint,
   EdgeKind.tag: Scoop.grape,
   EdgeKind.temporal: Scoop.mango,
 };
+
+const _activeAlpha = 0.96;
+const _dimAlpha = 0.08;
+const _dimLinkAlpha = 0.02;
+
+/// Similar-link weight buckets (alpha / width vary with weight).
+const _weightBuckets = 4;
 
 class CanvasScene extends ChangeNotifier {
   CanvasGraph? graph;
@@ -33,7 +50,8 @@ class CanvasScene extends ChangeNotifier {
   Size viewport = Size.zero;
   bool _needsFit = false;
 
-  /// Fired for everything except camera moves (hover, selection, filters).
+  /// Fired for interaction-state changes the overlays care about (hover,
+  /// selection, filters) — not for camera moves.
   final ChangeNotifier _overlay = ChangeNotifier();
   Listenable get overlay => _overlay;
 
@@ -49,15 +67,9 @@ class CanvasScene extends ChangeNotifier {
   double intro = 1;
 
   // derived state
-  Uint8List _visible = Uint8List(0);
-  Uint8List _lit = Uint8List(0);
-  int _matches = 0;
+  Uint8List _active = Uint8List(0);
   _RenderPlan? _plan;
   Float32List? _px, _py;
-
-  int? get focus => hovered ?? selected;
-  bool get emphasis => query.isNotEmpty || focus != null;
-  int get matchCount => _matches;
 
   double get minScale => fitCamera.scale * 0.25;
   double get maxScale => math.max(fitCamera.scale * 40, 6);
@@ -112,10 +124,13 @@ class CanvasScene extends ChangeNotifier {
   }
 
   // ── interaction state ─────────────────────────────────────────────────────
+
+  /// Hover only moves the ring — the plan (and so the whole graph) is untouched.
   void setHover(int? i) {
     if (i == hovered) return;
     hovered = i;
-    _invalidate();
+    _overlay.notifyListeners();
+    notifyListeners();
   }
 
   void setSelected(int? i) {
@@ -137,7 +152,7 @@ class CanvasScene extends ChangeNotifier {
   }
 
   void setRange(RangeValues? r) {
-    if (r != null && r.start <= 0.0005 && r.end >= 0.9995) r = null;
+    if (r != null && r.start <= 0.001 && r.end >= 0.999) r = null;
     if (r == range.value) return;
     range.value = r;
     _invalidate();
@@ -156,17 +171,15 @@ class CanvasScene extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── masks ─────────────────────────────────────────────────────────────────
+  // ── active mask (FilDOS buildPaint) ───────────────────────────────────────
   bool _masks = false;
 
-  bool isVisible(int i) {
-    _ensureMasks();
-    return i < _visible.length && _visible[i] == 1;
-  }
+  /// Every node is drawn; kept for callers that ask.
+  bool isVisible(int i) => graph != null && i < graph!.length;
 
-  bool isLit(int i) {
+  bool isActive(int i) {
     _ensureMasks();
-    return i < _lit.length && _lit[i] == 1;
+    return i < _active.length && _active[i] == 1;
   }
 
   void _ensureMasks() {
@@ -174,79 +187,53 @@ class CanvasScene extends ChangeNotifier {
     _masks = true;
     final g = graph;
     if (g == null) {
-      _visible = Uint8List(0);
-      _lit = Uint8List(0);
-      _matches = 0;
+      _active = Uint8List(0);
       return;
     }
     final n = g.length;
-    final vis = Uint8List(n);
     final r = range.value;
     final (t0, t1) = r == null ? (-double.infinity, double.infinity) : timeWindow(r.start, r.end, g.minTime, g.maxTime);
-    final upperOpen = r == null || r.end >= 0.999;
+    final sel = selected != null && selected! < n ? selected : null;
+    Uint8List? keep;
+    if (sel != null) {
+      keep = Uint8List(n)..[sel] = 1;
+      for (var j = g.adjStart[sel]; j < g.adjStart[sel + 1]; j++) {
+        if (kinds.contains(EdgeKind.values[g.edgeKind[g.adjEdge[j]]])) keep[g.adj[j]] = 1;
+      }
+    }
+    final active = Uint8List(n);
     for (var i = 0; i < n; i++) {
-      if (g.kind[i] != NodeKind.file) continue;
-      final t = g.mtime[i];
-      vis[i] = (t.isNaN || (t >= t0 && (upperOpen || t <= t1))) ? 1 : 0;
-    }
-    // Entity / tag hubs show when their kind is on and they link a visible file.
-    final entOn = kinds.contains(EdgeKind.entity), tagOn = kinds.contains(EdgeKind.tag);
-    for (var e = 0; e < g.edgeCount; e++) {
-      final k = g.edgeKind[e];
-      if (k == EdgeKind.entity.index && entOn || k == EdgeKind.tag.index && tagOn) {
-        final a = g.edgeA[e], b = g.edgeB[e];
-        if (g.kind[a] != NodeKind.file && g.kind[b] == NodeKind.file && vis[b] == 1) vis[a] = 1;
-        if (g.kind[b] != NodeKind.file && g.kind[a] == NodeKind.file && vis[a] == 1) vis[b] = 1;
+      var on = query.isEmpty || g.labelLower[i].contains(query);
+      if (on && r != null && g.kind[i] == NodeKind.file) {
+        final t = g.mtime[i].isNaN ? 0.0 : g.mtime[i];
+        on = t >= t0 && t <= t1;
       }
+      if (on && keep != null) on = keep[i] == 1;
+      active[i] = on ? 1 : 0;
     }
-
-    final lit = Uint8List(n);
-    var matches = 0;
-    for (var i = 0; i < n; i++) {
-      if (vis[i] == 0) continue;
-      final m = query.isEmpty || g.labelLower[i].contains(query);
-      if (m) {
-        lit[i] = 1;
-        if (query.isNotEmpty) matches++;
-      }
-    }
-    final f = focus;
-    if (f != null && f < n && vis[f] == 1) {
-      final keep = Uint8List(n)..[f] = 1;
-      for (var j = g.adjStart[f]; j < g.adjStart[f + 1]; j++) {
-        final nb = g.adj[j];
-        if (vis[nb] == 1 && kinds.contains(EdgeKind.values[g.edgeKind[g.adjEdge[j]]])) keep[nb] = 1;
-      }
-      for (var i = 0; i < n; i++) {
-        // The focus set stays lit even when it doesn't match the search.
-        lit[i] = keep[i];
-      }
-    }
-    _visible = vis;
-    _lit = lit;
-    _matches = matches;
+    _active = active;
   }
 
-  /// Number of visible neighbours of [i] (through enabled edge kinds).
-  List<int> neighboursOf(int i) {
+  /// Every connection of [i] across all edge kinds, strongest first (FilDOS
+  /// detail panel: `snapshot.edges` touching the node, top 24 by weight).
+  List<({int node, EdgeKind kind, double weight})> connectionsOf(int i, {int cap = 24}) {
     final g = graph;
     if (g == null) return const [];
-    _ensureMasks();
-    final out = <int>{};
+    final out = <({int node, EdgeKind kind, double weight})>[];
     for (var j = g.adjStart[i]; j < g.adjStart[i + 1]; j++) {
-      final nb = g.adj[j];
-      if (_visible[nb] == 1 && kinds.contains(EdgeKind.values[g.edgeKind[g.adjEdge[j]]])) out.add(nb);
+      final e = g.adjEdge[j];
+      out.add((node: g.adj[j], kind: EdgeKind.values[g.edgeKind[e]], weight: g.edgeWeight[e]));
     }
-    return out.toList();
+    out.sort((a, b) => b.weight.compareTo(a.weight));
+    return out.length > cap ? out.sublist(0, cap) : out;
   }
 
-  /// Highest-priority visible node whose label matches the query.
+  /// Highest-priority node whose label matches the query.
   int? firstMatch() {
     final g = graph;
     if (g == null || query.isEmpty) return null;
-    _ensureMasks();
     for (final i in g.priority) {
-      if (_visible[i] == 1 && g.labelLower[i].contains(query)) return i;
+      if (g.labelLower[i].contains(query)) return i;
     }
     return null;
   }
@@ -277,18 +264,16 @@ class CanvasScene extends ChangeNotifier {
   /// Screen radius of node [i].
   double screenRadius(int i) => graph!.radius[i] * zoomK;
 
-  /// The visible node under [screen], if any (nearest within its radius + slop).
+  /// The node under [screen], if any (nearest within its radius + slop).
   int? hitTest(Offset screen) {
     final g = graph;
     if (g == null) return null;
-    _ensureMasks();
     final w = camera.toWorld(screen);
     final s = camera.scale;
     final k = zoomK;
     int? best;
     var bestD = double.infinity;
     for (var i = 0; i < g.length; i++) {
-      if (_visible[i] == 0) continue;
       final dx = g.x[i] - w.dx, dy = g.y[i] - w.dy;
       final d2 = dx * dx + dy * dy;
       final r = (g.radius[i] * k + 4) / s;
@@ -308,53 +293,56 @@ class CanvasScene extends ChangeNotifier {
     _ensurePositions();
     final g = graph!;
     final px = _px!, py = _py!;
-    final vis = _visible, lit = _lit;
+    final act = _active;
 
-    // Edges: count first so each batch is a single exact-size Float32List.
+    // Links: batch key = kind × weight bucket (lit) or kind (dim).
     final kc = EdgeKind.values.length;
-    final litCount = List<int>.filled(kc, 0), dimCount = List<int>.filled(kc, 0);
-    final state = Uint8List(g.edgeCount); // 0 hidden, 1 dim, 2 lit
-    final emph = emphasis;
+    final litCount = List<int>.filled(kc * _weightBuckets, 0), dimCount = List<int>.filled(kc, 0);
+    final key = Int16List(g.edgeCount)..fillRange(0, g.edgeCount, -1);
     for (var e = 0; e < g.edgeCount; e++) {
       final k = g.edgeKind[e];
       if (!kinds.contains(EdgeKind.values[k])) continue;
       final a = g.edgeA[e], b = g.edgeB[e];
-      if (vis[a] == 0 || vis[b] == 0) continue;
-      final on = !emph || (lit[a] == 1 && lit[b] == 1);
-      state[e] = on ? 2 : 1;
-      on ? litCount[k]++ : dimCount[k]++;
+      if (act[a] == 1 && act[b] == 1) {
+        final bucket = k == EdgeKind.similar.index ? (g.edgeWeight[e].clamp(0.0, 0.999) * _weightBuckets).floor() : 0;
+        key[e] = k * _weightBuckets + bucket;
+        litCount[key[e]]++;
+      } else {
+        key[e] = 1000 + k;
+        dimCount[k]++;
+      }
     }
-    final litPts = [for (var k = 0; k < kc; k++) Float32List(litCount[k] * 4)];
-    final dimPts = [for (var k = 0; k < kc; k++) Float32List(dimCount[k] * 4)];
-    final li = List<int>.filled(kc, 0), di = List<int>.filled(kc, 0);
+    final litPts = [for (final n in litCount) Float32List(n * 4)];
+    final dimPts = [for (final n in dimCount) Float32List(n * 4)];
+    final li = List<int>.filled(litPts.length, 0), di = List<int>.filled(kc, 0);
     for (var e = 0; e < g.edgeCount; e++) {
-      final st = state[e];
-      if (st == 0) continue;
-      final k = g.edgeKind[e];
+      final kk = key[e];
+      if (kk < 0) continue;
       final a = g.edgeA[e], b = g.edgeB[e];
-      final buf = st == 2 ? litPts[k] : dimPts[k];
-      var o = st == 2 ? li[k] : di[k];
+      final dim = kk >= 1000;
+      final slot = dim ? kk - 1000 : kk;
+      final buf = dim ? dimPts[slot] : litPts[slot];
+      var o = dim ? di[slot] : li[slot];
       buf[o++] = px[a];
       buf[o++] = py[a];
       buf[o++] = px[b];
       buf[o++] = py[b];
-      st == 2 ? li[k] = o : di[k] = o;
+      dim ? di[slot] = o : li[slot] = o;
     }
 
     // Nodes: file points bucketed by colour slot × half-pixel radius.
     final litBuckets = <int, List<double>>{}, dimBuckets = <int, List<double>>{};
     final entLit = <int>[], entDim = <int>[], tagLit = <int>[], tagDim = <int>[];
     for (var i = 0; i < g.length; i++) {
-      if (vis[i] == 0) continue;
-      final on = !emph || lit[i] == 1;
+      final on = act[i] == 1;
       switch (g.kind[i]) {
         case NodeKind.entity:
           (on ? entLit : entDim).add(i);
         case NodeKind.tag:
           (on ? tagLit : tagDim).add(i);
         default:
-          final key = g.slot[i] * 64 + (g.radius[i] * 2).round();
-          ((on ? litBuckets : dimBuckets)[key] ??= <double>[])
+          final k = g.slot[i] * 64 + (g.radius[i] * 2).round();
+          ((on ? litBuckets : dimBuckets)[k] ??= <double>[])
             ..add(px[i])
             ..add(py[i]);
       }
@@ -378,21 +366,20 @@ class CanvasScene extends ChangeNotifier {
   final Map<int, TextPainter> _labels = {};
   Color? _labelColor;
 
-  TextPainter _label(int i, Color color, {bool bold = false}) {
+  TextPainter _label(int i, Color color) {
     if (_labelColor != color) {
       _clearLabels();
       _labelColor = color;
     }
-    final key = bold ? -1 - i : i;
-    return _labels[key] ??= TextPainter(
+    return _labels[i] ??= TextPainter(
       text: TextSpan(
         text: graph!.nodes[i].label,
-        style: FaText.sans(size: bold ? 11.5 : 10.5, weight: bold ? FontWeight.w600 : FontWeight.w500, color: color),
+        style: FaText.sans(size: 10, color: color),
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,
       ellipsis: '…',
-    )..layout(maxWidth: 170);
+    )..layout(maxWidth: 160);
   }
 
   void _clearLabels() {
@@ -419,7 +406,11 @@ class _NodeBatch {
 }
 
 class _RenderPlan {
-  final List<Float32List> litEdges, dimEdges;
+  /// Indexed by `kind * _weightBuckets + bucket`.
+  final List<Float32List> litEdges;
+
+  /// Indexed by kind.
+  final List<Float32List> dimEdges;
   final List<_NodeBatch> litNodes, dimNodes;
   final List<int> entLit, entDim, tagLit, tagDim;
   _RenderPlan({
@@ -455,41 +446,42 @@ class CanvasPainter extends CustomPainter {
     final s = cam.scale;
     final k = scene.zoomK;
     final px = scene._px!, py = scene._py!;
-    final dark = colors.isDark;
     final fade = scene.intro.clamp(0.0, 1.0);
-    final emph = scene.emphasis;
 
     canvas.save();
     canvas.clipRect(Offset.zero & size);
     canvas.translate(cam.offset.dx, cam.offset.dy);
     canvas.scale(s);
 
-    // ── edges ──
-    final edgePaint = Paint()
-      ..strokeWidth = 1 / s
-      ..isAntiAlias = true;
-    final baseAlpha = dark ? 0.22 : 0.30;
+    // ── links (screen-px widths, like cosmos) ──
+    final edgePaint = Paint()..isAntiAlias = true;
     for (final kind in EdgeKind.values) {
       final dim = plan.dimEdges[kind.index];
-      if (dim.isNotEmpty) {
-        edgePaint.color = edgeColors[kind]!.withValues(alpha: (dark ? 0.035 : 0.05) * fade);
-        canvas.drawRawPoints(ui.PointMode.lines, dim, edgePaint);
-      }
+      if (dim.isEmpty) continue;
+      edgePaint
+        ..color = edgeColors[kind]!.withValues(alpha: _dimLinkAlpha * fade)
+        ..strokeWidth = 0.8 / s;
+      canvas.drawRawPoints(ui.PointMode.lines, dim, edgePaint);
     }
     for (final kind in EdgeKind.values) {
-      final lit = plan.litEdges[kind.index];
-      if (lit.isEmpty) continue;
-      edgePaint
-        ..color = edgeColors[kind]!.withValues(alpha: (emph ? 0.65 : baseAlpha) * fade)
-        ..strokeWidth = (emph ? 1.3 : 1) / s;
-      canvas.drawRawPoints(ui.PointMode.lines, lit, edgePaint);
+      for (var b = 0; b < _weightBuckets; b++) {
+        final lit = plan.litEdges[kind.index * _weightBuckets + b];
+        if (lit.isEmpty) continue;
+        final similar = kind == EdgeKind.similar;
+        final w = (b + 0.5) / _weightBuckets;
+        edgePaint
+          ..color = edgeColors[kind]!.withValues(alpha: (similar ? 0.12 + 0.3 * w : 0.22) * fade)
+          ..strokeWidth = (similar ? 0.6 + w : 0.8) / s;
+        canvas.drawRawPoints(ui.PointMode.lines, lit, edgePaint);
+      }
     }
 
     // ── nodes ──
     final dotPaint = Paint()
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
-    final dimA = (dark ? 0.14 : 0.18) * fade;
+    final dimA = _dimAlpha * fade;
+    final litA = _activeAlpha * fade;
     void drawBatches(List<_NodeBatch> list, double alpha) {
       for (final b in list) {
         dotPaint
@@ -500,14 +492,14 @@ class CanvasPainter extends CustomPainter {
     }
 
     drawBatches(plan.dimNodes, dimA);
-    drawBatches(plan.litNodes, 0.95 * fade);
+    drawBatches(plan.litNodes, litA);
 
     // Entities: Mint diamonds.
     void diamonds(List<int> ids, double alpha) {
       if (ids.isEmpty) return;
       final path = Path();
       for (final i in ids) {
-        final r = g.radius[i] * k * 1.25 / s;
+        final r = g.radius[i] * k / s;
         final x = px[i], y = py[i];
         path
           ..moveTo(x, y - r)
@@ -520,81 +512,71 @@ class CanvasPainter extends CustomPainter {
     }
 
     diamonds(plan.entDim, dimA);
-    diamonds(plan.entLit, 0.95 * fade);
+    diamonds(plan.entLit, litA);
 
-    // Tags: rings in their own colour.
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2 / s;
-    void rings(List<int> ids, double alpha) {
+    // Tags: stars in their own colour.
+    final star = Paint();
+    void stars(List<int> ids, double alpha) {
       for (final i in ids) {
-        ring.color = Scoop.parse(g.nodes[i].color, Scoop.grape).withValues(alpha: alpha);
-        canvas.drawCircle(Offset(px[i], py[i]), g.radius[i] * k / s, ring);
+        star.color = Scoop.parse(g.nodes[i].color, colors.mutedForeground).withValues(alpha: alpha);
+        canvas.drawPath(_starPath(px[i], py[i], g.radius[i] * k / s), star);
       }
     }
 
-    rings(plan.tagDim, dimA);
-    rings(plan.tagLit, 0.95 * fade);
+    stars(plan.tagDim, dimA);
+    stars(plan.tagLit, litA);
 
-    // Focus / selection rings.
-    final hl = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6 / s
-      ..color = colors.foreground.withValues(alpha: 0.9);
-    for (final i in {?scene.selected, ?scene.hovered}) {
-      if (i >= g.length || !scene.isVisible(i)) continue;
-      canvas.drawCircle(Offset(px[i], py[i]), (g.radius[i] * k + 3.5) / s, hl);
+    // Hover ring (cosmos `renderHoveredPointRing`, Ink).
+    final h = scene.hovered;
+    if (h != null && h < g.length) {
+      final ring = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 / s
+        ..color = colors.foreground;
+      canvas.drawCircle(Offset(px[h], py[h]), (g.radius[h] * k + 2.5) / s, ring);
     }
     canvas.restore();
 
     if (fade >= 0.6) _paintLabels(canvas, size, g, px, py, k);
   }
 
+  static Path _starPath(double cx, double cy, double r) {
+    final p = Path();
+    for (var i = 0; i < 10; i++) {
+      final rr = i.isEven ? r : r * 0.45;
+      final a = -math.pi / 2 + i * math.pi / 5;
+      final x = cx + rr * math.cos(a), y = cy + rr * math.sin(a);
+      i == 0 ? p.moveTo(x, y) : p.lineTo(x, y);
+    }
+    return p..close();
+  }
+
+  /// FilDOS LabelsOverlay: the [kLabelCap] highest-degree nodes (entities
+  /// first), text-3xs foreground/80 with a soft drop shadow, centred 8px under
+  /// the node; a dimmed node keeps only a ghost (12%) of its label. The set is
+  /// fixed, so labels never pop in or out while panning or zooming.
   void _paintLabels(Canvas canvas, Size size, CanvasGraph g, Float32List px, Float32List py, double k) {
     final cam = scene.camera;
-    final emph = scene.emphasis;
-    final cap = (22 * k * k).clamp(22, 90).round();
-    final color = colors.foreground.withValues(alpha: 0.82);
-    final shadow = colors.background;
-    final placed = <Rect>[];
-    final view = (Offset.zero & size).inflate(40);
-
-    bool place(int i, {bool bold = false}) {
+    final color = colors.foreground.withValues(alpha: 0.8);
+    final view = (Offset.zero & size).inflate(80);
+    final shadow = Paint()
+      ..color = colors.background.withValues(alpha: 0.7)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    final n = math.min(kLabelCap, g.length);
+    for (var x = 0; x < n; x++) {
+      final i = g.priority[x];
       final p = cam.toScreen(px[i], py[i]);
-      if (!view.contains(p)) return false;
-      final r = g.radius[i] * k;
-      // Cheap estimate first so crowded areas don't lay out text they'll never show.
-      final est = math.min(170.0, g.nodes[i].label.length * 5.6);
-      final guess = Rect.fromLTWH(p.dx - est / 2, p.dy + r + 3, est, 13);
-      for (final o in placed) {
-        if (o.overlaps(guess)) return false;
+      if (!view.contains(p)) continue;
+      final tp = scene._label(i, color);
+      final at = Offset((p.dx - tp.width / 2).roundToDouble(), (p.dy + 8).roundToDouble());
+      final ghost = !scene.isActive(i);
+      if (ghost) {
+        canvas.saveLayer(at & tp.size, Paint()..color = Colors.black.withValues(alpha: 0.12));
+      } else {
+        canvas.drawRRect(RRect.fromRectAndRadius((at & tp.size).inflate(1), const Radius.circular(3)), shadow);
       }
-      final tp = scene._label(i, color, bold: bold);
-      final rect = Rect.fromLTWH(p.dx - tp.width / 2, p.dy + r + 3, tp.width, tp.height);
-      for (final o in placed) {
-        if (o.overlaps(rect)) return false;
-      }
-      placed.add(rect);
-      // A soft halo in the background colour keeps labels legible over edges.
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.inflate(2), const Radius.circular(3)),
-        Paint()..color = shadow.withValues(alpha: 0.55),
-      );
-      tp.paint(canvas, rect.topLeft);
-      return true;
-    }
-
-    final f = scene.focus;
-    if (f != null && scene.isVisible(f)) place(f, bold: true);
-    var drawn = placed.length;
-    var tries = 0;
-    for (final i in g.priority) {
-      if (drawn >= cap || tries > cap * 6) break;
-      if (i == f || !scene.isVisible(i)) continue;
-      if (emph && !scene.isLit(i)) continue;
-      if (!view.contains(cam.toScreen(px[i], py[i]))) continue;
-      tries++;
-      if (place(i)) drawn++;
+      tp.paint(canvas, at);
+      if (ghost) canvas.restore();
     }
   }
 

@@ -17,6 +17,9 @@ class FaToast {
   final ToastKind kind;
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// Set during the 200ms exit animation, just before the toast is removed.
+  bool exiting = false;
   FaToast(this.id, this.message, this.kind, {this.actionLabel, this.onAction});
 }
 
@@ -172,11 +175,52 @@ class FaController extends ChangeNotifier {
   /// Set by the explorer so other sections (Ask AI context, search scope) know the folder in view.
   String currentFolder = '';
 
+  /// Opens a section. Like FilDOS's `openPage`, re-opening the page already
+  /// in view is a no-op, and opening a new one drops the forward page.
   void showSection(FaSection s, {int? tagId}) {
+    if (s == section && tagId == activeTagId) return;
+    if (s != FaSection.browse) _forwardPage = null;
     section = s;
     activeTagId = tagId;
     notifyListeners();
   }
+
+  // FilDOS keeps pages (Recents, a tag, Canvas, Settings, Ask AI) in the same
+  // history as folders, so Back from a page returns to the folder behind it
+  // and Forward goes back to the page. The folder history lives in the
+  // explorer; this remembers the page that Back just left.
+  (FaSection, int?, String)? _forwardPage;
+
+  /// True when a page (not the file browser) is in view.
+  bool get onPage => section != FaSection.browse;
+
+  /// Forward would return to the page Back just left (the folder behind it is unchanged).
+  bool get canForwardToPage => !onPage && _forwardPage != null && _forwardPage!.$3 == currentFolder;
+
+  /// Back from a page: show the folder behind it.
+  void leavePage() {
+    if (!onPage) return;
+    _forwardPage = (section, activeTagId, currentFolder);
+    section = FaSection.browse;
+    activeTagId = null;
+    notifyListeners();
+  }
+
+  /// Forward to the page [leavePage] left.
+  void forwardToPage() {
+    final p = _forwardPage;
+    if (p == null) return;
+    _forwardPage = null;
+    section = p.$1;
+    activeTagId = p.$2;
+    notifyListeners();
+  }
+
+  /// Folder navigation drops the remembered forward page (a new history branch).
+  void dropForwardPage() => _forwardPage = null;
+
+  /// Bumped by ⌘L to put the address bar into edit mode.
+  final editAddress = ValueNotifier<int>(0);
 
   bool searchOpen = false;
   String searchSeed = '';
@@ -204,26 +248,52 @@ class FaController extends ChangeNotifier {
   final List<FaToast> toasts = [];
   int _toastId = 0;
 
+  /// Bumped whenever [toasts] changes, so the toast layer rebuilds only then.
+  int toastRev = 0;
+
+  void _toastsChanged() {
+    toastRev++;
+    notifyListeners();
+  }
+
+  /// FilDOS timing: errors stay 6s, everything else 3s.
   void toast(String message, {ToastKind kind = ToastKind.info, String? actionLabel, VoidCallback? onAction}) {
     final t = FaToast(++_toastId, message, kind, actionLabel: actionLabel, onAction: onAction);
     toasts.add(t);
     if (toasts.length > 4) toasts.removeAt(0);
-    notifyListeners();
-    Timer(Duration(milliseconds: kind == ToastKind.error ? 6000 : 3800), () => dismissToast(t.id));
+    _toastsChanged();
+    Timer(Duration(milliseconds: kind == ToastKind.error ? 6000 : 3000), () => dismissToast(t.id));
   }
 
   void toastError(FaError? e) => toast(e?.message ?? 'Something went wrong.', kind: ToastKind.error);
 
+  /// Two-phase like FilDOS: flag the toast `exiting` (it slides out over
+  /// 200ms), then remove it.
   void dismissToast(int id) {
-    toasts.removeWhere((t) => t.id == id);
-    notifyListeners();
+    final i = toasts.indexWhere((t) => t.id == id);
+    if (i < 0 || toasts[i].exiting) return;
+    toasts[i].exiting = true;
+    _toastsChanged();
+    Timer(const Duration(milliseconds: 200), () {
+      toasts.removeWhere((t) => t.id == id);
+      _toastsChanged();
+    });
+  }
+
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _sub?.cancel();
     _bootRetry?.cancel();
     _aiThrottle?.cancel();
+    editAddress.dispose();
     _fsChanged.close();
     events.dispose();
     super.dispose();

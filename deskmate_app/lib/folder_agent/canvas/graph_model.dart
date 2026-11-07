@@ -34,15 +34,16 @@ abstract final class ColorSlot {
   static const tag = 8;
 }
 
-/// Screen-space node radius (logical px at the fit zoom), gently sub-linear in degree.
+/// FilDOS `nodeSize` (a point diameter: files 3.2, entities / tags 5, plus
+/// `min(9, sqrt(degree) * 1.4)` — gently sub-linear so hubs read without
+/// dominating), returned as a radius in logical px at the fit zoom.
 double nodeRadius(int kind, int degree) {
-  final d = math.sqrt(math.max(0, degree));
-  return switch (kind) {
-    NodeKind.entity => 3.4 + math.min(3.0, d * 0.5),
-    NodeKind.tag => 4.2 + math.min(4.0, d * 0.6),
-    _ => 2.4 + math.min(5.0, d * 0.9),
-  };
+  final base = kind == NodeKind.file ? 3.2 : 5.0;
+  return (base + math.min(9.0, math.sqrt(math.max(0, degree)) * 1.4)) / 2;
 }
+
+/// How many labels the Canvas shows: FilDOS `labelIndices` cap.
+const kLabelCap = 36;
 
 /// Flattened, render-ready graph. Index `i` addresses every per-node array.
 class CanvasGraph {
@@ -64,12 +65,14 @@ class CanvasGraph {
 
   final Int32List edgeA, edgeB;
   final Uint8List edgeKind;
+  final Float32List edgeWeight;
 
   /// CSR adjacency: neighbours of `i` are `adj[adjStart[i] .. adjStart[i+1])`,
   /// reached through edge `adjEdge[..]`.
   final Int32List adjStart, adj, adjEdge;
 
-  /// Node indices by label priority: entities/tags first, then by degree.
+  /// Node indices by label priority (FilDOS `labelIndices`): entities / tags
+  /// first, then by degree.
   final Int32List priority;
   final Rect bounds;
   final double minTime, maxTime;
@@ -90,6 +93,7 @@ class CanvasGraph {
     required this.edgeA,
     required this.edgeB,
     required this.edgeKind,
+    required this.edgeWeight,
     required this.adjStart,
     required this.adj,
     required this.adjEdge,
@@ -171,16 +175,19 @@ class CanvasGraph {
 
     // Edges (dropping ones whose endpoints aren't in the snapshot).
     final ea = <int>[], eb = <int>[], ek = <int>[];
+    final ew = <double>[];
     for (final e in s.edges) {
       final a = indexOf[e.source], b = indexOf[e.target], k = edgeKindOf(e.kind);
       if (a == null || b == null || k == null || a == b) continue;
       ea.add(a);
       eb.add(b);
       ek.add(k.index);
+      ew.add(e.weight);
     }
     final m = ea.length;
     final edgeA = Int32List.fromList(ea), edgeB = Int32List.fromList(eb);
     final edgeKind = Uint8List.fromList(ek);
+    final edgeWeight = Float32List.fromList(ew);
 
     final deg = Int32List(n + 1);
     for (var e = 0; e < m; e++) {
@@ -225,6 +232,7 @@ class CanvasGraph {
       edgeA: edgeA,
       edgeB: edgeB,
       edgeKind: edgeKind,
+      edgeWeight: edgeWeight,
       adjStart: adjStart,
       adj: adj,
       adjEdge: adjEdge,

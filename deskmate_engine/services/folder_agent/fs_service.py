@@ -215,6 +215,18 @@ def get_info(path: str) -> dict[str, Any]:
     info["parent"] = str(p.parent)
     info["readable"] = os.access(p, os.R_OK)
     info["writable"] = os.access(p, os.W_OK)
+    try:
+        st = p.stat()
+        info["atime"] = st.st_atime
+        info["mode"] = stat.S_IMODE(st.st_mode)
+        info["permissions"] = stat.filemode(st.st_mode)  # e.g. "-rw-r--r--"
+    except OSError:
+        pass
+    if info["isSymlink"]:
+        try:
+            info["realPath"] = str(p.resolve(strict=True))
+        except OSError:
+            info["realPath"] = None
     if info["isDir"]:
         try:
             info["childCount"] = sum(1 for _ in os.scandir(p))

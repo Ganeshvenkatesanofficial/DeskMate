@@ -66,7 +66,15 @@ class ExplorerController extends ChangeNotifier {
     selection.clear();
     anchor = null;
     renaming = null;
-    view = (results[0] as Result<ViewPrefs?>).value ?? ViewPrefs(mode: view.mode);
+    // FilDOS: the layout (view mode) is app-wide; a folder remembers only its
+    // sort, falling back to the last deliberate (global) sort.
+    final remembered = (results[0] as Result<ViewPrefs?>).value;
+    final global = _globalView;
+    view = ViewPrefs(
+      mode: _mode ??= global.mode,
+      sortKey: remembered?.sortKey ?? global.sortKey,
+      sortDesc: remembered?.sortDesc ?? global.sortDesc,
+    );
     _applyListing(results[1] as Result<DirListing>);
     loading = false;
     app.events.watch(path);
@@ -114,11 +122,14 @@ class ExplorerController extends ChangeNotifier {
       _sort();
       final keep = entries.map((e) => e.path).toSet();
       selection.removeWhere((p) => !keep.contains(p));
+      if (anchor != null && !keep.contains(anchor)) anchor = null;
       unawaited(_loadTags());
     } else {
       error = r.error;
       _raw = entries = const [];
       hiddenCount = 0;
+      selection.clear();
+      anchor = null;
     }
   }
 
@@ -134,55 +145,66 @@ class ExplorerController extends ChangeNotifier {
     }
   }
 
-  void _sort() {
-    final list = List<FsEntry>.from(_raw);
+  void _sort() => entries = sorted(_raw);
+
+  /// FilDOS `sortEntries`: folders always lead, then the chosen key/direction.
+  /// Name compares case-insensitively (`localeCompare`, base sensitivity);
+  /// Type compares the extension, then the name. Exact ties fall back to the
+  /// name and path so re-sorting a refreshed listing never reshuffles rows.
+  List<FsEntry> sorted(Iterable<FsEntry> source) {
+    final list = List<FsEntry>.from(source);
+    final dir = view.sortDesc ? -1 : 1;
     int cmp(FsEntry a, FsEntry b) {
-      // Folders first, always.
       if (a.isDir != b.isDir) return a.isDir ? -1 : 1;
       final r = switch (view.sortKey) {
-        'mtime' => a.mtime.compareTo(b.mtime),
         'size' => a.size.compareTo(b.size),
-        'kind' => a.kind.compareTo(b.kind) != 0 ? a.kind.compareTo(b.kind) : a.ext.compareTo(b.ext),
-        _ => _natural(a.name, b.name),
+        'mtime' => a.mtime.compareTo(b.mtime),
+        'kind' => a.ext.compareTo(b.ext) != 0 ? a.ext.compareTo(b.ext) : compareNames(a.name, b.name),
+        _ => compareNames(a.name, b.name),
       };
-      final ordered = view.sortDesc ? -r : r;
-      return ordered != 0 ? ordered : _natural(a.name, b.name);
+      if (r != 0) return r * dir;
+      final n = a.name.compareTo(b.name);
+      return n != 0 ? n : a.path.compareTo(b.path);
     }
 
     list.sort(cmp);
-    entries = list;
+    return list;
   }
 
-  static final _digits = RegExp(r'(\d+)|(\D+)');
+  /// Case-insensitive name order (FilDOS `localeCompare(…, {sensitivity: 'base'})`).
+  static int compareNames(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
 
-  /// Natural, case-insensitive compare ("file2" < "file10").
-  static int _natural(String a, String b) {
-    final ma = _digits.allMatches(a.toLowerCase()).toList();
-    final mb = _digits.allMatches(b.toLowerCase()).toList();
-    for (var i = 0; i < ma.length && i < mb.length; i++) {
-      final x = ma[i].group(0)!, y = mb[i].group(0)!;
-      final nx = int.tryParse(x), ny = int.tryParse(y);
-      final c = (nx != null && ny != null) ? nx.compareTo(ny) : x.compareTo(y);
-      if (c != 0) return c;
-    }
-    return ma.length.compareTo(mb.length);
-  }
+  /// The app-wide view: the last deliberate layout + sort (FilDOS `globalView`).
+  ViewPrefs get _globalView => ViewPrefs(
+    mode: app.prefs['viewMode'] as String? ?? 'list',
+    sortKey: app.prefs['sortKey'] as String? ?? 'name',
+    sortDesc: app.prefs['sortDesc'] == true,
+  );
 
+  /// The app-wide layout once known (it does not change with the folder).
+  String? _mode;
+
+  /// A deliberate view change: becomes the global default and (for sort) this
+  /// folder's remembered view.
   Future<void> setView({String? mode, String? sortKey, bool? sortDesc}) async {
     view = view.copyWith(mode: mode, sortKey: sortKey, sortDesc: sortDesc);
+    _mode = view.mode;
     _sort();
     notifyListeners();
+    unawaited(app.setPrefs({'viewMode': view.mode, 'sortKey': view.sortKey, 'sortDesc': view.sortDesc}));
     if (current.isNotEmpty) await api.setView(current, view);
   }
 
-  /// Click on a sort header: same key flips direction.
+  /// Click on a sort header (or Sort By item): same key flips direction, a new key sorts ascending.
   void sortBy(String key) => setView(sortKey: key, sortDesc: view.sortKey == key ? !view.sortDesc : false);
 
   // ── selection ────────────────────────────────────────────────────────────
   final Set<String> selection = {};
   String? anchor;
 
+  /// The selection, in listing order, restricted to this folder (FilDOS `selectedEntries`).
   List<FsEntry> get selectedEntries => entries.where((e) => selection.contains(e.path)).toList();
+  List<String> get selectedPaths => [for (final e in selectedEntries) e.path];
   FsEntry? get primarySelection {
     final s = selectedEntries;
     return s.isEmpty ? null : s.first;
@@ -193,7 +215,9 @@ class ExplorerController extends ChangeNotifier {
       final a = entries.indexWhere((x) => x.path == anchor);
       final b = entries.indexOf(e);
       if (a >= 0 && b >= 0) {
-        if (!toggle) selection.clear();
+        // FilDOS: Shift-click replaces the selection with anchor..target and
+        // keeps the anchor (⌘ does not add to an existing range).
+        selection.clear();
         for (var i = a < b ? a : b; i <= (a < b ? b : a); i++) {
           selection.add(entries[i].path);
         }
@@ -219,14 +243,16 @@ class ExplorerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Click on empty space (FilDOS `onBackgroundClick`): clears the selection
+  /// only. An open rename field commits on its own when it loses focus.
   void clearSelection() {
-    if (selection.isEmpty && renaming == null) return;
+    if (selection.isEmpty) return;
     selection.clear();
-    renaming = null;
     notifyListeners();
   }
 
-  /// Keyboard arrows: move the selection by [delta] items (grid passes ±columns).
+  /// Keyboard arrows (FilDOS `moveCursor`): select the item [delta] away from
+  /// the anchor; with no anchor, ↓ starts at the first item and ↑ at the last.
   void moveSelection(int delta, {bool extend = false}) {
     if (entries.isEmpty) return;
     final cur = anchor == null ? -1 : entries.indexWhere((e) => e.path == anchor);
@@ -259,8 +285,15 @@ class ExplorerController extends ChangeNotifier {
   // ── rename ───────────────────────────────────────────────────────────────
   String? renaming;
 
+  /// FilDOS `startRename`: selects just the item and opens its name field.
   void beginRename([String? path]) {
-    renaming = path ?? primarySelection?.path;
+    final target = path ?? primarySelection?.path;
+    if (target == null) return;
+    selection
+      ..clear()
+      ..add(target);
+    anchor = target;
+    renaming = target;
     notifyListeners();
   }
 
@@ -272,20 +305,26 @@ class ExplorerController extends ChangeNotifier {
   Future<void> commitRename(String path, String newName) async {
     renaming = null;
     final oldName = baseName(path);
-    if (newName.trim().isEmpty || newName == oldName) {
+    final name = newName.trim();
+    if (name.isEmpty || name == oldName) {
       notifyListeners();
       return;
     }
-    final r = await api.rename(path, newName.trim());
+    final r = await api.rename(path, name);
     if (r.ok) {
       final newPath = r.value!.path;
       _record('Rename', () => api.rename(newPath, oldName));
-      await refresh(silent: true);
+      app.toast('Renamed to “$name”', kind: ToastKind.success);
+      // Swap the entry in place first so the old name never flashes back
+      // between closing the field and the refreshed listing.
+      _raw = [for (final e in _raw) e.path == path ? r.value! : e];
+      _sort();
       selection
         ..clear()
         ..add(newPath);
       anchor = newPath;
       notifyListeners();
+      await refresh(silent: true);
     } else {
       app.toastError(r.error);
       notifyListeners();
@@ -293,30 +332,33 @@ class ExplorerController extends ChangeNotifier {
   }
 
   // ── create ───────────────────────────────────────────────────────────────
-  Future<void> newFolder() async {
-    final r = await api.createFolder(current, 'untitled folder');
-    if (!r.ok) return app.toastError(r.error);
-    final created = r.value!.path;
-    _record('New Folder', () => api.trash([created]));
-    await refresh(silent: true);
-    selection
-      ..clear()
-      ..add(created);
-    renaming = created;
-    notifyListeners();
-  }
+  /// New folder. With a [name] (FilDOS's New Folder prompt) it is created and
+  /// toasted; without one it is created as "untitled folder" and opened for
+  /// inline rename.
+  Future<void> newFolder([String? name]) => _create(name, folder: true);
 
-  Future<void> newTextFile() async {
-    final r = await api.createFile(current, 'untitled.txt');
+  /// New file. With a [name] (FilDOS's New File prompt) it is created and
+  /// toasted; without one it is created as "untitled.txt" and opened for rename.
+  Future<void> newTextFile([String? name]) => _create(name, folder: false);
+
+  Future<void> _create(String? name, {required bool folder}) async {
+    final given = name?.trim();
+    if (given != null && given.isEmpty) return;
+    final n = given ?? (folder ? 'untitled folder' : 'untitled.txt');
+    final r = folder ? await api.createFolder(current, n) : await api.createFile(current, n);
     if (!r.ok) return app.toastError(r.error);
     final created = r.value!.path;
-    _record('New File', () => api.trash([created]));
+    _record(folder ? 'New folder' : 'New file', () => api.trash([created]));
+    if (given != null) app.toast('Created “$n”', kind: ToastKind.success);
     await refresh(silent: true);
-    selection
-      ..clear()
-      ..add(created);
-    renaming = created;
-    notifyListeners();
+    if (given == null) {
+      selection
+        ..clear()
+        ..add(created);
+      anchor = created;
+      renaming = created;
+      notifyListeners();
+    }
   }
 
   // ── clipboard ────────────────────────────────────────────────────────────
@@ -325,18 +367,27 @@ class ExplorerController extends ChangeNotifier {
 
   void copySelection() {
     if (selection.isEmpty) return;
-    clipboard = selection.toList();
+    copyPaths(selectedPaths);
+  }
+
+  /// FilDOS clipboard: copy/cut are silent; a cut is consumed by the paste.
+  void copyPaths(List<String> paths) {
+    if (paths.isEmpty) return;
+    clipboard = List.of(paths);
     clipMode = ClipMode.copy;
-    app.toast('Copied ${_count(clipboard.length)}');
+    notifyListeners();
+  }
+
+  void cutPaths(List<String> paths) {
+    if (paths.isEmpty) return;
+    clipboard = List.of(paths);
+    clipMode = ClipMode.cut;
     notifyListeners();
   }
 
   void cutSelection() {
     if (selection.isEmpty) return;
-    clipboard = selection.toList();
-    clipMode = ClipMode.cut;
-    app.toast('Cut ${_count(clipboard.length)} — paste to move');
-    notifyListeners();
+    cutPaths(selectedPaths);
   }
 
   bool isCut(String path) => clipMode == ClipMode.cut && clipboard.contains(path);
@@ -345,8 +396,10 @@ class ExplorerController extends ChangeNotifier {
     if (clipboard.isEmpty) return;
     final dest = into ?? current;
     if (clipMode == ClipMode.cut) {
-      await moveInto(clipboard, dest);
-      clipboard = const [];
+      if (await moveInto(clipboard, dest)) {
+        clipboard = const [];
+        notifyListeners();
+      }
     } else {
       await copyInto(clipboard, dest);
     }
@@ -357,15 +410,19 @@ class ExplorerController extends ChangeNotifier {
     if (!r.ok) return app.toastError(r.error);
     final created = r.value!.map((e) => e.path).toList();
     _record('Copy', () => api.trash(created));
-    app.toast('Copied ${_count(created.length)} to ${baseName(dest)}', kind: ToastKind.success);
+    app.toast('Copied ${_count(created.length)}', kind: ToastKind.success);
     await refresh(silent: true);
   }
 
-  Future<void> moveInto(List<String> paths, String dest) async {
+  /// Moves [paths] into [dest] (items already there are skipped). True on success.
+  Future<bool> moveInto(List<String> paths, String dest) async {
     final moves = paths.where((p) => parentDir(p) != dest && p != dest).toList();
-    if (moves.isEmpty) return;
+    if (moves.isEmpty) return false;
     final r = await api.move(moves, dest);
-    if (!r.ok) return app.toastError(r.error);
+    if (!r.ok) {
+      app.toastError(r.error);
+      return false;
+    }
     final moved = r.value!;
     final origins = {for (var i = 0; i < moved.length; i++) moved[i].path: parentDir(moves[i])};
     _record('Move', () async {
@@ -376,31 +433,35 @@ class ExplorerController extends ChangeNotifier {
       }
       return last;
     });
-    app.toast('Moved ${_count(moved.length)} to ${baseName(dest)}', kind: ToastKind.success);
+    app.toast('Moved ${_count(moved.length)}', kind: ToastKind.success);
     await refresh(silent: true);
+    return true;
   }
 
+  /// ⌘D / Duplicate: FilDOS duplicates a single selected item only.
   Future<void> duplicateSelection() async {
-    if (selection.isEmpty) return;
-    final r = await api.duplicate(selection.toList());
+    final targets = selectedPaths;
+    if (targets.length != 1) return;
+    await duplicatePath(targets.first);
+  }
+
+  Future<void> duplicatePath(String path) async {
+    final r = await api.duplicate([path]);
     if (!r.ok) return app.toastError(r.error);
     final created = r.value!.map((e) => e.path).toList();
     _record('Duplicate', () => api.trash(created));
+    app.toast('Duplicated', kind: ToastKind.success);
     await refresh(silent: true);
   }
 
   Future<void> trashSelection([List<String>? paths]) async {
-    final targets = paths ?? selection.toList();
+    final targets = paths ?? selectedPaths;
     if (targets.isEmpty) return;
     final r = await api.trash(targets);
     if (!r.ok) return app.toastError(r.error);
-    app.toast(
-      'Moved ${_count(targets.length)} to the Trash',
-      kind: ToastKind.success,
-      actionLabel: 'Show Trash',
-      onAction: () => api.open(app.isMac ? '${app.home}/.Trash' : app.home),
-    );
-    selection.removeAll(targets);
+    app.toast('Deleted ${_count(targets.length)}', kind: ToastKind.success);
+    selection.clear();
+    if (infoPath != null && targets.contains(infoPath)) infoPath = null;
     await refresh(silent: true);
   }
 
@@ -428,7 +489,7 @@ class ExplorerController extends ChangeNotifier {
     final op = _undo.removeLast();
     final r = await op.undo();
     if (r.ok) {
-      app.toast('Undid ${op.label}');
+      app.toast('Undone', kind: ToastKind.success);
     } else {
       app.toastError(r.error);
     }
@@ -436,6 +497,21 @@ class ExplorerController extends ChangeNotifier {
   }
 
   static String _count(int n) => n == 1 ? '1 item' : '$n items';
+
+  // ── info ─────────────────────────────────────────────────────────────────
+  /// The item "Get Info" asked to show (FilDOS `infoPath`); null when closed.
+  String? infoPath;
+
+  void showInfo(String path) {
+    infoPath = path;
+    notifyListeners();
+  }
+
+  void closeInfo() {
+    if (infoPath == null) return;
+    infoPath = null;
+    notifyListeners();
+  }
 
   @override
   void dispose() {

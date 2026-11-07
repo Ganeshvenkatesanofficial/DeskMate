@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -9,14 +10,13 @@ import '../core/format.dart';
 import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
-import '../widgets/file_icon.dart';
 import '../widgets/ui.dart';
 import 'file_preview.dart';
-import 'x_common.dart';
 
-/// Quick Look: a look at [entry] without opening another app. Space or Esc
-/// closes it; ←/→ (and ↑/↓) step through the files of the current folder and
-/// the explorer selection follows.
+/// Quick Look (FilDOS `QuickLook`): a look at [entry] without opening another
+/// app. Every file shows on the same fixed stage, so stepping through a folder
+/// with the arrow keys never makes the window jump. Space or Esc closes it;
+/// ↑/↓ (and ←/→) step through the folder's items and the selection follows.
 Future<void> showQuickLook(BuildContext context, FsEntry entry) {
   final app = context.read<FaController>();
   final ex = context.read<ExplorerController>();
@@ -26,7 +26,8 @@ Future<void> showQuickLook(BuildContext context, FsEntry entry) {
     barrierDismissible: true,
     barrierLabel: 'Close Quick Look',
     barrierColor: Colors.transparent,
-    transitionDuration: FaMotion.medium,
+    // Radix dialog: fade + zoom 95%, 200ms ease-snappy, in and out.
+    transitionDuration: const Duration(milliseconds: 200),
     pageBuilder: (_, _, _) => Theme(
       data: theme,
       child: MultiProvider(
@@ -41,7 +42,7 @@ Future<void> showQuickLook(BuildContext context, FsEntry entry) {
       final t = CurvedAnimation(parent: anim, curve: FaMotion.snappy);
       return FadeTransition(
         opacity: t,
-        child: ScaleTransition(scale: Tween(begin: 0.97, end: 1.0).animate(t), child: child),
+        child: ScaleTransition(scale: Tween(begin: 0.95, end: 1.0).animate(t), child: child),
       );
     },
   );
@@ -65,27 +66,34 @@ class _QuickLookState extends State<_QuickLook> {
     super.dispose();
   }
 
-  List<FsEntry> get _files => context.read<ExplorerController>().entries.where((e) => !e.isDir).toList();
-
+  /// Move the selection by [delta] items (Quick Look follows it), clamped at the ends.
   void _step(int delta) {
-    final files = _files;
-    final i = files.indexWhere((e) => e.path == _entry.path);
-    if (i < 0 || files.isEmpty) return;
-    final next = files[(i + delta).clamp(0, files.length - 1)];
+    final ex = context.read<ExplorerController>();
+    final visible = ex.entries;
+    final i = visible.indexWhere((e) => e.path == _entry.path);
+    if (i < 0) return; // shown from elsewhere: nowhere to step
+    final next = visible[(i + delta).clamp(0, visible.length - 1)];
     if (next.path == _entry.path) return;
     setState(() => _entry = next);
-    context.read<ExplorerController>().select(next);
+    ex.select(next);
   }
 
   void _close() => Navigator.of(context).maybePop();
+
+  Future<void> _openExternally() async {
+    final app = context.read<FaController>();
+    final r = await app.api.open(_entry.path);
+    if (!r.ok) app.toastError(r.error);
+  }
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is KeyUpEvent) return KeyEventResult.ignored;
     final keys = HardwareKeyboard.instance;
     if (keys.isMetaPressed || keys.isControlPressed || keys.isAltPressed) return KeyEventResult.ignored;
     final k = e.logicalKey;
-    if (e is KeyDownEvent && (k == LogicalKeyboardKey.space || k == LogicalKeyboardKey.escape)) {
-      _close();
+    // These keys are Quick Look's: nothing else may act on them too.
+    if (k == LogicalKeyboardKey.space || k == LogicalKeyboardKey.escape) {
+      if (e is KeyDownEvent) _close();
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown) {
@@ -103,57 +111,99 @@ class _QuickLookState extends State<_QuickLook> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final size = MediaQuery.sizeOf(context);
-    final files = context.watch<ExplorerController>().entries.where((e) => !e.isDir).toList();
-    final index = files.indexWhere((e) => e.path == _entry.path);
+    final e = _entry;
+    final meta = e.isDir ? formatDate(e.mtime) : '${formatBytes(e.size)} · ${formatDate(e.mtime)}';
+    final hint = FaText.sans(size: 11, color: c.mutedForeground);
     return Focus(
       focusNode: _focus,
       autofocus: true,
       onKeyEvent: _onKey,
       child: Stack(
         children: [
-          // Blurred, dimmed backdrop; a click outside closes.
+          // bg-black/40 + backdrop-blur-sm; a click outside closes.
           Positioned.fill(
             child: GestureDetector(
               onTap: _close,
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: ColoredBox(color: c.overlay),
+                child: const ColoredBox(color: Color(0x66000000)),
               ),
             ),
           ),
           Center(
             child: SizedBox(
-              width: (size.width * 0.8).clamp(360.0, 1400.0),
-              height: (size.height * 0.8).clamp(320.0, 1100.0),
+              // w-[min(880px,calc(100vw-4rem))]
+              width: math.min(880.0, size.width - 64),
               child: Material(
-                color: Colors.transparent,
-                child: FaCard(
-                  shadow: true,
-                  radius: FaRadius.xl,
-                  padding: EdgeInsets.zero,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(FaRadius.xl),
-                    child: Column(
-                      children: [
-                        _TitleBar(entry: _entry, onClose: _close),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: KeyedSubtree(
-                              key: ValueKey(_entry.path),
-                              child: FilePreview(entry: _entry),
+                type: MaterialType.transparency,
+                // bg-card border rounded-lg p-5 gap-4 shadow-lg.
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: c.card,
+                    borderRadius: BorderRadius.circular(FaRadius.lg),
+                    border: Border.all(color: c.border),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x1A000000), blurRadius: 15, spreadRadius: -3, offset: Offset(0, 10)),
+                      BoxShadow(color: Color(0x1A000000), blurRadius: 6, spreadRadius: -4, offset: Offset(0, 4)),
+                    ],
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 32),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    e.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: FaText.sans(size: 14, color: c.foreground, height: 20 / 14),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(meta, style: FaText.mono(size: 10, color: c.mutedForeground)),
+                              ],
                             ),
                           ),
-                        ),
-                        _Footer(
-                          position: index < 0 ? null : '${index + 1} of ${files.length}',
-                          canPrev: index > 0,
-                          canNext: index >= 0 && index < files.length - 1,
-                          onPrev: () => _step(-1),
-                          onNext: () => _step(1),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            // h-[min(560px,calc(100vh-13rem))]
+                            height: math.max(120.0, math.min(560.0, size.height - 208)),
+                            child: FilePreview(key: ValueKey(e.path), entry: e),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 32,
+                            child: Row(
+                              children: [
+                                const Kbd('↑'),
+                                const SizedBox(width: 6),
+                                const Kbd('↓'),
+                                const SizedBox(width: 6),
+                                Text('next file', style: hint),
+                                const SizedBox(width: 14),
+                                const Kbd('space'),
+                                const SizedBox(width: 6),
+                                Text('close', style: hint),
+                                const Spacer(),
+                                _SecondaryButton(label: 'Open', onTap: _openExternally),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      // The dialog's close button: top-4 right-4 of the card, 16px, opacity .7 → 1.
+                      Positioned(top: -4, right: -4, child: _CloseButton(onTap: _close)),
+                    ],
                   ),
                 ),
               ),
@@ -165,110 +215,51 @@ class _QuickLookState extends State<_QuickLook> {
   }
 }
 
-class _TitleBar extends StatelessWidget {
-  final FsEntry entry;
-  final VoidCallback onClose;
-  const _TitleBar({required this.entry, required this.onClose});
+/// FilDOS `Button size="sm" variant="secondary"`.
+class _SecondaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _SecondaryButton({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final app = context.read<FaController>();
-    final ex = context.read<ExplorerController>();
-    final meta = entry.isDir ? formatDate(entry.mtime) : '${formatBytes(entry.size)} · ${formatDate(entry.mtime)}';
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.only(left: 14, right: 8),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.border)),
-      ),
-      child: Row(
-        children: [
-          FileIcon.entry(entry, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    entry.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: FaText.sans(size: 13.5, weight: FontWeight.w600, color: c.foreground),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(meta, style: FaText.mono(size: 10.5, color: c.mutedForeground)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          FaButton(
-            label: 'Open with default app',
-            icon: Icons.open_in_new_rounded,
-            dense: true,
-            onPressed: () async {
-              final r = await app.api.open(entry.path);
-              if (!r.ok) app.toastError(r.error);
-            },
-          ),
-          const SizedBox(width: 4),
-          FaIconButton(
-            icon: Icons.folder_open_outlined,
-            tooltip: revealLabel(app),
-            onPressed: () => ex.reveal(entry.path),
-          ),
-          FaIconButton(icon: Icons.close_rounded, tooltip: 'Close (Esc)', onPressed: onClose),
-        ],
+    return Hoverable(
+      cursor: SystemMouseCursors.basic,
+      onTap: onTap,
+      builder: (context, hover) => AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: FaMotion.snappy,
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.muted.withValues(alpha: hover ? 0.8 : 1),
+          borderRadius: BorderRadius.circular(FaRadius.sm),
+        ),
+        child: Text(label, style: FaText.sans(size: 14, color: c.foreground)),
       ),
     );
   }
 }
 
-class _Footer extends StatelessWidget {
-  final String? position;
-  final bool canPrev;
-  final bool canNext;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-  const _Footer({
-    required this.position,
-    required this.canPrev,
-    required this.canNext,
-    required this.onPrev,
-    required this.onNext,
-  });
+class _CloseButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CloseButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final hint = FaText.sans(size: 11.5, color: c.mutedForeground);
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: c.border)),
-      ),
-      child: Row(
-        children: [
-          const Kbd('←'),
-          const SizedBox(width: 4),
-          const Kbd('→'),
-          const SizedBox(width: 6),
-          Text('next file', style: hint),
-          const SizedBox(width: 14),
-          const Kbd('space'),
-          const SizedBox(width: 6),
-          Text('close', style: hint),
-          const Spacer(),
-          if (position != null) ...[
-            FaIconButton(icon: Icons.chevron_left_rounded, tooltip: 'Previous', onPressed: canPrev ? onPrev : null),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(position!, style: FaText.mono(size: 10.5, color: c.mutedForeground)),
-            ),
-            FaIconButton(icon: Icons.chevron_right_rounded, tooltip: 'Next', onPressed: canNext ? onNext : null),
-          ],
-        ],
+    return Tooltip(
+      message: 'Close',
+      child: Hoverable(
+        cursor: SystemMouseCursors.basic,
+        onTap: onTap,
+        builder: (context, hover) => AnimatedOpacity(
+          opacity: hover ? 1 : 0.7,
+          duration: const Duration(milliseconds: 150),
+          child: SizedBox(width: 16, height: 16, child: Icon(Icons.close_rounded, size: 16, color: c.foreground)),
+        ),
       ),
     );
   }

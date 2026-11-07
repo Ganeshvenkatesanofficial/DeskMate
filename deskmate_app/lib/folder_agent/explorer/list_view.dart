@@ -2,51 +2,54 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/fa_theme.dart';
-import '../core/format.dart';
 import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
-import '../widgets/ui.dart';
-import 'context_menu.dart';
 import 'entry_interactions.dart';
-import 'grid_view.dart' show tagColorFor;
+import 'x_common.dart';
 
-/// Detail list with sortable Name / Date Modified / Size / Kind columns.
+/// FilDOS FileList geometry: 32px rows; Name fills, then Size 100 · Type 140 ·
+/// Modified 200 (FilDOS's default column widths).
+const double _rowH = 32;
+const double _sizeW = 100, _typeW = 140, _modifiedW = 200;
+
+/// Detail list (FilDOS FileList) with sortable Name / Size / Type / Modified.
 class FileListView extends StatelessWidget {
   const FileListView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final ex = context.watch<ExplorerController>();
-    return Column(
-      children: [
-        const _Header(),
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: ex.clearSelection,
-            onSecondaryTapDown: (d) => showBackgroundMenu(context, d.globalPosition),
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
-              itemExtent: 30,
-              itemCount: ex.entries.length,
-              findChildIndexCallback: (key) {
-                if (key is! ValueKey<String>) return null;
-                final i = ex.entries.indexWhere((e) => e.path == key.value);
-                return i < 0 ? null : i;
-              },
-              itemBuilder: (context, i) =>
-                  _Row(key: ValueKey(ex.entries[i].path), entry: ex.entries[i], striped: i.isOdd),
+    final entries = context.select<ExplorerController, List<FsEntry>>((ex) => ex.entries);
+    return PaneBackground(
+      child: Column(
+        children: [
+          const _Header(),
+          // FilDOS keeps the column header above the empty message.
+          if (entries.isEmpty)
+            Expanded(
+              child: Center(
+                child: Text('This folder is empty', style: FaText.sans(size: 13, color: context.fa.mutedForeground)),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                itemExtent: _rowH,
+                itemCount: entries.length,
+                findChildIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final i = entries.indexWhere((e) => e.path == key.value);
+                  return i < 0 ? null : i;
+                },
+                itemBuilder: (context, i) => _Row(key: ValueKey(entries[i].path), entry: entries[i]),
+              ),
             ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
-
-const _dateW = 190.0, _sizeW = 96.0, _kindW = 150.0;
 
 class _Header extends StatelessWidget {
   const _Header();
@@ -54,48 +57,74 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     final ex = context.watch<ExplorerController>();
-    Widget col(String key, String label, {double? width, bool right = false}) {
+    Widget col(String key, String label, {double? width}) {
       final active = ex.view.sortKey == key;
-      final cell = Hoverable(
+      final cell = _HeaderCell(
+        label: label,
+        arrow: active ? (ex.view.sortDesc ? '▼' : '▲') : null,
         onTap: () => ex.sortBy(key),
-        builder: (context, hover) => Row(
-          mainAxisAlignment: right ? MainAxisAlignment.end : MainAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: FaText.sans(
-                size: 11,
-                weight: FontWeight.w500,
-                color: active || hover ? c.foreground : c.mutedForeground,
-              ),
-            ),
-            if (active)
-              Icon(
-                ex.view.sortDesc ? Icons.arrow_drop_down_rounded : Icons.arrow_drop_up_rounded,
-                size: 16,
-                color: c.foreground,
-              ),
-          ],
-        ),
       );
       return width == null ? Expanded(child: cell) : SizedBox(width: width, child: cell);
     }
 
     return Container(
-      height: 28,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
+        color: c.background,
         border: Border(bottom: BorderSide(color: c.border)),
       ),
       child: Row(
         children: [
           col('name', 'Name'),
-          col('mtime', 'Date Modified', width: _dateW),
-          col('size', 'Size', width: _sizeW, right: true),
-          const SizedBox(width: 18),
-          col('kind', 'Kind', width: _kindW),
+          col('size', 'Size', width: _sizeW),
+          col('kind', 'Type', width: _typeW),
+          col('mtime', 'Modified', width: _modifiedW),
         ],
+      ),
+    );
+  }
+}
+
+/// `px-2.5 py-2 text-2xs font-semibold uppercase tracking-wider`, muted → foreground on hover.
+class _HeaderCell extends StatefulWidget {
+  final String label;
+  final String? arrow;
+  final VoidCallback onTap;
+  const _HeaderCell({required this.label, required this.arrow, required this.onTap});
+  @override
+  State<_HeaderCell> createState() => _HeaderCellState();
+}
+
+class _HeaderCellState extends State<_HeaderCell> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    final color = _hover ? c.foreground : c.mutedForeground;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  widget.label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: FaText.sans(size: 11, weight: FontWeight.w600, color: color, letterSpacing: 0.55, height: 1.5),
+                ),
+              ),
+              if (widget.arrow != null) ...[
+                const SizedBox(width: 4),
+                Text(widget.arrow!, style: TextStyle(fontSize: 8, color: color, height: 1)),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -103,75 +132,74 @@ class _Header extends StatelessWidget {
 
 class _Row extends StatelessWidget {
   final FsEntry entry;
-  final bool striped;
-  const _Row({super.key, required this.entry, required this.striped});
+  const _Row({super.key, required this.entry});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final ex = context.watch<ExplorerController>();
-    final app = context.read<FaController>();
-    final selected = ex.selection.contains(entry.path);
-    final tags = ex.tagsByPath[entry.path] ?? const [];
-    final meta = FaText.sans(size: 12, color: c.mutedForeground);
+    final selected = context.select<ExplorerController, bool>((ex) => ex.selection.contains(entry.path));
+    final editing = context.select<ExplorerController, bool>((ex) => ex.renaming == entry.path);
+    final tags = context.select<ExplorerController, List<int>>((ex) => ex.tagsByPath[entry.path] ?? const []);
+    context.select<FaController, int>((app) => app.tags.length);
+    final cell = FaText.sans(size: 12, color: c.mutedForeground);
+    Widget meta(String text, double width) => SizedBox(
+      width: width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text(text, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: cell),
+      ),
+    );
     return EntryInteractions(
       entry: entry,
-      radius: BorderRadius.circular(FaRadius.sm),
-      child: Hoverable(
-        builder: (context, hover) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: selected
-                ? c.selection
-                : hover
-                ? c.accent.withValues(alpha: 0.7)
-                : (striped ? c.muted.withValues(alpha: c.isDark ? 0.35 : 0.55) : Colors.transparent),
-            borderRadius: BorderRadius.circular(FaRadius.sm),
-          ),
-          child: Opacity(
-            opacity: ex.isCut(entry.path) || entry.hidden ? 0.5 : 1,
+      editing: editing,
+      builder: (context, hover, drop) {
+        final Color bg = drop
+            ? fdHover(c)
+            : selected
+            ? fdSelected(c)
+            : hover
+            ? fdHover(c)
+            : Colors.transparent;
+        return Opacity(
+          opacity: entry.hidden ? kFdHiddenOpacity : 1,
+          child: Container(
+            color: bg,
+            foregroundDecoration: drop ? BoxDecoration(border: Border.all(color: fdRing(c), width: 2)) : null,
             child: Row(
               children: [
-                FileIcon.entry(entry, size: 18),
-                const SizedBox(width: 9),
                 Expanded(
-                  child: ex.renaming == entry.path
-                      ? RenameField(entry: entry)
-                      : Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                entry.name,
-                                overflow: TextOverflow.ellipsis,
-                                style: FaText.sans(size: 12.5, color: c.foreground),
-                              ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        FileIcon.entry(entry, size: 16),
+                        const SizedBox(width: 8),
+                        if (editing)
+                          Expanded(child: RenameField(entry: entry))
+                        else ...[
+                          Flexible(
+                            child: Text(
+                              entry.name,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: FaText.sans(size: 13, weight: FontWeight.w500, color: c.foreground),
                             ),
-                            for (final id in tags.take(3))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 5),
-                                child: ScoopDot(tagColorFor(app, id), size: 7),
-                              ),
-                          ],
-                        ),
+                          ),
+                          if (tags.isNotEmpty) ...[const SizedBox(width: 8), TagDotsRow(tags)],
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                SizedBox(
-                  width: _dateW,
-                  child: Text(formatDate(entry.mtime), style: meta, overflow: TextOverflow.ellipsis),
-                ),
-                SizedBox(
-                  width: _sizeW,
-                  child: Text(entry.isDir ? '--' : formatBytes(entry.size), style: meta, textAlign: TextAlign.right),
-                ),
-                const SizedBox(width: 18),
-                SizedBox(
-                  width: _kindW,
-                  child: Text(kindLabel(entry.kind, entry.ext), style: meta, overflow: TextOverflow.ellipsis),
-                ),
+                meta(entry.isDir ? '—' : fdFormatSize(entry.size), _sizeW),
+                meta(typeLabel(entry), _typeW),
+                meta(fdFormatDate(entry.mtime), _modifiedW),
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

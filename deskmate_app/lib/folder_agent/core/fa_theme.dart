@@ -68,6 +68,19 @@ class FaColors extends ThemeExtension<FaColors> {
 
   bool get isDark => brightness == Brightness.dark;
 
+  /// `--input` (field borders) — the same hairline as [border] in FilDOS.
+  Color get input => border;
+
+  /// `--ring` (focus rings) — Ink in light mode, near-white in dark mode.
+  Color get ring => foreground;
+
+  /// FilDOS's active/pressed wash: `bg-foreground/[0.09]` (sidebar selection,
+  /// ghost-button hover).
+  Color get wash => foreground.withValues(alpha: 0.09);
+
+  /// The dialog scrim (`bg-black/40`), the same in both modes.
+  Color get dialogScrim => const Color(0x66000000);
+
   static const light = FaColors(
     brightness: Brightness.light,
     background: Color(0xFFFFFFFF),
@@ -103,7 +116,7 @@ class FaColors extends ThemeExtension<FaColors> {
     success: Color(0xFF4ADE80),
     sidebar: Color(0xFF0F1117),
     selection: Color(0x26EEF2FB),
-    overlay: Color(0x99000000),
+    overlay: Color(0x330F1117),
   );
 
   @override
@@ -147,16 +160,37 @@ abstract final class FaText {
   static TextStyle mono({double size = 11, FontWeight weight = FontWeight.w400, Color? color, double? height}) =>
       TextStyle(fontFamily: monoFamily, fontSize: size, fontWeight: weight, color: color, height: height);
 
-  /// Uppercase section label ("QUICK ACCESS").
+  /// Uppercase section label ("QUICK ACCESS"): FilDOS `text-3xs font-semibold
+  /// tracking-wider` — 10px, 600, 0.05em.
   static TextStyle label(FaColors c) =>
-      sans(size: 10.5, weight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.9);
+      sans(size: 10, weight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.5);
 }
 
 abstract final class FaMotion {
   static const snappy = Cubic(0.23, 1, 0.32, 1);
   static const fluid = Cubic(0.77, 0, 0.175, 1);
-  static const fast = Duration(milliseconds: 140);
+
+  /// Tailwind `duration-150` — every FilDOS colour/hover transition.
+  static const fast = Duration(milliseconds: 150);
   static const medium = Duration(milliseconds: 240);
+}
+
+/// Tailwind's elevation shadows as FilDOS uses them.
+abstract final class FaShadow {
+  /// `shadow-xs` (buttons, inputs).
+  static const xs = [BoxShadow(color: Color(0x0D000000), blurRadius: 2, offset: Offset(0, 1))];
+
+  /// `shadow-md` (dropdown / context menus).
+  static const md = [
+    BoxShadow(color: Color(0x1A000000), blurRadius: 6, spreadRadius: -1, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x1A000000), blurRadius: 4, spreadRadius: -2, offset: Offset(0, 2)),
+  ];
+
+  /// `shadow-lg` (dialogs, toasts, submenus).
+  static const lg = [
+    BoxShadow(color: Color(0x1A000000), blurRadius: 15, spreadRadius: -3, offset: Offset(0, 10)),
+    BoxShadow(color: Color(0x1A000000), blurRadius: 6, spreadRadius: -4, offset: Offset(0, 4)),
+  ];
 }
 
 abstract final class FaRadius {
@@ -193,9 +227,10 @@ ThemeData faThemeData(ThemeData base, Brightness brightness) {
     scaffoldBackgroundColor: c.background,
     canvasColor: c.background,
     dividerColor: c.border,
+    // FilDOS inputs: `selection:bg-foreground/20`.
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: c.foreground,
-      selectionColor: Scoop.mint.withValues(alpha: 0.30),
+      selectionColor: c.foreground.withValues(alpha: 0.20),
     ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
@@ -203,7 +238,7 @@ ThemeData faThemeData(ThemeData base, Brightness brightness) {
         borderRadius: BorderRadius.circular(6),
       ),
       textStyle: FaText.sans(size: 11.5, color: Colors.white),
-      waitDuration: const Duration(milliseconds: 450),
+      waitDuration: const Duration(milliseconds: 700),
     ),
     // Neutral fields: DeskMate's app theme focuses inputs in purple; Folder
     // Agent fields are borderless unless they draw their own (FaTextField).
@@ -224,10 +259,20 @@ ThemeData faThemeData(ThemeData base, Brightness brightness) {
       surface: c.card,
       onSurface: c.foreground,
     ),
+    // FilDOS scrollbars: a ~4px pill (10px track, 3px transparent border) of
+    // foreground at 16%, 34% on hover, on a transparent track.
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStatePropertyAll(c.mutedForeground.withValues(alpha: 0.35)),
-      radius: const Radius.circular(8),
-      thickness: const WidgetStatePropertyAll(6),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => c.foreground.withValues(
+          alpha: s.contains(WidgetState.hovered) || s.contains(WidgetState.dragged) ? 0.34 : 0.16,
+        ),
+      ),
+      trackColor: const WidgetStatePropertyAll(Colors.transparent),
+      trackBorderColor: const WidgetStatePropertyAll(Colors.transparent),
+      radius: const Radius.circular(999),
+      thickness: const WidgetStatePropertyAll(4),
+      crossAxisMargin: 3,
+      mainAxisMargin: 3,
     ),
     extensions: [c],
   );

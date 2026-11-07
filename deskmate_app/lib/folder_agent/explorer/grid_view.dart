@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,40 +8,48 @@ import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
-import '../widgets/ui.dart';
-import 'context_menu.dart';
 import 'entry_interactions.dart';
+import 'x_common.dart';
 
+/// Legacy tile metrics still used by the tag-files page.
 const double kGridTileWidth = 132;
 const double kGridTileHeight = 132;
 
-/// Icon grid (the FilDOS default view): big type icons / thumbnails, names below.
+/// FilDOS GridView tile geometry (icon size "medium"): a 128×116 tile, a
+/// 64px cover-cropped thumbnail or a 54px type logo, packed edge to edge.
+const double _tileW = 128;
+const double _tileH = 116;
+const double _preview = 64;
+const double _logo = 54;
+const double _pad = 8; // p-2 around the grid
+
+/// Icon grid (FilDOS GridView): type logos / thumbnails with names below.
 class FileGridView extends StatelessWidget {
   const FileGridView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final ex = context.watch<ExplorerController>();
+    final entries = context.select<ExplorerController, List<FsEntry>>((ex) => ex.entries);
     return LayoutBuilder(
       builder: (context, box) {
-        final columns = ((box.maxWidth - 24) / (kGridTileWidth + 8)).floor().clamp(1, 64);
-        GridColumns.of(context)?.value = columns;
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: ex.clearSelection,
-          onSecondaryTapDown: (d) => showBackgroundMenu(context, d.globalPosition),
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisExtent: kGridTileHeight + 18,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 6,
-            ),
-            itemCount: ex.entries.length,
-            // Tiles follow their file across refreshes and re-sorts (no thumbnail swaps).
-            findChildIndexCallback: (key) => _indexOf(ex, key),
-            itemBuilder: (context, i) => _GridTile(key: ValueKey(ex.entries[i].path), entry: ex.entries[i]),
+        final perRow = math.max(1, ((box.maxWidth - _pad * 2) / _tileW).floor());
+        GridColumns.of(context)?.value = perRow;
+        final rows = (entries.length / perRow).ceil();
+        return PaneBackground(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(_pad),
+            itemExtent: _tileH,
+            itemCount: rows,
+            itemBuilder: (context, r) {
+              final start = r * perRow;
+              final end = math.min(start + perRow, entries.length);
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = start; i < end; i++) _GridTile(key: ValueKey(entries[i].path), entry: entries[i]),
+                ],
+              );
+            },
           ),
         );
       },
@@ -56,12 +66,6 @@ class GridColumns extends InheritedWidget {
   bool updateShouldNotify(GridColumns old) => false;
 }
 
-int? _indexOf(ExplorerController ex, Key key) {
-  if (key is! ValueKey<String>) return null;
-  final i = ex.entries.indexWhere((e) => e.path == key.value);
-  return i < 0 ? null : i;
-}
-
 class _GridTile extends StatelessWidget {
   final FsEntry entry;
   const _GridTile({super.key, required this.entry});
@@ -69,65 +73,84 @@ class _GridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final ex = context.watch<ExplorerController>();
-    final app = context.read<FaController>();
-    final selected = ex.selection.contains(entry.path);
-    final renaming = ex.renaming == entry.path;
-    final tags = ex.tagsByPath[entry.path] ?? const [];
+    final selected = context.select<ExplorerController, bool>((ex) => ex.selection.contains(entry.path));
+    final editing = context.select<ExplorerController, bool>((ex) => ex.renaming == entry.path);
+    final tags = context.select<ExplorerController, List<int>>((ex) => ex.tagsByPath[entry.path] ?? const []);
+    context.select<FaController, int>((app) => app.tags.length);
     return EntryInteractions(
       entry: entry,
-      child: Hoverable(
-        builder: (context, hover) => AnimatedContainer(
-          duration: FaMotion.fast,
-          padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
-          decoration: BoxDecoration(
-            color: selected ? c.selection : (hover ? c.accent.withValues(alpha: 0.7) : Colors.transparent),
-            borderRadius: BorderRadius.circular(FaRadius.lg),
-          ),
-          child: Opacity(
-            opacity: ex.isCut(entry.path) || entry.hidden ? 0.5 : 1,
+      editing: editing,
+      builder: (context, hover, drop) {
+        final Color bg = drop
+            ? fdHover(c)
+            : selected
+            ? fdSelected(c)
+            : hover
+            ? fdHover(c)
+            : Colors.transparent;
+        final ring = drop ? 2.0 : (selected ? 1.0 : 0.0);
+        return Opacity(
+          opacity: entry.hidden ? kFdHiddenOpacity : 1,
+          child: Container(
+            width: _tileW,
+            height: _tileH,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(FaRadius.lg)),
+            foregroundDecoration: ring == 0
+                ? null
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(FaRadius.lg),
+                    border: Border.all(color: fdRing(c), width: ring),
+                  ),
             child: Column(
               children: [
-                SizedBox(
-                  height: 76,
-                  child: Center(child: FileIcon.entry(entry, size: entry.hasThumbnail ? 72 : 60, thumbnail: true)),
+                Expanded(
+                  child: Center(
+                    child: FileIcon.entry(
+                      entry,
+                      size: _preview,
+                      logoSize: _logo,
+                      thumbnail: true,
+                      fit: BoxFit.cover,
+                      radius: FaRadius.sm,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                if (renaming)
-                  RenameField(entry: entry, align: TextAlign.center, maxLines: 2)
+                const SizedBox(height: 6),
+                if (editing)
+                  RenameField(entry: entry, align: TextAlign.center, fontSize: 12, strongBorder: true)
                 else
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (final id in tags.take(3))
-                        Padding(
-                          padding: const EdgeInsets.only(right: 3),
-                          child: ScoopDot(tagColorFor(app, id), size: 7),
+                  Tooltip(
+                    message: entry.name,
+                    waitDuration: const Duration(milliseconds: 800),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            if (tags.isNotEmpty)
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: TagDotsRow(tags, dotSize: 7),
+                                ),
+                              ),
+                            TextSpan(text: entry.name),
+                          ],
                         ),
-                      if (tags.isNotEmpty) const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
-                          entry.name,
-                          maxLines: 2,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: FaText.sans(size: 12.5, weight: FontWeight.w500, color: c.foreground, height: 1.3),
-                        ),
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: FaText.sans(size: 12, weight: FontWeight.w500, color: c.foreground, height: 1.25),
                       ),
-                    ],
+                    ),
                   ),
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
-}
-
-Color tagColorFor(FaController app, int id) {
-  for (final t in app.tags) {
-    if (t.id == id) return Scoop.parse(t.color);
-  }
-  return Scoop.blueberry;
 }

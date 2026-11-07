@@ -8,6 +8,7 @@ import 'chat/ask_ai_view.dart';
 import 'chat/folder_chat_controller.dart';
 import 'core/fa_theme.dart';
 import 'core/format.dart';
+import 'core/models.dart';
 import 'explorer/explorer_pane.dart';
 import 'explorer/grid_view.dart' show GridColumns;
 import 'explorer/quick_look.dart';
@@ -95,12 +96,11 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
 
   Widget _frame(BuildContext context, {required bool ready, required bool onboarded}) {
     final c = context.fa;
-    if (!ready) return _Splash(colors: c);
+    if (!ready) return const _Splash();
     if (!onboarded) return const OnboardingView();
     return GridColumns(
       notifier: _gridColumns,
-      child: _Shortcuts(
-        gridColumns: _gridColumns,
+      child: _KeyboardMap(
         child: Material(
           color: c.background,
           child: Stack(
@@ -152,29 +152,98 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
   };
 }
 
-class _Splash extends StatelessWidget {
-  final FaColors colors;
-  const _Splash({required this.colors});
+/// FilDOS `Splash`: the mark (64px) gently floating, `gap-7`, then the
+/// wordmark (`text-2xl`) over a 112×2px track with a sweeping quarter-width
+/// bar (`gap-3.5`). Motion stops under reduced-motion.
+class _Splash extends StatefulWidget {
+  const _Splash();
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: colors.background,
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const DeskMateMark(size: 44),
-          const SizedBox(height: 14),
-          const DeskMateWordmark(size: 20),
-          const SizedBox(height: 18),
-          const SizedBox(width: 120, child: FaProgressBar()),
-          const SizedBox(height: 10),
-          Text('Starting the DeskMate engine…', style: FaText.sans(size: 12, color: colors.mutedForeground)),
-        ],
-      ),
-    ),
-  );
+  State<_Splash> createState() => _SplashState();
 }
 
+class _SplashState extends State<_Splash> with TickerProviderStateMixin {
+  late final _float = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+  late final _sweep = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _float.stop();
+      _sweep.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _float.dispose();
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return ColoredBox(
+      color: c.background,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _float,
+              builder: (context, child) {
+                // translateY 0 → -5px → 0 on the fluid ease.
+                final t = _float.value;
+                final half = t < 0.5 ? t * 2 : (1 - t) * 2;
+                return Transform.translate(offset: Offset(0, -5 * FaMotion.fluid.transform(half)), child: child);
+              },
+              child: const DeskMateMark(size: 64),
+            ),
+            const SizedBox(height: 28),
+            const DeskMateWordmark(size: 24),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                width: 112,
+                height: 2,
+                color: c.muted,
+                child: AnimatedBuilder(
+                  animation: _sweep,
+                  builder: (context, _) {
+                    // translateX(-120%) → translateX(420%) of a 28px segment.
+                    final x = (-1.2 + 5.4 * FaMotion.fluid.transform(_sweep.value)) * 28;
+                    return Stack(
+                      children: [
+                        Positioned(
+                          left: x,
+                          top: 0,
+                          bottom: 0,
+                          width: 28,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: c.foreground.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// FilDOS `StatusBar`: `bg-card border-t px-3 py-1 text-2xs` Mist text —
+/// "N items (H hidden)" (or the page's name) on the left, "N selected · size"
+/// on the right. With nothing selected the right side reports indexing.
 class _StatusBar extends StatelessWidget {
   const _StatusBar();
   @override
@@ -183,43 +252,47 @@ class _StatusBar extends StatelessWidget {
     final app = context.watch<FaController>();
     final ex = context.watch<ExplorerController>();
     final idx = app.index;
-    final left = switch (app.section) {
-      FaSection.browse =>
-        ex.selection.isNotEmpty
-            ? '${ex.selection.length} of ${ex.entries.length} selected'
-            : '${ex.entries.length} item${ex.entries.length == 1 ? '' : 's'}${ex.hiddenCount > 0 ? ' (${ex.hiddenCount} hidden)' : ''}',
+    final page = switch (app.section) {
+      FaSection.browse => null,
       FaSection.recents => 'Recents',
-      FaSection.tag => 'Tag',
+      FaSection.tag => app.tags.where((t) => t.id == app.activeTagId).map((t) => t.name).firstOrNull ?? 'Tag',
       FaSection.canvas => 'Canvas',
       FaSection.askAi => 'Ask AI',
       FaSection.settings => 'Settings',
     };
-    final style = FaText.sans(size: 11, color: c.mutedForeground);
+    final n = ex.entries.length;
+    final left = page ?? '$n item${n == 1 ? '' : 's'}${ex.hiddenCount > 0 ? ' (${ex.hiddenCount} hidden)' : ''}';
+    final selected = page == null ? ex.selectedEntries : const <FsEntry>[];
+    final selectedSize = selected.fold<int>(0, (s, e) => s + (e.isDir ? 0 : e.size));
+    final style = FaText.sans(size: 11, color: c.mutedForeground, height: 1.5);
     return Container(
-      height: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
+        color: c.card,
         border: Border(top: BorderSide(color: c.border)),
       ),
       child: Row(
         children: [
           Text(left, style: style),
+          const SizedBox(width: 16),
           const Spacer(),
-          if (idx.busy) ...[
-            const SizedBox(
-              width: 10,
-              height: 10,
-              child: CircularProgressIndicator(strokeWidth: 1.4, color: Scoop.mint),
-            ),
-            const SizedBox(width: 6),
+          if (selected.isNotEmpty)
             Text(
-              idx.state == 'scanning'
-                  ? 'Scanning folders…'
-                  : 'Indexing ${idx.done}/${idx.total}${idx.current != null ? ' · ${baseName(idx.current!)}' : ''}',
+              '${selected.length} selected${selectedSize > 0 ? ' · ${formatBytes(selectedSize)}' : ''}',
               style: style,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ] else if (app.aiEnabled && idx.indexed > 0)
+            )
+          else if (idx.busy)
+            Flexible(
+              child: Text(
+                idx.state == 'scanning'
+                    ? 'Scanning folders…'
+                    : 'Indexing ${idx.done}/${idx.total}${idx.current != null ? ' · ${baseName(idx.current!)}' : ''}',
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            )
+          else if (app.aiEnabled && idx.indexed > 0)
             Text('${idx.indexed} files searchable by meaning', style: style),
         ],
       ),
@@ -227,82 +300,167 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
-/// App-wide keyboard shortcuts (FilDOS map).
-class _Shortcuts extends StatelessWidget {
+/// FilDOS's global keyboard map (App.tsx), as a window-level key handler so it
+/// works wherever focus sits — FilDOS listens on `window`, not on a focused
+/// element. ⌘K toggles search and ⌘F opens it from anywhere; every other key
+/// is inert while typing in a field, while a dialog / menu / Quick Look is up,
+/// while search is open, or on a page (Recents, a tag, Canvas…).
+class _KeyboardMap extends StatefulWidget {
   final Widget child;
-  final ValueNotifier<int> gridColumns;
-  const _Shortcuts({required this.child, required this.gridColumns});
+  const _KeyboardMap({required this.child});
+  @override
+  State<_KeyboardMap> createState() => _KeyboardMapState();
+}
 
-  bool _typing() {
-    final focus = FocusManager.instance.primaryFocus;
-    return focus?.context?.widget is EditableText ||
-        focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+class _KeyboardMapState extends State<_KeyboardMap> {
+  ModalRoute<dynamic>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
   }
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _typing() {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (ctx == null) return false;
+    return ctx.widget is EditableText || ctx.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
+    if (!mounted) return false;
+    // Something modal (dialog, menu, Quick Look) owns the keyboard.
+    if (!(_route?.isCurrent ?? true)) return false;
     final app = context.read<FaController>();
     final ex = context.read<ExplorerController>();
-    bool browsing() => app.section == FaSection.browse && !app.searchOpen && !_typing();
-    void when(bool Function() cond, VoidCallback f) {
-      if (cond()) f();
+    final keys = HardwareKeyboard.instance;
+    final mod = keys.isMetaPressed || keys.isControlPressed;
+    final key = e.logicalKey;
+
+    if (mod && !keys.isShiftPressed && !keys.isAltPressed && e is KeyDownEvent) {
+      if (key == LogicalKeyboardKey.keyK) {
+        app.searchOpen ? app.closeSearch() : app.openSearch();
+        return true;
+      }
+      if (key == LogicalKeyboardKey.keyF) {
+        if (!app.searchOpen) app.openSearch();
+        return true;
+      }
+    }
+    if (_typing() || app.searchOpen) return false;
+
+    // Back / forward (macOS ⌘[ ⌘]) work on pages too.
+    if (mod && key == LogicalKeyboardKey.bracketLeft) {
+      navBack(app, ex);
+      return true;
+    }
+    if (mod && key == LogicalKeyboardKey.bracketRight) {
+      navForward(app, ex);
+      return true;
+    }
+    if (app.section != FaSection.browse) return false;
+
+    final sel = ex.selectedEntries;
+    if (mod) {
+      final down = e is KeyDownEvent;
+      if (key == LogicalKeyboardKey.keyA) {
+        ex.selectAll();
+      } else if (key == LogicalKeyboardKey.keyC && down) {
+        if (sel.isNotEmpty) ex.copySelection();
+      } else if (key == LogicalKeyboardKey.keyX && down) {
+        if (sel.isNotEmpty) ex.cutSelection();
+      } else if (key == LogicalKeyboardKey.keyV && down) {
+        ex.paste();
+      } else if (key == LogicalKeyboardKey.keyD && down) {
+        if (sel.length != 1) return false;
+        ex.duplicateSelection();
+      } else if (key == LogicalKeyboardKey.keyN && down) {
+        newFolderFlow(context);
+      } else if (key == LogicalKeyboardKey.keyZ && down) {
+        ex.undo();
+      } else if (key == LogicalKeyboardKey.keyR && down) {
+        ex.refresh();
+      } else if (key == LogicalKeyboardKey.keyL && down) {
+        app.editAddress.value++;
+      } else if (const [
+        LogicalKeyboardKey.digit1,
+        LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit4,
+      ].contains(key)) {
+        if (down) {
+          const modes = ['list', 'grid', 'gallery', 'columns'];
+          ex.setView(mode: modes[key.keyLabel.codeUnitAt(0) - 0x31]);
+        }
+      } else if (key == LogicalKeyboardKey.arrowUp) {
+        ex.up();
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        // macOS Finder's ⌘↓: open the selection.
+        if (sel.length != 1) return false;
+        ex.activate(sel.first);
+      } else if (key == LogicalKeyboardKey.backspace) {
+        if (sel.isEmpty) return false;
+        if (down) _confirmDelete(ex, sel);
+      } else {
+        return false;
+      }
+      return true;
     }
 
-    int step() => ex.view.mode == 'grid' ? gridColumns.value : 1;
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () => app.openSearch(),
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () => app.openSearch(),
-        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () => app.openSearch(),
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => app.openSearch(),
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (app.searchOpen) {
-            app.closeSearch();
-          } else {
-            ex.clearSelection();
-          }
-        },
-        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): ex.back,
-        const SingleActivator(LogicalKeyboardKey.bracketRight, meta: true): ex.forward,
-        const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): () => when(browsing, ex.up),
-        const SingleActivator(LogicalKeyboardKey.arrowDown, meta: true): () => when(browsing, () {
-          final e = ex.primarySelection;
-          if (e != null) ex.activate(e);
-        }),
-        const SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
-            when(browsing, () => ex.trashSelection()),
-        const SingleActivator(LogicalKeyboardKey.delete): () => when(browsing, () => ex.trashSelection()),
-        const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () => when(browsing, ex.selectAll),
-        const SingleActivator(LogicalKeyboardKey.keyA, control: true): () => when(browsing, ex.selectAll),
-        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): () => when(browsing, ex.copySelection),
-        const SingleActivator(LogicalKeyboardKey.keyC, control: true): () => when(browsing, ex.copySelection),
-        const SingleActivator(LogicalKeyboardKey.keyX, meta: true): () => when(browsing, ex.cutSelection),
-        const SingleActivator(LogicalKeyboardKey.keyX, control: true): () => when(browsing, ex.cutSelection),
-        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () => when(browsing, () => ex.paste()),
-        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () => when(browsing, () => ex.paste()),
-        const SingleActivator(LogicalKeyboardKey.keyD, meta: true): () => when(browsing, ex.duplicateSelection),
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): () => when(browsing, ex.undo),
-        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () => when(browsing, ex.undo),
-        const SingleActivator(LogicalKeyboardKey.keyN, meta: true, shift: true): () => when(browsing, ex.newFolder),
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true, shift: true): () => when(browsing, ex.newFolder),
-        const SingleActivator(LogicalKeyboardKey.keyR, meta: true): () => when(browsing, () => ex.refresh()),
-        const SingleActivator(LogicalKeyboardKey.enter): () => when(browsing, () {
-          if (ex.renaming == null && ex.selection.length == 1) ex.beginRename();
-        }),
-        const SingleActivator(LogicalKeyboardKey.space): () => when(browsing, () {
-          final e = ex.primarySelection;
-          if (e != null && !e.isDir) showQuickLook(context, e);
-        }),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () => when(browsing, () => ex.moveSelection(1)),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => when(browsing, () => ex.moveSelection(-1)),
-        const SingleActivator(LogicalKeyboardKey.arrowDown): () => when(browsing, () => ex.moveSelection(step())),
-        const SingleActivator(LogicalKeyboardKey.arrowUp): () => when(browsing, () => ex.moveSelection(-step())),
-        const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () =>
-            when(browsing, () => ex.moveSelection(step(), extend: true)),
-        const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () =>
-            when(browsing, () => ex.moveSelection(-step(), extend: true)),
-      },
-      child: Focus(autofocus: true, child: child),
-    );
+    // FilDOS moves the cursor one item in every view (no row step, no extend).
+    if (key == LogicalKeyboardKey.arrowDown) {
+      ex.moveSelection(1);
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      ex.moveSelection(-1);
+    } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+      if (sel.length != 1) return false;
+      ex.activate(sel.first);
+    } else if (key == LogicalKeyboardKey.backspace) {
+      ex.up();
+    } else if (key == LogicalKeyboardKey.delete) {
+      if (sel.isEmpty) return false;
+      if (e is KeyDownEvent) _confirmDelete(ex, sel);
+    } else if (key == LogicalKeyboardKey.f2) {
+      if (sel.length != 1) return false;
+      ex.beginRename(sel.first.path);
+    } else if (key == LogicalKeyboardKey.space) {
+      // Quick Look the focused file (the anchor of a multi-selection).
+      final target = sel.where((x) => x.path == ex.anchor).firstOrNull ?? sel.firstOrNull;
+      if (target == null || e is! KeyDownEvent) return false;
+      showQuickLook(context, target);
+    } else {
+      return false;
+    }
+    return true;
   }
+
+  /// FilDOS's Delete confirmation, then the move to the Trash.
+  Future<void> _confirmDelete(ExplorerController ex, List<FsEntry> entries) async {
+    final n = entries.length;
+    final what = n == 1 ? '“${entries.first.name}”' : '$n items';
+    final ok = await confirmDialog(
+      context,
+      title: 'Delete',
+      message: 'Delete $what? ${n == 1 ? 'It' : 'They'} will be moved to your system Trash.',
+      confirm: 'Delete',
+      danger: true,
+    );
+    if (ok) await ex.trashSelection(entries.map((e) => e.path).toList());
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

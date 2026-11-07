@@ -5,21 +5,36 @@ import 'package:flutter/material.dart';
 import '../core/fa_theme.dart';
 
 /// The scoop "comet" orbiting a panel's edge (FilDOS' `.scoop-trail`): a
-/// sweep gradient — blueberry → mint → grape → bubblegum → mango fading to
-/// nothing — rotated by [turn], painted as a hairline ring only so the
-/// panel's surface never washes with colour.
+/// 1.5px hairline ring in [base] (the border colour) with a conic gradient —
+/// blueberry → mint → grape → bubblegum → mango fading to nothing — rotated
+/// by [turn] on top of it. Painted as a ring only, so the panel's translucent
+/// surface never washes with colour. With [comet] off (reduced motion) only
+/// the still hairline remains, as in FilDOS.
 class ScoopTrailPainter extends CustomPainter {
   final Animation<double> turn;
+  final Color base;
+  final bool comet;
+
+  /// Outer corner radius of the ring box.
   final double radius;
   final double stroke;
-  ScoopTrailPainter(this.turn, {this.radius = FaRadius.xl, this.stroke = 1.5}) : super(repaint: turn);
+  ScoopTrailPainter(this.turn, {required this.base, this.comet = true, this.radius = FaRadius.xl, this.stroke = 1.5})
+    : super(repaint: comet ? turn : null);
 
+  // conic-gradient(from a, transparent 0 200deg, #6e9bee80 240deg, mint 268deg,
+  // grape 294deg, bubblegum 320deg, mango 344deg, transparent 350deg 360deg)
   static const _stops = [0.0, 200 / 360, 240 / 360, 268 / 360, 294 / 360, 320 / 360, 344 / 360, 350 / 360, 1.0];
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final ring = RRect.fromRectAndRadius(rect.deflate(stroke / 2), Radius.circular(radius));
+    final ring = RRect.fromRectAndRadius(rect.deflate(stroke / 2), Radius.circular(radius - stroke / 2));
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = base;
+    canvas.drawRRect(ring, paint);
+    if (!comet) return;
     final shader = SweepGradient(
       colors: [
         Scoop.blueberry.withValues(alpha: 0),
@@ -33,17 +48,13 @@ class ScoopTrailPainter extends CustomPainter {
         Scoop.mango.withValues(alpha: 0),
       ],
       stops: _stops,
-      transform: GradientRotation(turn.value * 2 * math.pi),
+      // CSS conic gradients start at 12 o'clock; Flutter's sweep at 3 o'clock.
+      transform: GradientRotation(turn.value * 2 * math.pi - math.pi / 2),
     ).createShader(rect);
-    canvas.drawRRect(
-      ring,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..shader = shader,
-    );
+    canvas.drawRRect(ring, paint..shader = shader);
   }
 
   @override
-  bool shouldRepaint(covariant ScoopTrailPainter old) => old.radius != radius || old.stroke != stroke;
+  bool shouldRepaint(covariant ScoopTrailPainter old) =>
+      old.radius != radius || old.stroke != stroke || old.base != base || old.comet != comet;
 }

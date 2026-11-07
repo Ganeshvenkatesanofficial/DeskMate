@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -8,13 +9,21 @@ import '../core/format.dart';
 import '../state/fa_controller.dart';
 import '../widgets/ui.dart';
 
-/// Building blocks shared by Settings and the onboarding tour (FilDOS
-/// SettingsView idioms: section cards with a framed icon tile, Ink switches,
-/// hairline rows, scoop colour only as an accent).
+/// Building blocks shared by Settings and the onboarding tour — straight ports
+/// of the FilDOS SettingsView / Onboarding idioms (Section cards with a framed
+/// icon tile, Ink switches, hairline row boxes, scoop colour only as accent).
+///
+/// FilDOS type scale used throughout: text-sm 14, text-xs 12, text-2xs 11,
+/// text-3xs 10, text-4xs 8; spacing unit 4px.
 
 String formatCount(int n) => NumberFormat.decimalPattern().format(n);
 
-/// A small on/off switch (Ink/white primary track).
+/// Tailwind's default `transition` timing (150ms, ease-in-out-ish).
+const _twEase = Cubic(0.4, 0, 0.2, 1);
+const _twFast = Duration(milliseconds: 150);
+
+/// FilDOS `Toggle` / onboarding `Switch`: h-5 w-9 track (`bg-primary` on,
+/// `bg-muted` off), a white size-4 thumb inset 2px that slides 16px.
 class FaSwitch extends StatelessWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -24,31 +33,24 @@ class FaSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     return Opacity(
-      opacity: onChanged == null ? 0.45 : 1,
+      opacity: onChanged == null ? 0.5 : 1,
       child: Hoverable(
         onTap: onChanged == null ? null : () => onChanged!(!value),
         builder: (context, _) => AnimatedContainer(
-          duration: FaMotion.medium,
-          curve: FaMotion.snappy,
+          duration: _twFast,
+          curve: _twEase,
           width: 36,
           height: 20,
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: value ? c.primary : (c.isDark ? c.border : const Color(0xFFDCDDE2)),
-            borderRadius: BorderRadius.circular(999),
-          ),
+          decoration: BoxDecoration(color: value ? c.primary : c.muted, borderRadius: BorderRadius.circular(999)),
           child: AnimatedAlign(
-            duration: FaMotion.medium,
-            curve: FaMotion.snappy,
+            duration: _twFast,
+            curve: _twEase,
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
               width: 16,
               height: 16,
-              decoration: BoxDecoration(
-                color: value ? c.primaryForeground : Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 2)],
-              ),
+              margin: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
             ),
           ),
         ),
@@ -57,13 +59,16 @@ class FaSwitch extends StatelessWidget {
   }
 }
 
-/// A section card: framed icon tile, title + subtitle, optional action, body.
+/// FilDOS `Section`: `rounded-xl border bg-card p-5`, a size-9 `bg-muted`
+/// tile (ring-border/60, rounded-lg) with a 17px icon, title text-sm medium,
+/// subtitle text-2xs, an optional action on the right, then `mt-4 space-y-4`.
 class SettingsCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final Widget? action;
   final bool mint;
+  final bool disabled;
   final List<Widget> children;
   const SettingsCard({
     super.key,
@@ -72,14 +77,15 @@ class SettingsCard extends StatelessWidget {
     required this.subtitle,
     this.action,
     this.mint = false,
+    this.disabled = false,
     this.children = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    return Container(
-      padding: const EdgeInsets.all(18),
+    Widget card = Container(
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: c.card,
         borderRadius: BorderRadius.circular(FaRadius.xl),
@@ -89,45 +95,53 @@ class SettingsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: c.muted,
-                  borderRadius: BorderRadius.circular(FaRadius.md),
-                  border: Border.all(color: c.border.withValues(alpha: 0.6)),
-                ),
-                child: Icon(icon, size: 17, color: mint ? Scoop.mint : c.foreground),
-              ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      title,
-                      style: FaText.sans(size: 13.5, weight: FontWeight.w500, color: c.foreground),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: c.muted,
+                        borderRadius: BorderRadius.circular(FaRadius.lg),
+                        border: Border.all(color: c.border.withValues(alpha: 0.6)),
+                      ),
+                      child: Icon(icon, size: 17, color: mint ? Scoop.mint : c.foreground),
                     ),
-                    const SizedBox(height: 1),
-                    Text(subtitle, style: FaText.sans(size: 11.5, color: c.mutedForeground)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: FaText.sans(size: 14, weight: FontWeight.w500, color: c.foreground),
+                          ),
+                          Text(subtitle, style: FaText.sans(size: 11, color: c.mutedForeground)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-              if (action != null) ...[const SizedBox(width: 12), action!],
+              if (action != null) ...[const SizedBox(width: 16), action!],
             ],
           ),
           if (children.isNotEmpty) ...[
             const SizedBox(height: 16),
-            for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: 14), children[i]],
+            for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: 16), children[i]],
           ],
         ],
       ),
     );
+    if (disabled) card = IgnorePointer(child: Opacity(opacity: 0.5, child: card));
+    return card;
   }
 }
 
-/// Uppercase sub-heading inside a card.
+/// FilDOS `SubLabel`: text-2xs, medium, tracking-wider, uppercase, mb-2.
 class SubLabel extends StatelessWidget {
   final String text;
   final Widget? trailing;
@@ -135,75 +149,134 @@ class SubLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Expanded(child: Text(text.toUpperCase(), style: FaText.label(context.fa))),
+      Expanded(
+        child: Text(
+          text.toUpperCase(),
+          style: FaText.sans(size: 11, weight: FontWeight.w500, color: context.fa.mutedForeground, letterSpacing: 0.55),
+        ),
+      ),
       ?trailing,
     ],
   );
 }
 
-/// A label + description on the left and a control (switch, button) on the right.
+/// The `rounded-lg border px-3 py-2.5` row box every Settings control lives
+/// in (Rescan every, Skip file types, This machine…).
+class RowBox extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final bool dashed;
+  const RowBox({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    this.dashed = false,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    final box = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(FaRadius.lg),
+        border: dashed ? null : Border.all(color: c.border),
+      ),
+      child: child,
+    );
+    if (!dashed) return box;
+    return CustomPaint(painter: _DashedRRect(c.border), child: box);
+  }
+}
+
+class _DashedRRect extends CustomPainter {
+  final Color color;
+  _DashedRRect(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius((Offset.zero & size).deflate(0.5), const Radius.circular(FaRadius.lg));
+    final path = Path()..addRRect(rrect);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        canvas.drawPath(metric.extractPath(d, d + 3), paint);
+        d += 6;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRRect old) => old.color != color;
+}
+
+/// A label + description on the left and a control on the right, inside a
+/// [RowBox] (FilDOS "Rescan every" / "Continue in the background" rows).
+/// With [boxed] false it is the bare `border-t pt-4` row used inside a card.
 class SettingRow extends StatelessWidget {
   final String title;
   final String? description;
   final Widget trailing;
-  final bool divider;
-  const SettingRow({super.key, required this.title, this.description, required this.trailing, this.divider = false});
+  final bool boxed;
+  const SettingRow({super.key, required this.title, this.description, required this.trailing, this.boxed = true});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    return Container(
-      padding: EdgeInsets.only(top: divider ? 14 : 0),
-      decoration: divider
-          ? BoxDecoration(
-              border: Border(top: BorderSide(color: c.border)),
-            )
-          : null,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: FaText.sans(size: 13, color: c.foreground)),
-                if (description != null) ...[
-                  const SizedBox(height: 2),
-                  Text(description!, style: FaText.sans(size: 11.5, color: c.mutedForeground, height: 1.4)),
-                ],
-              ],
-            ),
+    final row = Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: FaText.sans(size: 14, color: c.foreground)),
+              if (description != null) Text(description!, style: FaText.sans(size: 11, color: c.mutedForeground)),
+            ],
           ),
-          const SizedBox(width: 12),
-          trailing,
-        ],
+        ),
+        const SizedBox(width: 12),
+        trailing,
+      ],
+    );
+    if (boxed) return RowBox(child: row);
+    return Container(
+      padding: const EdgeInsets.only(top: 16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.border)),
       ),
+      child: row,
     );
   }
 }
 
-/// A small neutral pill ("Recommended", "Installed").
+/// A small pill: `bg-muted text-muted-foreground rounded-full px-1.5 py-0.5
+/// text-3xs font-medium`, or the scoop variant (`bg-mint/15 text-mint`).
 class FaBadge extends StatelessWidget {
   final String text;
   final Color? accent;
-  const FaBadge(this.text, {super.key, this.accent});
+  final bool wide;
+  const FaBadge(this.text, {super.key, this.accent, this.wide = false});
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: wide ? 8 : 6, vertical: 2),
       decoration: BoxDecoration(
         color: accent?.withValues(alpha: 0.15) ?? c.muted,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
-        style: FaText.sans(size: 10, weight: FontWeight.w500, color: accent ?? c.mutedForeground),
+        style: FaText.sans(size: 10, weight: FontWeight.w500, color: accent ?? c.mutedForeground, height: 1.4),
       ),
     );
   }
 }
 
-/// A round radio indicator (FilDOS ChoiceCard / OptionRow).
+/// The FilDOS radio indicator (ChoiceCard / OptionRow): size-4 circle with a
+/// border; active fills with foreground and shows a 10px check.
 class RadioDot extends StatelessWidget {
   final bool active;
   const RadioDot(this.active, {super.key});
@@ -211,15 +284,86 @@ class RadioDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     return AnimatedContainer(
-      duration: FaMotion.fast,
+      duration: _twFast,
+      curve: _twEase,
       width: 16,
       height: 16,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: active ? c.foreground : Colors.transparent,
-        border: Border.all(color: active ? c.foreground : c.border, width: 1.2),
+        border: Border.all(color: active ? c.foreground : c.border),
       ),
-      child: active ? Icon(Icons.check_rounded, size: 11, color: c.background) : null,
+      child: active ? Icon(Icons.check_rounded, size: 10, color: c.background) : null,
+    );
+  }
+}
+
+/// FilDOS `Button` — `size="sm"` (h-8 px-3) by default, or the default size
+/// with [large] (h-9 px-4); rounded-sm, text-sm, 150ms colour transition.
+class SmallButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final double iconSize;
+  final VoidCallback? onPressed;
+  final FaButtonVariant variant;
+  final bool large;
+  final bool expand;
+  const SmallButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.iconSize = 13,
+    this.onPressed,
+    this.variant = FaButtonVariant.primary,
+    this.large = false,
+    this.expand = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    final enabled = onPressed != null;
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: Hoverable(
+        onTap: onPressed,
+        builder: (context, hover) {
+          final h = hover && enabled;
+          final (bg, fg, border) = switch (variant) {
+            FaButtonVariant.primary => (h ? c.primary.withValues(alpha: 0.9) : c.primary, c.primaryForeground, null),
+            FaButtonVariant.secondary => (h ? c.muted.withValues(alpha: 0.8) : c.muted, c.foreground, null),
+            FaButtonVariant.outline => (h ? c.accent : c.background, c.foreground, c.border),
+            FaButtonVariant.ghost => (
+              h ? c.foreground.withValues(alpha: 0.09) : Colors.transparent,
+              h ? c.foreground : c.mutedForeground,
+              null,
+            ),
+            FaButtonVariant.destructive => (
+              h ? c.destructive.withValues(alpha: 0.9) : c.destructive,
+              Colors.white,
+              null,
+            ),
+          };
+          return AnimatedContainer(
+            duration: _twFast,
+            height: large ? 36 : 32,
+            padding: EdgeInsets.symmetric(horizontal: large ? (icon == null ? 16 : 12) : (icon == null ? 12 : 10)),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(FaRadius.sm),
+              border: border == null ? null : Border.all(color: border),
+            ),
+            child: Row(
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[Icon(icon, size: iconSize, color: fg), SizedBox(width: large ? 8 : 6)],
+                Text(label, style: FaText.sans(size: 14, color: fg)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -268,9 +412,9 @@ class MiniWindow extends StatelessWidget {
                   const Row(
                     children: [
                       ScoopDot(Scoop.blueberry, size: 4),
-                      SizedBox(width: 3),
+                      SizedBox(width: 4),
                       ScoopDot(Scoop.mint, size: 4),
-                      SizedBox(width: 3),
+                      SizedBox(width: 4),
                       ScoopDot(Scoop.strawberry, size: 4),
                     ],
                   ),
@@ -285,11 +429,11 @@ class MiniWindow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  pill(0.33),
-                  const SizedBox(height: 4),
+                  pill(1 / 3),
+                  const SizedBox(height: 6),
                   Container(height: 1, color: line),
                   for (final w in const [0.9, 0.65, 0.8, 0.5]) ...[
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         Container(
@@ -325,12 +469,14 @@ class _SystemClipper extends CustomClipper<Path> {
 }
 
 const themeChoices = [
-  (ThemeMode.system, 'System', Icons.desktop_mac_outlined),
+  (ThemeMode.system, 'System', Icons.desktop_windows_outlined),
   (ThemeMode.light, 'Light', Icons.light_mode_outlined),
   (ThemeMode.dark, 'Dark', Icons.dark_mode_outlined),
 ];
 
-/// System / Light / Dark cards with live miniature previews. Selecting one
+/// System / Light / Dark. The onboarding variant is FilDOS's `ThemeCard` grid
+/// (live miniature previews, `grid-cols-3 gap-3`); [compact] is the Settings
+/// variant (`grid-cols-3 gap-2` of bordered icon buttons). Selecting one
 /// changes DeskMate's app-wide theme (AppSettings) — Folder Agent follows it.
 class ThemePicker extends StatelessWidget {
   final bool compact;
@@ -338,23 +484,63 @@ class ThemePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chat = context.watch<AppSettings>();
+    final mode = context.select<AppSettings, ThemeMode>((s) => s.themeMode);
+    final chat = context.read<AppSettings>();
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < themeChoices.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
+          if (i > 0) SizedBox(width: compact ? 8 : 12),
           Expanded(
-            child: _ThemeCard(
-              mode: themeChoices[i].$1,
-              label: themeChoices[i].$2,
-              icon: themeChoices[i].$3,
-              active: chat.themeMode == themeChoices[i].$1,
-              compact: compact,
-              onTap: () => chat.setThemeMode(themeChoices[i].$1),
-            ),
+            child: compact
+                ? _ThemeButton(
+                    label: themeChoices[i].$2,
+                    icon: themeChoices[i].$3,
+                    active: mode == themeChoices[i].$1,
+                    onTap: () => chat.setThemeMode(themeChoices[i].$1),
+                  )
+                : _ThemeCard(
+                    mode: themeChoices[i].$1,
+                    label: themeChoices[i].$2,
+                    icon: themeChoices[i].$3,
+                    active: mode == themeChoices[i].$1,
+                    onTap: () => chat.setThemeMode(themeChoices[i].$1),
+                  ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _ThemeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _ThemeButton({required this.label, required this.icon, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Hoverable(
+      onTap: onTap,
+      builder: (context, hover) => AnimatedContainer(
+        duration: _twFast,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? c.primary.withValues(alpha: 0.1) : (hover ? c.accent : Colors.transparent),
+          borderRadius: BorderRadius.circular(FaRadius.lg),
+          border: Border.all(color: c.border),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: active ? c.foreground : c.mutedForeground),
+            const SizedBox(height: 6),
+            Text(label, style: FaText.sans(size: 14, color: c.foreground)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -364,14 +550,12 @@ class _ThemeCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool active;
-  final bool compact;
   final VoidCallback onTap;
   const _ThemeCard({
     required this.mode,
     required this.label,
     required this.icon,
     required this.active,
-    required this.compact,
     required this.onTap,
   });
 
@@ -387,6 +571,7 @@ class _ThemeCard extends StatelessWidget {
             ],
           )
         : MiniWindow(dark: mode == ThemeMode.dark);
+    final fg = active ? c.foreground : c.mutedForeground;
     return Hoverable(
       onTap: onTap,
       builder: (context, hover) => AnimatedContainer(
@@ -394,19 +579,19 @@ class _ThemeCard extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: active
-              ? c.primary.withValues(alpha: 0.08)
-              : (hover ? c.accent.withValues(alpha: 0.6) : Colors.transparent),
+              ? c.primary.withValues(alpha: 0.1)
+              : (hover ? c.accent.withValues(alpha: 0.5) : c.background.withValues(alpha: 0)),
           borderRadius: BorderRadius.circular(FaRadius.xl),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              aspectRatio: compact ? 2.0 : 1.4,
+              aspectRatio: 7 / 5,
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(FaRadius.md),
+                  borderRadius: BorderRadius.circular(FaRadius.lg),
                   border: Border.all(color: c.border),
                 ),
                 child: preview,
@@ -415,10 +600,10 @@ class _ThemeCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(icon, size: 13, color: active ? c.foreground : c.mutedForeground),
+                Icon(icon, size: 13, color: fg),
                 const SizedBox(width: 6),
-                Text(label, style: FaText.sans(size: 13, color: active ? c.foreground : c.mutedForeground)),
-                if (active) ...[const SizedBox(width: 6), Icon(Icons.check_rounded, size: 13, color: c.foreground)],
+                Text(label, style: FaText.sans(size: 14, color: fg)),
+                if (active) ...[const SizedBox(width: 6), Icon(Icons.check_rounded, size: 13, color: fg)],
               ],
             ),
           ],
@@ -430,91 +615,105 @@ class _ThemeCard extends StatelessWidget {
 
 // ── Paths ──────────────────────────────────────────────────────────────────
 
-/// One folder in a list: icon + name with its location beneath, and a remove
-/// affordance revealed on hover (FilDOS HiddenPathRow).
+/// FilDOS `HiddenPathRow`: `rounded-lg border px-3 py-2 gap-2.5`, a 15px
+/// icon, name text-sm with its parent beneath (mono text-3xs), and a 14px
+/// remove affordance revealed on hover.
 class PathRow extends StatelessWidget {
   final String path;
   final VoidCallback? onRemove;
   final String removeTooltip;
   final IconData icon;
-  final Widget? trailing;
   const PathRow({
     super.key,
     required this.path,
     this.onRemove,
     this.removeTooltip = 'Remove',
     this.icon = Icons.folder_outlined,
-    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final home = context.select<FaController, String>((a) => a.home);
     final parent = parentDir(path);
-    return Hoverable(
-      cursor: SystemMouseCursors.basic,
-      builder: (context, hover) => AnimatedContainer(
-        duration: FaMotion.fast,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: hover ? c.accent.withValues(alpha: 0.5) : Colors.transparent,
-          borderRadius: BorderRadius.circular(FaRadius.md),
-          border: Border.all(color: c.border),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 15, color: c.mutedForeground),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    baseName(path),
-                    style: FaText.sans(size: 13, color: c.foreground),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (parent != path)
+    return Tooltip(
+      message: path,
+      waitDuration: const Duration(milliseconds: 800),
+      child: Hoverable(
+        cursor: SystemMouseCursors.basic,
+        builder: (context, hover) => AnimatedContainer(
+          duration: _twFast,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: hover ? c.accent.withValues(alpha: 0.5) : c.card.withValues(alpha: 0),
+            borderRadius: BorderRadius.circular(FaRadius.lg),
+            border: Border.all(color: c.border),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: c.mutedForeground),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      compactDir(parent, home),
-                      style: FaText.mono(size: 10, color: c.mutedForeground),
+                      baseName(path),
+                      style: FaText.sans(size: 14, color: c.foreground),
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (parent != path)
+                      Text(
+                        parent,
+                        style: FaText.mono(size: 10, color: c.mutedForeground),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
-            ),
-            ?trailing,
-            if (onRemove != null)
-              AnimatedOpacity(
-                duration: FaMotion.fast,
-                opacity: hover ? 1 : 0,
-                child: FaIconButton(icon: Icons.close_rounded, size: 24, tooltip: removeTooltip, onPressed: onRemove),
-              ),
-          ],
+              if (onRemove != null)
+                AnimatedOpacity(
+                  duration: _twFast,
+                  opacity: hover ? 1 : 0,
+                  child: Tooltip(
+                    message: removeTooltip,
+                    child: Hoverable(
+                      onTap: onRemove,
+                      builder: (context, h) =>
+                          Icon(Icons.close_rounded, size: 14, color: h ? c.foreground : c.mutedForeground),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Placeholder row for an empty list.
+/// Placeholder for an empty list (FilDOS dashed `rounded-lg` empty state).
 class EmptyNote extends StatelessWidget {
   final String text;
-  const EmptyNote(this.text, {super.key});
+  final IconData? icon;
+  const EmptyNote(this.text, {super.key, this.icon});
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(FaRadius.md),
-        border: Border.all(color: c.border),
-      ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: FaText.sans(size: 12, color: c.mutedForeground),
+    return RowBox(
+      dashed: true,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Column(
+        children: [
+          if (icon != null) ...[Icon(icon, size: 18, color: c.mutedForeground), const SizedBox(height: 8)],
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 384),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: FaText.sans(size: 11, color: c.mutedForeground, height: 1.375),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -522,217 +721,189 @@ class EmptyNote extends StatelessWidget {
 
 // ── Privacy ────────────────────────────────────────────────────────────────
 
-const suggestedExcludeExtensions = ['.key', '.pem', '.p12', '.kdbx'];
-
-/// "Hide from AI": folders never read, indexed or shown to the agent, plus
-/// file extensions to skip. Persists straight to the backend.
-class PrivacyEditor extends StatefulWidget {
-  const PrivacyEditor({super.key});
-  @override
-  State<PrivacyEditor> createState() => _PrivacyEditorState();
+Future<void> pickExcludes(FaController app) async {
+  final picked = await app.api.pickFolders(prompt: 'Choose folders to hide from AI');
+  if (!picked.ok) return app.toastError(picked.error);
+  if (picked.value!.isEmpty) return;
+  final r = await app.api.addExcludes(picked.value!);
+  if (!r.ok) return app.toastError(r.error);
+  await app.refreshPrefs();
 }
 
-class _PrivacyEditorState extends State<PrivacyEditor> {
-  final _ext = TextEditingController();
+Future<void> removeExclude(FaController app, String path) async {
+  final r = await app.api.removeExclude(path);
+  if (!r.ok) return app.toastError(r.error);
+  await app.refreshPrefs();
+}
 
-  @override
-  void dispose() {
-    _ext.dispose();
-    super.dispose();
-  }
+Future<void> setExcludeExtensions(FaController app, List<String> exts) async {
+  final r = await app.api.setExcludeExtensions(exts);
+  if (!r.ok) return app.toastError(r.error);
+  await app.refreshPrefs();
+}
 
-  Future<void> _addFolders(FaController app) async {
-    final picked = await app.api.pickFolders(prompt: 'Choose folders to hide from AI');
-    if (!picked.ok) return app.toastError(picked.error);
-    if (picked.value!.isEmpty) return;
-    final r = await app.api.addExcludes(picked.value!);
-    if (!r.ok) return app.toastError(r.error);
-    await app.refreshPrefs();
-  }
-
-  Future<void> _remove(FaController app, String path) async {
-    final r = await app.api.removeExclude(path);
-    if (!r.ok) return app.toastError(r.error);
-    await app.refreshPrefs();
-  }
-
-  Future<void> _setExts(FaController app, List<String> exts) async {
-    final r = await app.api.setExcludeExtensions(exts);
-    if (!r.ok) return app.toastError(r.error);
-    await app.refreshPrefs();
-  }
-
-  void _submitExt(FaController app) {
-    final raw = _ext.text
-        .split(RegExp(r'[\s,]+'))
-        .map((e) => e.trim().toLowerCase())
-        .where((e) => e.isNotEmpty && e != '.')
-        .map((e) => e.startsWith('.') ? e : '.$e');
-    if (raw.isEmpty) return;
-    _ext.clear();
-    _setExts(app, {...app.excludeExtensions, ...raw}.toList());
-  }
+/// "Hide from AI" body (FilDOS Settings → Privacy): the hidden paths, or the
+/// dashed empty state, plus the footnote.
+class HiddenPathsList extends StatelessWidget {
+  const HiddenPathsList({super.key});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     final app = context.watch<FaController>();
     final excludes = app.excludes;
-    final exts = app.excludeExtensions;
-    final suggestions = suggestedExcludeExtensions.where((e) => !exts.contains(e)).toList();
+    if (excludes.isEmpty) {
+      return const EmptyNote(
+        'Nothing is hidden. Right-click any file or folder and choose Hide from AI, or add one here. '
+        'Hidden items are removed from the index immediately and never re-indexed.',
+        icon: Icons.visibility_off_outlined,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SubLabel(
-          'Hidden folders',
-          trailing: FaButton(
-            label: 'Add folder…',
-            icon: Icons.add_rounded,
-            dense: true,
-            variant: FaButtonVariant.outline,
-            onPressed: () => _addFolders(app),
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (excludes.isEmpty)
-          const EmptyNote('Nothing hidden. Anything you add is never read, indexed, or shown to the agent.')
-        else
-          for (final p in excludes)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: PathRow(
-                path: p,
-                icon: Icons.visibility_off_outlined,
-                removeTooltip: 'Show to AI again',
-                onRemove: () => _remove(app, p),
-              ),
-            ),
-        const SizedBox(height: 14),
-        const SubLabel('Skipped file types'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            for (final e in exts) _ExtChip(ext: e, onRemove: () => _setExts(app, exts.where((x) => x != e).toList())),
-            for (final e in suggestions)
-              FaChip(label: e, icon: Icons.add_rounded, onTap: () => _setExts(app, [...exts, e])),
-            SizedBox(
-              width: 150,
-              child: FaTextField(
-                controller: _ext,
-                hint: '.ext, then Enter',
-                dense: true,
-                mono: true,
-                onSubmitted: (_) => _submitExt(app),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(Icons.lock_outline_rounded, size: 13, color: c.mutedForeground),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Secrets are always skipped — .env files, SSH keys, credentials and tokens are never read, '
-                'indexed or sent to a model. Dotfiles, system folders and caches are ignored too.',
-                style: FaText.sans(size: 11.5, color: c.mutedForeground, height: 1.45),
-              ),
-            ),
-          ],
+        for (final p in excludes) ...[
+          PathRow(path: p, removeTooltip: 'Show to AI again', onRemove: () => removeExclude(app, p)),
+          const SizedBox(height: 6),
+        ],
+        const SizedBox(height: 10),
+        Text(
+          'Hidden items are removed from the index immediately and never re-indexed — semantic search and '
+          'Ask AI can\'t see them.',
+          style: FaText.sans(size: 11, color: c.mutedForeground, height: 1.375),
         ),
       ],
     );
   }
 }
 
-class _ExtChip extends StatelessWidget {
-  final String ext;
-  final VoidCallback onRemove;
-  const _ExtChip({required this.ext, required this.onRemove});
+/// FilDOS `SkipTypesRow`: removable extension chips plus an inline input.
+/// Enter, comma or space commits what's typed; backspace on an empty input
+/// removes the last chip; blur commits too.
+class SkipTypesRow extends StatefulWidget {
+  /// Without the row box (onboarding draws its own card).
+  final bool bare;
+  const SkipTypesRow({super.key, this.bare = false});
+  @override
+  State<SkipTypesRow> createState() => _SkipTypesRowState();
+}
+
+class _SkipTypesRowState extends State<SkipTypesRow> {
+  final _draft = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _commit();
+    });
+    _draft.addListener(_onDraft);
+  }
+
+  @override
+  void dispose() {
+    _draft.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onDraft() {
+    final t = _draft.text;
+    if (t.endsWith(',') || t.endsWith(' ')) _commit();
+  }
+
+  void _commit() {
+    final app = context.read<FaController>();
+    final parts = _draft.text
+        .split(RegExp(r'[\s,]+'))
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty && e != '.')
+        .map((e) => e.startsWith('.') ? e : '.$e');
+    if (_draft.text.isNotEmpty) _draft.clear();
+    if (parts.isEmpty) return;
+    setExcludeExtensions(app, {...app.excludeExtensions, ...parts}.toList());
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    return Container(
-      height: 26,
-      padding: const EdgeInsets.only(left: 10, right: 3),
-      decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    final app = context.watch<FaController>();
+    final exts = app.excludeExtensions;
+    final field = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: BorderRadius.circular(FaRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(ext, style: FaText.mono(size: 11, color: c.foreground)),
-          const SizedBox(width: 2),
-          FaIconButton(icon: Icons.close_rounded, size: 20, tooltip: 'Stop skipping $ext', onPressed: onRemove),
+          for (final e in exts)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(FaRadius.md)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(e, style: FaText.mono(size: 11, color: c.foreground)),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: 'Index $e files again',
+                    child: Hoverable(
+                      onTap: () => setExcludeExtensions(app, exts.where((x) => x != e).toList()),
+                      builder: (context, h) =>
+                          Icon(Icons.close_rounded, size: 10, color: h ? c.foreground : c.mutedForeground),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          SizedBox(
+            width: 120,
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (node, k) {
+                if (k is KeyDownEvent && k.logicalKey == LogicalKeyboardKey.backspace && _draft.text.isEmpty) {
+                  if (exts.isNotEmpty) setExcludeExtensions(app, exts.sublist(0, exts.length - 1));
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                controller: _draft,
+                focusNode: _focus,
+                onSubmitted: (_) => _commit(),
+                style: FaText.sans(size: 14, color: c.foreground),
+                cursorColor: c.foreground,
+                cursorHeight: 15,
+                decoration: InputDecoration.collapsed(
+                  hintText: exts.isEmpty ? 'e.g. log, mp3, svg' : '',
+                  hintStyle: FaText.sans(size: 14, color: c.mutedForeground),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (widget.bare) return field;
+    return RowBox(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Skip file types', style: FaText.sans(size: 14, color: c.foreground)),
+          Text(
+            'The index never reads these extensions; existing entries are removed',
+            style: FaText.sans(size: 11, color: c.mutedForeground),
+          ),
+          const SizedBox(height: 8),
+          field,
         ],
       ),
     );
   }
-}
-
-/// Simple confirm dialog in the Folder Agent look.
-Future<bool> confirmDialog(
-  BuildContext context, {
-  required String title,
-  required String message,
-  String confirm = 'Confirm',
-  bool destructive = false,
-}) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    barrierColor: context.fa.overlay,
-    builder: (ctx) {
-      final c = ctx.fa;
-      return Dialog(
-        backgroundColor: c.popover,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FaRadius.xl),
-          side: BorderSide(color: c.border),
-        ),
-        child: SizedBox(
-          width: 380,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: FaText.sans(size: 15, weight: FontWeight.w600, color: c.foreground),
-                ),
-                const SizedBox(height: 8),
-                Text(message, style: FaText.sans(size: 12.5, color: c.mutedForeground, height: 1.45)),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    FaButton(
-                      label: 'Cancel',
-                      variant: FaButtonVariant.ghost,
-                      onPressed: () => Navigator.pop(ctx, false),
-                    ),
-                    const SizedBox(width: 8),
-                    FaButton(
-                      label: confirm,
-                      variant: destructive ? FaButtonVariant.destructive : FaButtonVariant.primary,
-                      onPressed: () => Navigator.pop(ctx, true),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-  return ok ?? false;
 }

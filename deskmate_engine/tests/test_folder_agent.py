@@ -220,3 +220,14 @@ def test_secret_files_are_refused_by_tools(sandbox: Path):
 def test_entities_skip_all_caps_headers_and_short_acronyms():
     ents = extract.extract_entities("SPEAKER STATEMENTS here. ACTION ACTION. OS OS. AWS AWS.")
     assert ents == {"AWS": 2}
+
+
+def test_info_reports_access_time_permissions_and_link_target(sandbox: Path):
+    import os
+
+    target = sandbox / "docs" / "notes.md"
+    link = sandbox / "notes-link.md"
+    os.symlink(target, link)
+    info = fs_service.get_info(str(link))
+    assert info["isSymlink"] and info["realPath"] == str(target.resolve())
+    assert info["permissions"].startswith("-") and isinstance(info["mode"], int) and info["atime"] > 0

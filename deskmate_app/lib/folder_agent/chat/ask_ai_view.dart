@@ -25,51 +25,92 @@ class AskAiView extends StatefulWidget {
   State<AskAiView> createState() => _AskAiViewState();
 }
 
+/// Distance from the bottom (px) within which the conversation still counts
+/// as "stuck" and follows new content (FilDOS `Conversation`'s STICK_THRESHOLD).
+const _stickThreshold = 48.0;
+
+/// The page column: FilDOS `mx-auto max-w-3xl` (768px) for the conversation and the composer.
+const _columnWidth = 768.0;
+
 class _AskAiViewState extends State<AskAiView> {
   final _scroll = ScrollController();
   final _composerKey = GlobalKey<AskAiComposerState>();
   late final FolderChatController _chat = context.read<FolderChatController>();
   late final AskAiSession _session = AskAiSession.of(_chat);
-  Object? _lastSignature;
+
+  /// Pinned to the newest content; released the moment the user scrolls up.
+  bool _stuck = true;
+  int _lastCount = 0;
+
+  /// Built message widgets, reused while the message is unchanged so a log
+  /// step arriving for the live turn never rebuilds the finished turns.
+  final _views = <String, (ChatMessage, Widget)>{};
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
+    _lastCount = _chat.messages.length;
     _chat.refreshHistory();
   }
 
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final p = _scroll.position;
+    final stuck = p.maxScrollExtent - p.pixels <= _stickThreshold;
+    if (stuck != _stuck) setState(() => _stuck = stuck);
+  }
+
+  /// Content or viewport changed size: follow it to the bottom while stuck.
+  /// (A jump, as FilDOS sets scrollTop — no animation to fight new content.)
+  bool _onMetrics(ScrollMetricsNotification n) {
+    if (_stuck && _scroll.hasClients) {
+      final p = _scroll.position;
+      if (p.pixels != p.maxScrollExtent) p.jumpTo(p.maxScrollExtent);
+    }
+    return false;
+  }
+
+  void _jumpToLatest() {
+    setState(() => _stuck = true);
+    if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  }
+
+  /// A new conversation, a reopened one, or a message the user just sent
+  /// re-attaches to the bottom.
+  void _restick() {
+    _stuck = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    });
+  }
+
   void _toggleHistory() {
     setState(() => _session.showHistory = !_session.showHistory);
-    if (_session.showHistory) _chat.refreshHistory();
+    if (_session.showHistory) {
+      _chat.refreshHistory();
+    } else {
+      _restick();
+    }
   }
 
   void _newChat() {
     _chat.newChat();
+    _restick();
     setState(() => _session.showHistory = false);
   }
 
   Future<void> _openChat(String id) async {
     setState(() => _session.showHistory = false);
     await _chat.openChat(id);
-    _lastSignature = null;
-  }
-
-  /// Keep the newest content in view whenever a message or log step arrives.
-  void _autoScroll(FolderChatController chat) {
-    final last = chat.liveTelemetry.lastOrNull;
-    final sig = (chat.messages.length, chat.liveTelemetry.length, last?.summary?.length, chat.liveTitle, chat.sending);
-    if (sig == _lastSignature) return;
-    _lastSignature = sig;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      _scroll.animateTo(_scroll.position.maxScrollExtent, duration: FaMotion.medium, curve: FaMotion.snappy);
-    });
+    if (mounted) setState(_restick);
   }
 
   @override
@@ -80,6 +121,11 @@ class _AskAiViewState extends State<AskAiView> {
     final provider = context.watch<AppSettings>();
     final showHistory = _session.showHistory;
     final title = chat.chatId == null ? null : chat.history.where((h) => h.id == chat.chatId).firstOrNull?.title;
+    final count = chat.messages.length;
+    if (count != _lastCount) {
+      if (count > _lastCount && chat.messages.last.role == MessageRole.user) _restick();
+      _lastCount = count;
+    }
 
     return Column(
       children: [
@@ -108,15 +154,19 @@ class _AskAiViewState extends State<AskAiView> {
           ),
           actions: [
             FaIconButton(
-              icon: Icons.history_rounded,
-              tooltip: 'History',
+              icon: Icons.schedule_rounded,
+              tooltip: 'Conversation history',
               active: showHistory,
               onPressed: _toggleHistory,
             ),
-            FaIconButton(icon: Icons.add_rounded, tooltip: 'New chat', onPressed: chat.sending ? null : _newChat),
+            FaIconButton(
+              icon: Icons.add_rounded,
+              tooltip: 'New conversation',
+              onPressed: chat.sending ? null : _newChat,
+            ),
             FaIconButton(
               icon: Icons.close_rounded,
-              tooltip: 'Close',
+              tooltip: 'Close Ask AI',
               onPressed: () => app.showSection(FaSection.browse),
             ),
           ],
@@ -134,7 +184,7 @@ class _AskAiViewState extends State<AskAiView> {
         if (!showHistory)
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 784),
+              constraints: const BoxConstraints(maxWidth: _columnWidth),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -193,25 +243,116 @@ class _AskAiViewState extends State<AskAiView> {
     return const [];
   }
 
+  Widget _messageView(ChatMessage m) {
+    final cached = _views[m.id];
+    if (cached != null && identical(cached.$1, m)) return cached.$2;
+    final view = ChatMessageView(
+      key: ValueKey(m.id),
+      message: m,
+      mentions: m.role == MessageRole.user ? (_session.sentMentions[m.content.trim()] ?? const []) : const [],
+    );
+    _views[m.id] = (m, view);
+    return view;
+  }
+
+  /// FilDOS `Conversation` › `flex flex-col gap-4 px-4 mx-auto max-w-3xl py-6`,
+  /// pinned to the bottom while stuck, with a "Latest" pill once released.
   Widget _conversation(FolderChatController chat) {
-    _autoScroll(chat);
+    if (_views.length > chat.messages.length) {
+      final ids = {for (final m in chat.messages) m.id};
+      _views.removeWhere((id, _) => !ids.contains(id));
+    }
     final items = <Widget>[
-      for (final m in chat.messages)
-        ChatMessageView(
-          key: ValueKey(m.id),
-          message: m,
-          mentions: m.role == MessageRole.user ? (_session.sentMentions[m.content.trim()] ?? const []) : const [],
-        ),
+      for (final m in chat.messages) _messageView(m),
       if (chat.sending) LiveTelemetry(steps: chat.liveTelemetry, title: chat.liveTitle),
     ];
-    return ListView.builder(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-      itemCount: items.length,
-      itemBuilder: (context, i) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: Padding(padding: const EdgeInsets.only(bottom: 18), child: items[i]),
+    return Stack(
+      children: [
+        NotificationListener<ScrollMetricsNotification>(
+          onNotification: _onMetrics,
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _columnWidth - 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[if (i > 0) const SizedBox(height: 16), items[i]],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (!_stuck)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: Center(child: _LatestPill(onTap: _jumpToLatest)),
+          ),
+      ],
+    );
+  }
+}
+
+/// FilDOS "Jump to latest": `h-6 rounded-full border material px-2.5 text-2xs
+/// font-medium shadow-md`, fading/zooming in (`zoom-in-95`, 150ms snappy).
+class _LatestPill extends StatelessWidget {
+  final VoidCallback onTap;
+  const _LatestPill({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 150),
+      curve: FaMotion.snappy,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(scale: 0.95 + 0.05 * t, child: child),
+      ),
+      child: Tooltip(
+        message: 'Jump to latest',
+        child: Hoverable(
+          onTap: onTap,
+          builder: (context, hover) => Container(
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: hover ? c.accent : c.popover,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: c.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 6,
+                  spreadRadius: -1,
+                  offset: const Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  spreadRadius: -2,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.arrow_downward_rounded, size: 11, color: c.foreground),
+                const SizedBox(width: 4),
+                Text(
+                  'Latest',
+                  style: FaText.sans(size: 11, weight: FontWeight.w500, color: c.foreground, height: 1.5),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

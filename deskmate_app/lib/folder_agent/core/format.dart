@@ -1,58 +1,47 @@
+import 'dart:math' as math;
+
 import 'package:intl/intl.dart';
 
-String formatBytes(int bytes, {int decimals = 1}) {
-  if (bytes <= 0) return 'Zero bytes';
-  const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
-  var v = bytes.toDouble();
-  var i = 0;
-  while (v >= 1000 && i < units.length - 1) {
-    v /= 1000;
-    i++;
-  }
-  return i == 0 ? '$bytes bytes' : '${v.toStringAsFixed(v >= 100 ? 0 : decimals)} ${units[i]}';
+// Formatting helpers — the same rules as FilDOS's lib/format.ts and
+// lib/path.ts so sizes, dates, types and folder hints read identically.
+
+/// Human-readable size, base 1024: 0 → "0 B", 1536 → "1.5 KB".
+String formatBytes(int bytes) {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  final exp = math.min((math.log(bytes) / math.log(1024)).floor(), units.length - 1);
+  final value = bytes / math.pow(1024, exp);
+  if (exp == 0) return '$bytes B';
+  final rounded = (value * 10).round() / 10;
+  final text = rounded == rounded.roundToDouble() ? rounded.toStringAsFixed(0) : rounded.toStringAsFixed(1);
+  return '$text ${units[exp]}';
 }
 
-/// "Today at 14:05", "Yesterday at 09:12", "12 Mar 2026".
-String formatDate(DateTime d) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(d.year, d.month, d.day);
-  final time = DateFormat.Hm().format(d);
-  if (day == today) return 'Today at $time';
-  if (day == today.subtract(const Duration(days: 1))) return 'Yesterday at $time';
-  if (d.year == now.year) return DateFormat('d MMM \'at\' HH:mm').format(d);
-  return DateFormat('d MMM yyyy').format(d);
+/// Date and time, e.g. "Jun 8, 2026, 9:04 AM".
+String formatDate(DateTime? d) {
+  if (d == null || d.millisecondsSinceEpoch == 0) return '—';
+  return DateFormat('MMM d, y, h:mm a').format(d);
 }
 
-/// "2m ago", "3h ago", "5d ago" for compact UI.
-String formatAgo(DateTime d) {
-  final diff = DateTime.now().difference(d);
-  if (diff.inSeconds < 60) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 30) return '${diff.inDays}d ago';
-  return DateFormat('d MMM yyyy').format(d);
+/// Compact relative time: "just now", "5m ago", "3h ago", "2d ago", then "Jun 8".
+String formatAgo(DateTime d, {DateTime? now}) {
+  final seconds = math.max(0, (now ?? DateTime.now()).difference(d).inSeconds);
+  if (seconds < 60) return 'just now';
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) return '${minutes}m ago';
+  final hours = minutes ~/ 60;
+  if (hours < 24) return '${hours}h ago';
+  final days = hours ~/ 24;
+  if (days < 7) return '${days}d ago';
+  return DateFormat('MMM d').format(d);
 }
 
-const _kindLabels = {
-  'folder': 'Folder',
-  'image': 'Image',
-  'video': 'Video',
-  'audio': 'Audio',
-  'pdf': 'PDF document',
-  'document': 'Document',
-  'spreadsheet': 'Spreadsheet',
-  'presentation': 'Presentation',
-  'archive': 'Archive',
-  'code': 'Source code',
-  'data': 'Data',
-  'ebook': 'E-book',
-  'font': 'Font',
-  'app': 'Application',
-};
-
-String kindLabel(String kind, String ext) =>
-    _kindLabels[kind] ?? (ext.isEmpty ? 'Document' : '${ext.toUpperCase()} file');
+/// Short type label: "Folder", "PDF file", "File" (FilDOS `typeLabel`).
+String kindLabel(String kind, String ext, {bool isSymlink = false}) {
+  if (kind == 'folder') return 'Folder';
+  if (isSymlink) return 'Alias';
+  return ext.isEmpty ? 'File' : '${ext.toUpperCase()} file';
+}
 
 /// Last path component, tolerant of trailing separators and roots.
 String baseName(String path) {
@@ -69,8 +58,14 @@ String parentDir(String path) {
   return trimmed.substring(0, i);
 }
 
-/// "~/Documents/Work" for display (home collapsed to ~).
-String compactDir(String path, String home) {
-  if (home.isNotEmpty && path.startsWith(home)) return '~${path.substring(home.length)}';
-  return path;
+/// A folder for row sublines: home collapsed to "~", and deep paths shortened
+/// to their last two parts ("…/Work/Taxes"), as FilDOS's `compactDir`.
+String compactDir(String dir, String home) {
+  final sep = dir.contains('\\') && !dir.contains('/') ? '\\' : '/';
+  final underHome = home.isNotEmpty && (dir == home || dir.startsWith('$home$sep'));
+  final shown = underHome ? '~${dir.substring(home.length)}' : dir;
+  final parts = shown.split(sep).where((p) => p.isNotEmpty).toList();
+  final lead = underHome ? 1 : 0; // "~" counts as a part
+  if (parts.length - lead <= 3) return shown;
+  return ['…', ...parts.sublist(parts.length - 2)].join(sep);
 }

@@ -14,7 +14,7 @@ import '../core/models.dart';
 import '../shell/pane_header.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
-import '../widgets/file_icon.dart';
+import '../widgets/logo.dart';
 import '../widgets/ui.dart';
 import 'canvas_scene.dart';
 import 'graph_model.dart';
@@ -38,12 +38,11 @@ const _kindLabels = {
   EdgeKind.tag: 'Tags',
   EdgeKind.temporal: 'Sessions',
 };
-const _phases = ['similarity', 'entities', 'assemble'];
 
 String _phaseText(String? p) => switch (p) {
   'similarity' => 'Connecting files that belong together',
   'entities' => 'Reading who and what is inside your files',
-  _ => 'Assembling the map',
+  _ => 'Assembling',
 };
 
 class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
@@ -87,13 +86,10 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
     _app = context.read<FaController>();
     _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
       ..addListener(() => _scene.setIntro(FaMotion.snappy.transform(_intro.value)));
-    _replay = AnimationController(vsync: this, duration: const Duration(seconds: 6))
+    _replay = AnimationController(vsync: this, duration: const Duration(seconds: 8))
       ..addListener(_onReplayTick)
       ..addStatusListener((s) {
-        if (s == AnimationStatus.completed && mounted) {
-          setState(() => _playing = false);
-          _scene.setRange(null);
-        }
+        if (s == AnimationStatus.completed && mounted) setState(() => _playing = false);
       });
     _camAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 420))
       ..addListener(() {
@@ -151,7 +147,7 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
     _snapshot = snap;
     final g = snap == null || snap.nodes.isEmpty ? null : CanvasGraph.fromSnapshot(snap);
     _graph = g;
-    _histogram = g == null ? const [] : timeHistogram(g.fileTimes, g.minTime, g.maxTime, 60);
+    _histogram = g == null ? const [] : timeHistogram(g.fileTimes, g.minTime, g.maxTime, 48);
     _replay.stop();
     _playing = false;
     _scene.setGraph(g);
@@ -271,10 +267,14 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
   }
 
   // ── replay ────────────────────────────────────────────────────────────────
+  /// FilDOS replay: the right edge sweeps from just past the left edge to the
+  /// end over 8s (ease-out quad); the left edge stays where the user put it.
+  double _replayFrom = 0;
   void _onReplayTick() {
     final t = _replay.value;
     final eased = 1 - (1 - t) * (1 - t);
-    _scene.setRange(RangeValues(0, 0.02 + 0.98 * eased));
+    final f = _replayFrom;
+    _scene.setRange(RangeValues(f, math.min(1, f + 0.02 + (1 - f - 0.02) * eased)));
   }
 
   void _togglePlay() {
@@ -282,7 +282,7 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
       _replay.stop();
       setState(() => _playing = false);
     } else {
-      _scene.setSelected(null);
+      _replayFrom = _scene.range.value?.start ?? 0;
       setState(() => _playing = true);
       _replay.forward(from: 0);
     }
@@ -345,7 +345,6 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
   void _onScaleEnd(ScaleEndDetails d) => _dragging = false;
 
   void _onTapUp(TapUpDetails d) {
-    _dismissHint();
     final hit = _scene.hitTest(d.localPosition);
     final now = DateTime.now();
     if (hit != null && hit == _lastTapNode && now.difference(_lastTapAt) < const Duration(milliseconds: 350)) {
@@ -356,7 +355,8 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
     }
     _lastTapNode = hit;
     _lastTapAt = now;
-    _scene.setSelected(hit);
+    // FilDOS: clicking a node toggles it; clicking empty space clears.
+    _scene.setSelected(hit != null && hit == _scene.selected ? null : hit);
   }
 
   void _dismissHint() {
@@ -388,36 +388,71 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
   }
 
   // ── build ─────────────────────────────────────────────────────────────────
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused != null && focused.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return KeyEventResult.ignored;
+    }
+    // FilDOS: Escape clears the selection first, then leaves the page.
+    if (_scene.selected != null) {
+      _scene.setSelected(null);
+    } else {
+      _app.showSection(FaSection.browse);
+    }
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final app = context.watch<FaController>();
-    return ColoredBox(
-      color: c.background,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PaneHeader.simple(icon: Icons.hub_outlined, label: 'Canvas', actions: [_headerAction(c, app)]),
-          Expanded(child: _body(c, app)),
-          if (app.aiEnabled && _graph != null && _graph!.maxTime > _graph!.minTime)
-            TimeScrubber(
-              counts: _histogram,
-              min: _graph!.minTime,
-              max: _graph!.maxTime,
-              range: _scene.range,
-              onChanged: _setRange,
-              playing: _playing,
-              onTogglePlay: _togglePlay,
+    // Only what this view shows — index-progress ticks for other fields must
+    // not rebuild (and so re-layout) the canvas stack.
+    final (aiEnabled, indexed, busy, done, total) = context.select<FaController, (bool, int, bool, int, int)>(
+      (a) => (a.aiEnabled, a.index.indexed, a.index.busy, a.index.done, a.index.total),
+    );
+    final g = _graph;
+    return Focus(
+      focusNode: _canvasFocus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: ColoredBox(
+        color: c.background,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PaneHeader.simple(
+              icon: Icons.psychology_outlined,
+              label: 'Canvas',
+              actions: [
+                Tooltip(
+                  message: 'Recompute similarity edges and entities from scratch',
+                  child: _ChromeButton(
+                    icon: Icons.refresh_rounded,
+                    label: 'Rebuild',
+                    onTap: aiEnabled && indexed > 0 ? _rebuild : null,
+                  ),
+                ),
+              ],
             ),
-        ],
+            Expanded(
+              child: _body(c, aiEnabled: aiEnabled, indexed: indexed, busy: busy, done: done, total: total),
+            ),
+            if (aiEnabled && g != null && g.maxTime > g.minTime)
+              TimeScrubber(
+                counts: _histogram,
+                min: g.minTime,
+                max: g.maxTime,
+                range: _scene.range,
+                onChanged: _setRange,
+                playing: _playing,
+                onTogglePlay: _togglePlay,
+              ),
+          ],
+        ),
       ),
     );
-  }
-
-  (int, int) get _phaseStep {
-    final p = _status['phase'] as String?;
-    final i = _phases.indexOf(p ?? '');
-    return (i < 0 ? 1 : i + 1, _phases.length);
   }
 
   double? get _phaseFraction {
@@ -426,146 +461,71 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
     return total > 0 ? (done / total).clamp(0.0, 1.0) : null;
   }
 
-  Widget _headerAction(FaColors c, FaController app) {
-    if (_building) {
-      final (n, m) = _phaseStep;
-      return Tooltip(
-        message: _phaseText(_status['phase'] as String?),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 1.5, color: Scoop.mint),
-              ),
-              const SizedBox(width: 8),
-              Text('Building… $n/$m', style: FaText.sans(size: 12, color: c.mutedForeground)),
-            ],
-          ),
-        ),
-      );
-    }
-    return Tooltip(
-      message: 'Recompute similarity, entities and clusters from the index',
-      child: FaButton(
-        label: 'Rebuild',
-        icon: Icons.refresh_rounded,
-        variant: FaButtonVariant.ghost,
-        dense: true,
-        onPressed: app.aiEnabled && app.index.indexed > 0 ? _rebuild : null,
-      ),
-    );
-  }
-
-  Widget _body(FaColors c, FaController app) {
-    if (!app.aiEnabled) {
-      return _EmptyState(
-        icon: Icons.auto_awesome_outlined,
-        title: 'The Canvas needs on-device AI',
-        body:
-            'Turn on DeskMate\'s on-device AI and index a few folders. The Canvas then maps how your files '
-            'relate: by meaning, by the people and projects inside them, and by when you worked on them.',
-        action: FaButton(
-          label: 'Open Settings',
-          variant: FaButtonVariant.primary,
-          dense: true,
-          onPressed: () => app.showSection(FaSection.settings),
-        ),
-      );
-    }
-    final g = _graph;
-    if (g == null) {
-      if (_building) return _buildingState(c);
-      if (_state == 'error') {
-        return _EmptyState(
-          icon: Icons.error_outline_rounded,
-          title: 'Couldn\'t build the Canvas',
-          body: (_status['error'] as String?) ?? 'Something went wrong while mapping your files.',
-          action: FaButton(label: 'Try again', icon: Icons.refresh_rounded, dense: true, onPressed: _rebuild),
-        );
-      }
-      if (app.index.indexed == 0) {
-        return _EmptyState(
-          icon: Icons.hub_outlined,
-          title: 'Index some folders first',
-          body: app.index.busy
-              ? 'Indexing is under way (${app.index.done} of ${app.index.total}). The Canvas appears once files are indexed.'
-              : 'The Canvas is drawn from your semantic index. Choose folders to index in Settings and come back.',
-          action: FaButton(
-            label: 'Open Settings',
-            variant: FaButtonVariant.primary,
-            dense: true,
-            onPressed: () => app.showSection(FaSection.settings),
-          ),
-        );
-      }
-      if (_loading) return const SizedBox.shrink();
-      if (_loadError != null) {
-        return _EmptyState(
-          icon: Icons.cloud_off_outlined,
-          title: 'Couldn\'t load the Canvas',
-          body: _loadError!.message,
-          action: FaButton(
-            label: 'Retry',
-            icon: Icons.refresh_rounded,
-            dense: true,
-            onPressed: () {
-              setState(() => _loadError = null);
-              _load();
-            },
-          ),
-        );
-      }
-      if (_snapshot != null) {
-        return _EmptyState(
-          icon: Icons.hub_outlined,
-          title: 'Nothing to map yet',
-          body: 'The index is still young. Come back once a few more files are indexed, or rebuild now.',
-          action: FaButton(label: 'Rebuild', icon: Icons.refresh_rounded, dense: true, onPressed: _rebuild),
-        );
-      }
-      return _buildingState(c);
-    }
-    return _stage(c, app);
-  }
-
-  Widget _buildingState(FaColors c) {
-    final (n, m) = _phaseStep;
+  /// FilDOS BuildProgress: "phase · NN%".
+  String get _buildText {
     final pct = _phaseFraction;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.hub_outlined, size: 30, color: Scoop.mint),
-            const SizedBox(height: 14),
-            Text(
-              'Mapping your files…',
-              style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${_phaseText(_status['phase'] as String?)} · step $n of $m'
-              '${pct == null ? '' : ' · ${(pct * 100).round()}%'}',
-              textAlign: TextAlign.center,
-              style: FaText.sans(size: 12, color: c.mutedForeground),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: 220,
-              child: FaProgressBar(value: pct == null ? null : ((n - 1) + pct) / m, color: Scoop.mint),
-            ),
-          ],
+    return '${_phaseText(_status['phase'] as String?)}${pct == null ? '' : ' · ${(pct * 100).round()}%'}';
+  }
+
+  Widget _body(
+    FaColors c, {
+    required bool aiEnabled,
+    required int indexed,
+    required bool busy,
+    required int done,
+    required int total,
+  }) {
+    final g = _graph;
+    if (g != null && aiEnabled) return _stage(c);
+    if (aiEnabled && _building) {
+      return _EmptyState(
+        pulse: true,
+        title: 'Mapping your storage…',
+        child: Text(
+          _buildText,
+          textAlign: TextAlign.center,
+          style: FaText.sans(size: 11, color: c.mutedForeground),
         ),
-      ),
+      );
+    }
+    if (!aiEnabled || indexed == 0) {
+      return _EmptyState(
+        title: 'The Canvas needs an index',
+        body: busy
+            ? 'Indexing is under way ($done of $total). The Canvas appears once files are indexed.'
+            : 'Turn on indexing and DeskMate will map how your files relate — by meaning, by the people and '
+                  'projects inside them, and by when you worked on them.',
+        action: _PrimaryPill(label: 'Open Settings', onTap: () => _app.showSection(FaSection.settings)),
+      );
+    }
+    if (_state == 'error') {
+      return _EmptyState(
+        title: 'Couldn\'t build the Canvas',
+        body: (_status['error'] as String?) ?? 'Something went wrong while mapping your files.',
+        action: _PrimaryPill(label: 'Try again', onTap: _rebuild),
+      );
+    }
+    if (_loading) return const SizedBox.shrink();
+    if (_loadError != null) {
+      return _EmptyState(
+        title: 'Couldn\'t load the Canvas',
+        body: _loadError!.message,
+        action: _PrimaryPill(
+          label: 'Retry',
+          onTap: () {
+            setState(() => _loadError = null);
+            _load();
+          },
+        ),
+      );
+    }
+    return const _EmptyState(
+      title: 'Nothing to map yet',
+      body: 'The index is still young. Come back once a few files are indexed, or rebuild now.',
     );
   }
 
-  Widget _stage(FaColors c, FaController app) {
+  Widget _stage(FaColors c) {
     final snap = _snapshot!;
     return LayoutBuilder(
       builder: (context, box) {
@@ -574,7 +534,7 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
           clipBehavior: Clip.hardEdge,
           children: [
             Positioned.fill(child: _canvas(c)),
-            // Top-left: search + legend/filter chips.
+            // HUD: search + edge-kind chips (left), stats (right).
             Positioned(
               left: 12,
               top: 12,
@@ -602,69 +562,60 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            // Top-right: stats pill.
             Positioned(right: 12, top: 12, child: _StatsPill(stats: snap.stats)),
-            // Bottom-right: zoom controls.
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: _ZoomControls(onIn: () => _zoomBy(1.5), onOut: () => _zoomBy(1 / 1.5), onFit: _fit),
-            ),
-            // Bottom-centre: build progress over an existing graph / error / first-use hint.
-            Positioned(left: 0, right: 0, bottom: 14, child: Center(child: _bottomPill(c))),
-            // Hover tooltip.
+            // Bottom-centre: build progress / error / first-open hint.
+            Positioned(left: 0, right: 0, bottom: 12, child: Center(child: _bottomPill(c))),
+            // Hover card at the pointer (+14px).
             ListenableBuilder(
               listenable: Listenable.merge([_pointer, _scene.overlay]),
               builder: (context, _) {
                 final i = _scene.hovered, p = _pointer.value;
-                if (i == null || p == null || i == _scene.selected) return const SizedBox.shrink();
-                const w = 280.0;
-                final left = (p.dx + 16 + w > size.width) ? p.dx - 16 - w : p.dx + 16;
-                final top = math.min(p.dy + 16, size.height - 110);
+                if (i == null || p == null) return const SizedBox.shrink();
+                const w = 320.0;
+                final left = (p.dx + 14 + w > size.width) ? p.dx - 14 - w : p.dx + 14;
                 return Positioned(
                   left: math.max(8, left),
-                  top: math.max(8, top),
+                  top: math.min(p.dy + 14, size.height - 48),
                   child: IgnorePointer(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: w),
-                      child: _HoverCard(node: _graph!.nodes[i], home: app.home, scene: _scene, index: i),
+                      child: _HoverCard(node: _graph!.nodes[i]),
                     ),
                   ),
                 );
               },
             ),
-            // Selection card, anchored beside the selected node.
+            // Zoom cluster + detail panel (steps aside when a node is selected).
             ListenableBuilder(
-              listenable: _scene,
+              listenable: _scene.overlay,
               builder: (context, _) {
                 final i = _scene.selected;
-                if (i == null || !_scene.isVisible(i)) return const SizedBox.shrink();
-                const w = 272.0;
-                final p = _scene.screenOf(i);
-                final r = _scene.screenRadius(i) + 14;
-                var left = p.dx + r;
-                if (left + w > size.width - 60) left = p.dx - r - w;
-                left = left.clamp(8.0, math.max(8.0, size.width - w - 8)).toDouble();
-                final top = (p.dy - 40).clamp(96.0, math.max(96.0, size.height - 250)).toDouble();
-                return Positioned(
-                  left: left,
-                  top: top,
-                  width: w,
-                  child: _SelectionCard(
-                    key: ValueKey(i),
-                    graph: _graph!,
-                    scene: _scene,
-                    index: i,
-                    home: app.home,
-                    onClose: () => _scene.setSelected(null),
-                    onOpen: _openFile,
-                    onShowInFolder: _showInFolder,
-                    onAskAi: (paths) => app.askAiAbout(paths),
-                    onSelect: (j) {
-                      _scene.setSelected(j);
-                      _centreOn(j, zoomIn: false);
-                    },
-                  ),
+                return Stack(
+                  children: [
+                    Positioned(
+                      right: i == null ? 12 : 312,
+                      bottom: 12,
+                      child: _ZoomControls(onIn: () => _zoomBy(1.5), onOut: () => _zoomBy(1 / 1.5), onFit: _fit),
+                    ),
+                    if (i != null)
+                      Positioned(
+                        right: 12,
+                        top: 12,
+                        bottom: 12,
+                        width: 288,
+                        child: _DetailPanel(
+                          key: ValueKey(i),
+                          graph: _graph!,
+                          scene: _scene,
+                          index: i,
+                          onClose: () => _scene.setSelected(null),
+                          onOpen: _openFile,
+                          onShowInFolder: _showInFolder,
+                          onAskAi: (paths) => _app.askAiAbout(paths),
+                          onSelect: _scene.setSelected,
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -675,35 +626,30 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
   }
 
   Widget _canvas(FaColors c) {
-    return Focus(
-      focusNode: _canvasFocus,
-      onKeyEvent: (node, e) {
-        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && _scene.selected != null) {
-          _scene.setSelected(null);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
+    return Listener(
+      onPointerSignal: _onScroll,
+      onPointerDown: (_) {
+        _canvasFocus.requestFocus();
+        _dismissHint(); // FilDOS: the hint goes at the first touch
       },
-      child: Listener(
-        onPointerSignal: _onScroll,
-        onPointerDown: (_) => _canvasFocus.requestFocus(),
-        child: ValueListenableBuilder<bool>(
-          valueListenable: _hoverCursor,
-          builder: (context, onNode, child) => MouseRegion(
-            cursor: onNode ? SystemMouseCursors.click : SystemMouseCursors.grab,
-            onHover: _onHover,
-            onExit: _onExit,
-            child: child,
-          ),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapUp: _onTapUp,
-            onScaleStart: _onScaleStart,
-            onScaleUpdate: _onScaleUpdate,
-            onScaleEnd: _onScaleEnd,
-            child: RepaintBoundary(
-              child: CustomPaint(painter: CanvasPainter(_scene, c), size: Size.infinite),
-            ),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _hoverCursor,
+        builder: (context, onNode, child) => MouseRegion(
+          cursor: onNode
+              ? SystemMouseCursors.click
+              : (_dragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab),
+          onHover: _onHover,
+          onExit: _onExit,
+          child: child,
+        ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: _onTapUp,
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+          onScaleEnd: _onScaleEnd,
+          child: RepaintBoundary(
+            child: CustomPaint(painter: CanvasPainter(_scene, c), size: Size.infinite),
           ),
         ),
       ),
@@ -712,24 +658,17 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
 
   Widget _bottomPill(FaColors c) {
     if (_building) {
-      final (n, m) = _phaseStep;
-      final pct = _phaseFraction;
       return _Glass(
         radius: 999,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        alpha: 0.9,
+        shadow: true,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 11,
-              height: 11,
-              child: CircularProgressIndicator(strokeWidth: 1.4, color: Scoop.mint),
-            ),
+            const _Pulse(child: DeskMateMark(size: 14)),
             const SizedBox(width: 8),
-            Text(
-              '${_phaseText(_status['phase'] as String?)} · $n/$m${pct == null ? '' : ' · ${(pct * 100).round()}%'}',
-              style: FaText.sans(size: 11.5, color: c.mutedForeground),
-            ),
+            Text(_buildText, style: FaText.sans(size: 11, color: c.mutedForeground)),
           ],
         ),
       );
@@ -737,70 +676,194 @@ class _CanvasViewState extends State<CanvasView> with TickerProviderStateMixin {
     if (_state == 'error') {
       return _Glass(
         radius: 999,
-        padding: const EdgeInsets.only(left: 12, right: 4, top: 3, bottom: 3),
+        alpha: 0.9,
+        shadow: true,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded, size: 14, color: c.destructive),
-            const SizedBox(width: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 360),
               child: Text(
                 'Rebuild failed: ${(_status['error'] as String?) ?? 'unknown error'}',
                 overflow: TextOverflow.ellipsis,
-                style: FaText.sans(size: 11.5, color: c.mutedForeground),
+                style: FaText.sans(size: 11, color: c.mutedForeground),
               ),
             ),
-            const SizedBox(width: 6),
-            FaButton(label: 'Retry', variant: FaButtonVariant.ghost, dense: true, onPressed: _rebuild),
+            const SizedBox(width: 8),
+            Hoverable(
+              onTap: _rebuild,
+              builder: (context, h) => Text(
+                'Retry',
+                style: FaText.sans(size: 11, weight: FontWeight.w500, color: h ? c.foreground : Scoop.mint),
+              ),
+            ),
           ],
         ),
       );
     }
-    if (_hintDismissed) return const SizedBox.shrink();
-    return _Glass(
-      radius: 999,
-      padding: const EdgeInsets.only(left: 12, right: 4, top: 3, bottom: 3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Drag to explore · Scroll to zoom · Click any dot for its story',
-            style: FaText.sans(size: 11.5, color: c.mutedForeground),
+    return ListenableBuilder(
+      listenable: _scene.overlay,
+      builder: (context, _) {
+        if (_hintDismissed || _scene.selected != null) return const SizedBox.shrink();
+        return IgnorePointer(
+          ignoring: false,
+          child: _Glass(
+            radius: 999,
+            alpha: 0.9,
+            shadow: true,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Drag to explore · Scroll to zoom · Click any dot for its story',
+                  style: FaText.sans(size: 11, color: c.mutedForeground),
+                ),
+                const SizedBox(width: 4),
+                Hoverable(
+                  onTap: _dismissHint,
+                  builder: (context, h) =>
+                      Icon(Icons.close_rounded, size: 11, color: h ? c.foreground : c.mutedForeground),
+                ),
+              ],
+            ),
           ),
-          FaIconButton(icon: Icons.close_rounded, size: 22, onPressed: _dismissHint),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 // ── overlay widgets ─────────────────────────────────────────────────────────
 
-/// Translucent card surface for HUD elements floating over the graph.
+/// `bg-card/85 border backdrop-blur` HUD surface (rounded-lg unless [radius]).
 class _Glass extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double radius;
-  const _Glass({required this.child, this.padding = const EdgeInsets.all(10), this.radius = FaRadius.md});
+  final double alpha;
+  final bool shadow;
+  const _Glass({
+    required this.child,
+    this.padding = const EdgeInsets.all(10),
+    this.radius = FaRadius.lg,
+    this.alpha = 0.85,
+    this.shadow = false,
+  });
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: c.card.withValues(alpha: 0.88),
+        color: c.card.withValues(alpha: alpha),
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: c.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: c.isDark ? 0.25 : 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: shadow
+            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))]
+            : null,
       ),
       child: child,
+    );
+  }
+}
+
+/// FilDOS page-chrome button: `text-xs px-2 py-1 rounded-md`, 14px icon.
+class _ChromeButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  const _ChromeButton({required this.icon, required this.label, this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Opacity(
+      opacity: onTap == null ? 0.5 : 1,
+      child: Hoverable(
+        onTap: onTap,
+        builder: (context, h) {
+          final fg = h && onTap != null ? c.foreground : c.mutedForeground;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: h && onTap != null ? c.accent : c.accent.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(FaRadius.md),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: fg),
+                const SizedBox(width: 6),
+                Text(label, style: FaText.sans(size: 12, color: fg)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// `bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-xs font-medium`.
+class _PrimaryPill extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _PrimaryPill({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Hoverable(
+      onTap: onTap,
+      builder: (context, h) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: h ? c.primary.withValues(alpha: 0.9) : c.primary,
+          borderRadius: BorderRadius.circular(FaRadius.md),
+        ),
+        child: Text(
+          label,
+          style: FaText.sans(size: 12, weight: FontWeight.w500, color: c.primaryForeground),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tailwind `animate-pulse` (opacity 1 → 0.5 → 1 over 2s).
+class _Pulse extends StatefulWidget {
+  final Widget child;
+  const _Pulse({required this.child});
+  @override
+  State<_Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return FadeTransition(
+      opacity: _c.drive(
+        TweenSequence([
+          TweenSequenceItem(
+            tween: Tween(begin: 1.0, end: 0.5).chain(CurveTween(curve: const Cubic(0.4, 0, 0.6, 1))),
+            weight: 1,
+          ),
+          TweenSequenceItem(
+            tween: Tween(begin: 0.5, end: 1.0).chain(CurveTween(curve: const Cubic(0.4, 0, 0.6, 1))),
+            weight: 1,
+          ),
+        ]),
+      ),
+      child: widget.child,
     );
   }
 }
@@ -811,36 +874,36 @@ class _SearchBox extends StatelessWidget {
   final VoidCallback onSubmit;
   const _SearchBox({required this.controller, required this.scene, required this.onSubmit});
 
+  void _clear() {
+    controller.clear();
+    scene.setQuery('');
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     return _Glass(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      shadow: true,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: SizedBox(
-        width: 236,
-        height: 32,
+        width: 202, // w-56 (224) minus padding
         child: Row(
           children: [
-            Icon(Icons.search_rounded, size: 15, color: c.mutedForeground),
-            const SizedBox(width: 7),
+            Icon(Icons.search_rounded, size: 14, color: c.mutedForeground),
+            const SizedBox(width: 8),
             Expanded(
               child: CallbackShortcuts(
-                bindings: {
-                  const SingleActivator(LogicalKeyboardKey.escape): () {
-                    controller.clear();
-                    scene.setQuery('');
-                  },
-                },
+                bindings: {const SingleActivator(LogicalKeyboardKey.escape): _clear},
                 child: TextField(
                   controller: controller,
                   onChanged: scene.setQuery,
                   onSubmitted: (_) => onSubmit(),
-                  style: FaText.sans(size: 12.5, color: c.foreground),
+                  style: FaText.sans(size: 12, color: c.foreground),
                   cursorColor: c.foreground,
-                  cursorHeight: 14,
+                  cursorHeight: 13,
                   decoration: InputDecoration.collapsed(
                     hintText: 'Find in graph…',
-                    hintStyle: FaText.sans(size: 12.5, color: c.mutedForeground),
+                    hintStyle: FaText.sans(size: 12, color: c.mutedForeground),
                   ),
                 ),
               ),
@@ -849,24 +912,13 @@ class _SearchBox extends StatelessWidget {
               listenable: scene.overlay,
               builder: (context, _) {
                 if (scene.query.isEmpty) return const SizedBox.shrink();
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${scene.matchCount}',
-                      style: FaText.mono(size: 10.5, color: scene.matchCount == 0 ? c.destructive : c.mutedForeground),
-                    ),
-                    const SizedBox(width: 2),
-                    FaIconButton(
-                      icon: Icons.close_rounded,
-                      size: 22,
-                      tooltip: 'Clear',
-                      onPressed: () {
-                        controller.clear();
-                        scene.setQuery('');
-                      },
-                    ),
-                  ],
+                return Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Hoverable(
+                    onTap: _clear,
+                    builder: (context, h) =>
+                        Icon(Icons.close_rounded, size: 12, color: h ? c.foreground : c.mutedForeground),
+                  ),
                 );
               },
             ),
@@ -877,6 +929,8 @@ class _SearchBox extends StatelessWidget {
   }
 }
 
+/// Edge-kind chip: `rounded-full border bg-card/85 px-2.5 py-1 text-2xs`, a
+/// size-2 dot; off = muted text, whole chip at 60%, dot at 35%.
 class _KindChip extends StatelessWidget {
   final String label;
   final Color color;
@@ -888,31 +942,23 @@ class _KindChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     return Tooltip(
-      message: '${on ? 'Hide' : 'Show'} ${label.toLowerCase()} connections',
+      message: 'Toggle ${label.toLowerCase()} connections',
       child: Hoverable(
         onTap: onTap,
-        builder: (context, hover) => AnimatedContainer(
-          duration: FaMotion.fast,
-          height: 26,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: hover ? c.accent : c.card.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: c.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ScoopDot(on ? color : color.withValues(alpha: 0.3), size: 7),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: FaText.sans(
-                  size: 11.5,
-                  color: on ? c.foreground : c.mutedForeground.withValues(alpha: 0.7),
-                ).copyWith(decoration: on ? null : TextDecoration.lineThrough, decorationColor: c.mutedForeground),
-              ),
-            ],
+        builder: (context, _) => AnimatedOpacity(
+          duration: const Duration(milliseconds: 150),
+          opacity: on ? 1 : 0.6,
+          child: _Glass(
+            radius: 999,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ScoopDot(color.withValues(alpha: on ? 1 : 0.35), size: 8),
+                const SizedBox(width: 6),
+                Text(label, style: FaText.sans(size: 11, color: on ? c.foreground : c.mutedForeground)),
+              ],
+            ),
           ),
         ),
       ),
@@ -932,35 +978,54 @@ class _StatsPill extends StatelessWidget {
         '${n('files')} files · ${n('entities')} entities · ${n('edges')} links'
         '${stats['truncated'] == true ? ' · most-connected shown' : ''}';
     return _Glass(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      child: Text(text, style: FaText.sans(size: 11.5, color: c.mutedForeground)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Text(text, style: FaText.sans(size: 11, color: c.mutedForeground)),
     );
   }
 }
 
+/// Zoom cluster: three size-7 buttons, hairline `border-y` between.
 class _ZoomControls extends StatelessWidget {
   final VoidCallback onIn, onOut, onFit;
   const _ZoomControls({required this.onIn, required this.onOut, required this.onFit});
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    Widget sep() => Container(height: 1, width: 30, color: c.border);
-    return _Glass(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FaIconButton(icon: Icons.add_rounded, size: 30, tooltip: 'Zoom in', onPressed: onIn),
-          sep(),
-          FaIconButton(icon: Icons.remove_rounded, size: 30, tooltip: 'Zoom out', onPressed: onOut),
-          sep(),
-          FaIconButton(
-            icon: Icons.fit_screen_outlined,
-            size: 30,
-            tooltip: 'Fit the whole graph in view',
-            onPressed: onFit,
-          ),
-        ],
+    Widget btn(String tip, VoidCallback onTap, Widget Function(Color) glyph) => Tooltip(
+      message: tip,
+      child: Hoverable(
+        onTap: onTap,
+        builder: (context, h) => Container(
+          width: 28,
+          height: 28,
+          color: h ? c.accent : c.accent.withValues(alpha: 0),
+          alignment: Alignment.center,
+          child: glyph(h ? c.foreground : c.mutedForeground),
+        ),
+      ),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(FaRadius.lg),
+      child: _Glass(
+        shadow: true,
+        padding: EdgeInsets.zero,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            btn('Zoom in', onIn, (fg) => Icon(Icons.add_rounded, size: 14, color: fg)),
+            Container(height: 1, width: 28, color: c.border),
+            btn(
+              'Zoom out',
+              onOut,
+              (fg) => Text(
+                '−',
+                style: FaText.sans(size: 14, weight: FontWeight.w500, color: fg, height: 1),
+              ),
+            ),
+            Container(height: 1, width: 28, color: c.border),
+            btn('Fit the whole graph in view', onFit, (fg) => Icon(Icons.fullscreen_exit_rounded, size: 13, color: fg)),
+          ],
+        ),
       ),
     );
   }
@@ -970,68 +1035,44 @@ Color _nodeColor(CanvasGraph g, int i, FaColors c) {
   final s = g.slot[i];
   if (s < 6) return Scoop.all[s];
   if (s == ColorSlot.mint) return Scoop.mint;
-  if (s == ColorSlot.tag) return Scoop.parse(g.nodes[i].color, Scoop.grape);
+  if (s == ColorSlot.tag) return Scoop.parse(g.nodes[i].color, c.mutedForeground);
   return c.mutedForeground;
 }
 
-String _plural(int n, String one) => '$n $one${n == 1 ? '' : 's'}';
+String _kindName(GraphNode n) => n.kind == 'tag' ? 'Tag' : 'Entity';
 
+/// FilDOS HoverCard: label text-xs medium; path (or kind) · N connections in text-3xs.
 class _HoverCard extends StatelessWidget {
   final GraphNode node;
-  final String home;
-  final CanvasScene scene;
-  final int index;
-  const _HoverCard({required this.node, required this.home, required this.scene, required this.index});
+  const _HoverCard({required this.node});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final g = scene.graph!;
-    final muted = FaText.sans(size: 11, color: c.mutedForeground);
-    final isFile = node.kind == 'file';
-    return FaCard(
-      shadow: true,
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    final sub = node.kind == 'file' ? (node.path ?? '') : _kindName(node);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: BorderRadius.circular(FaRadius.lg),
+        border: Border.all(color: c.border),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 6, offset: const Offset(0, 4))],
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ScoopDot(_nodeColor(g, index, c), size: 7),
-              const SizedBox(width: 7),
-              Flexible(
-                child: Text(
-                  node.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FaText.sans(size: 12.5, weight: FontWeight.w600, color: c.foreground),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          if (isFile && node.path != null)
-            Text(
-              compactDir(parentDir(node.path!), home),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: FaText.mono(size: 10, color: c.mutedForeground),
-            ),
-          const SizedBox(height: 3),
           Text(
-            [
-              if (isFile)
-                kindLabel(node.fileKind ?? 'file', node.ext ?? '')
-              else
-                (node.kind == 'tag' ? 'Tag' : 'Entity'),
-              if (isFile && node.mtime != null) formatDate(node.mtime!),
-              _plural(node.degree, 'connection'),
-            ].join(' · '),
+            node.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: muted,
+            style: FaText.sans(size: 12, weight: FontWeight.w500, color: c.foreground),
+          ),
+          Text(
+            '$sub · ${node.degree} connection${node.degree == 1 ? '' : 's'}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FaText.sans(size: 10, color: c.mutedForeground),
           ),
         ],
       ),
@@ -1039,23 +1080,24 @@ class _HoverCard extends StatelessWidget {
   }
 }
 
-class _SelectionCard extends StatelessWidget {
+/// FilDOS DetailPanel: a right-docked `w-72 bg-card/95 rounded-xl` panel —
+/// header (dot, label, path, close), Open / Show in folder, then the node's
+/// strongest connections with the "why" behind each.
+class _DetailPanel extends StatelessWidget {
   final CanvasGraph graph;
   final CanvasScene scene;
   final int index;
-  final String home;
   final VoidCallback onClose;
   final ValueChanged<String> onOpen;
   final ValueChanged<String> onShowInFolder;
   final ValueChanged<List<String>> onAskAi;
   final ValueChanged<int> onSelect;
 
-  const _SelectionCard({
+  const _DetailPanel({
     super.key,
     required this.graph,
     required this.scene,
     required this.index,
-    required this.home,
     required this.onClose,
     required this.onOpen,
     required this.onShowInFolder,
@@ -1063,204 +1105,214 @@ class _SelectionCard extends StatelessWidget {
     required this.onSelect,
   });
 
+  static String _why(EdgeKind k, double w) => switch (k) {
+    EdgeKind.similar => '${(w * 100).round()}% similar',
+    EdgeKind.entity => 'mentions it',
+    EdgeKind.tag => 'tagged',
+    EdgeKind.temporal => 'same work session',
+  };
+
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     final node = graph.nodes[index];
     final isFile = node.kind == 'file';
-    final neighbours = scene.neighboursOf(index)..sort((a, b) => graph.nodes[b].degree - graph.nodes[a].degree);
-    final linkedFiles = neighbours.where((j) => graph.kind[j] == NodeKind.file).toList();
-
-    final header = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isFile)
-          Padding(
-            padding: const EdgeInsets.only(right: 9, top: 1),
-            child: FileIcon(name: node.label, isDir: false, ext: node.ext ?? '', size: 28),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(right: 9, top: 5),
-            child: ScoopDot(_nodeColor(graph, index, c), size: 9),
+    final connections = scene.connectionsOf(index);
+    Widget action(String label, bool primary, VoidCallback? onTap) => Expanded(
+      child: Hoverable(
+        onTap: onTap,
+        builder: (context, h) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: primary ? c.primary : (h ? c.accent : c.accent.withValues(alpha: 0)),
+            borderRadius: BorderRadius.circular(FaRadius.md),
+            border: primary ? null : Border.all(color: c.border),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                node.label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: FaText.sans(size: 13, weight: FontWeight.w600, color: c.foreground),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                isFile
-                    ? compactDir(parentDir(node.path ?? ''), home)
-                    : '${node.kind == 'tag' ? 'Tag' : 'Entity'} · ${_plural(linkedFiles.length, 'linked file')}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: isFile
-                    ? FaText.mono(size: 10, color: c.mutedForeground)
-                    : FaText.sans(size: 11, color: c.mutedForeground),
-              ),
-            ],
+          child: Text(
+            label,
+            style: FaText.sans(
+              size: 11,
+              weight: primary ? FontWeight.w500 : FontWeight.w400,
+              color: primary ? c.primaryForeground : c.foreground,
+            ),
           ),
         ),
-        FaIconButton(icon: Icons.close_rounded, size: 22, tooltip: 'Close', onPressed: onClose),
-      ],
+      ),
     );
-
-    return FaCard(
-      shadow: true,
-      padding: const EdgeInsets.all(12),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: c.card.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(FaRadius.xl),
+        border: Border.all(color: c.border),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 15, offset: const Offset(0, 10))],
+      ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          if (isFile) ...[
-            const SizedBox(height: 6),
-            Text(
-              [
-                kindLabel(node.fileKind ?? 'file', node.ext ?? ''),
-                if (node.mtime != null) 'Modified ${formatDate(node.mtime!)}',
-                _plural(neighbours.length, 'connection'),
-              ].join(' · '),
-              style: FaText.sans(size: 11, color: c.mutedForeground),
-            ),
-            const SizedBox(height: 10),
-            Row(
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Padding(padding: const EdgeInsets.only(top: 4), child: ScoopDot(_nodeColor(graph, index, c), size: 10)),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: FaButton(
-                    label: 'Open',
-                    variant: FaButtonVariant.primary,
-                    dense: true,
-                    expand: true,
-                    onPressed: node.path == null ? null : () => onOpen(node.path!),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: FaButton(
-                    label: 'Show in Folder',
-                    variant: FaButtonVariant.outline,
-                    dense: true,
-                    expand: true,
-                    onPressed: node.path == null ? null : () => onShowInFolder(node.path!),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            FaButton(
-              label: 'Ask AI about it',
-              leading: const Icon(Icons.auto_awesome_outlined, size: 14, color: Scoop.mint),
-              variant: FaButtonVariant.ghost,
-              dense: true,
-              expand: true,
-              onPressed: node.path == null ? null : () => onAskAi([node.path!]),
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            for (final j in linkedFiles.take(6))
-              Hoverable(
-                onTap: () => onSelect(j),
-                builder: (context, hover) => Container(
-                  height: 26,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    color: hover ? c.accent : Colors.transparent,
-                    borderRadius: BorderRadius.circular(FaRadius.sm),
-                  ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ScoopDot(_nodeColor(graph, j, c), size: 6),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          graph.nodes[j].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: FaText.sans(size: 12, color: c.foreground),
-                        ),
+                      Text(
+                        node.label,
+                        style: FaText.sans(size: 14, weight: FontWeight.w500, color: c.foreground),
                       ),
+                      if (isFile && node.path != null)
+                        Text(node.path!, style: FaText.sans(size: 10, color: c.mutedForeground))
+                      else if (!isFile)
+                        Text(_kindName(node), style: FaText.sans(size: 10, color: c.mutedForeground)),
                     ],
                   ),
                 ),
-              ),
-            if (linkedFiles.length > 6)
-              Padding(
-                padding: const EdgeInsets.only(left: 6, top: 2),
-                child: Text(
-                  '+ ${linkedFiles.length - 6} more highlighted',
-                  style: FaText.sans(size: 11, color: c.mutedForeground),
+                Hoverable(
+                  onTap: onClose,
+                  builder: (context, h) =>
+                      Icon(Icons.close_rounded, size: 14, color: h ? c.foreground : c.mutedForeground),
                 ),
+              ],
+            ),
+          ),
+          if (isFile && node.path != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Row(
+                children: [
+                  action('Open', true, () => onOpen(node.path!)),
+                  const SizedBox(width: 6),
+                  action('Show in folder', false, () => onShowInFolder(node.path!)),
+                  const SizedBox(width: 6),
+                  // DeskMate: hand the file to Ask AI.
+                  Tooltip(
+                    message: 'Ask AI about it',
+                    child: Hoverable(
+                      onTap: () => onAskAi([node.path!]),
+                      builder: (context, h) => Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: h ? c.accent : c.accent.withValues(alpha: 0),
+                          borderRadius: BorderRadius.circular(FaRadius.md),
+                          border: Border.all(color: c.border),
+                        ),
+                        child: const Icon(Icons.auto_awesome_outlined, size: 13, color: Scoop.mint),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            if (linkedFiles.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              FaButton(
-                label: 'Ask AI about these files',
-                leading: const Icon(Icons.auto_awesome_outlined, size: 14, color: Scoop.mint),
-                variant: FaButtonVariant.ghost,
-                dense: true,
-                expand: true,
-                onPressed: () => onAskAi([
-                  for (final j in linkedFiles.take(10))
-                    if (graph.nodes[j].path != null) graph.nodes[j].path!,
-                ]),
-              ),
-            ],
-          ],
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: Text(
+              'CONNECTED',
+              style: FaText.sans(size: 10, weight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.5),
+            ),
+          ),
+          Expanded(
+            child: connections.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                    child: Text(
+                      'No visible connections',
+                      textAlign: TextAlign.center,
+                      style: FaText.sans(size: 11, color: c.mutedForeground),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                    children: [
+                      for (final conn in connections)
+                        Tooltip(
+                          message: graph.nodes[conn.node].path ?? graph.nodes[conn.node].label,
+                          waitDuration: const Duration(milliseconds: 700),
+                          child: Hoverable(
+                            onTap: () => onSelect(conn.node),
+                            builder: (context, h) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: h ? c.accent : c.accent.withValues(alpha: 0),
+                                borderRadius: BorderRadius.circular(FaRadius.md),
+                              ),
+                              child: Row(
+                                children: [
+                                  ScoopDot(edgeColors[conn.kind]!, size: 6),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      graph.nodes[conn.node].label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: FaText.sans(size: 12, color: c.foreground),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _why(conn.kind, conn.weight),
+                                    style: FaText.sans(size: 10, color: c.mutedForeground),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
   }
 }
 
+/// FilDOS empty state: the mark (size-10, pulsing while building), title
+/// text-sm medium, body text-xs leading-relaxed, optional action; `gap-3`.
 class _EmptyState extends StatelessWidget {
-  final IconData icon;
   final String title;
-  final String body;
+  final String? body;
+  final Widget? child;
   final Widget? action;
-  const _EmptyState({required this.icon, required this.title, required this.body, this.action});
+  final bool pulse;
+  const _EmptyState({required this.title, this.body, this.child, this.action, this.pulse = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
+    const mark = DeskMateMark(size: 40);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          constraints: const BoxConstraints(maxWidth: 384),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: c.muted,
-                  borderRadius: BorderRadius.circular(FaRadius.xl),
-                  border: Border.all(color: c.border),
-                ),
-                child: Icon(icon, size: 22, color: Scoop.mint),
-              ),
-              const SizedBox(height: 14),
+              if (pulse) const _Pulse(child: mark) else mark,
+              const SizedBox(height: 12),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground),
+                style: FaText.sans(size: 14, weight: FontWeight.w500, color: c.foreground),
               ),
-              const SizedBox(height: 6),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: FaText.sans(size: 12.5, color: c.mutedForeground, height: 1.5),
-              ),
-              if (action != null) ...[const SizedBox(height: 16), action!],
+              if (body != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  body!,
+                  textAlign: TextAlign.center,
+                  style: FaText.sans(size: 12, color: c.mutedForeground, height: 1.625),
+                ),
+              ],
+              if (child != null) ...[const SizedBox(height: 12), child!],
+              if (action != null) ...[const SizedBox(height: 12), action!],
             ],
           ),
         ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/fa_api.dart';
 import '../core/fa_theme.dart';
 import '../core/models.dart';
 import '../shell/sidebar.dart' show createTagFlow;
@@ -10,55 +10,41 @@ import '../state/fa_controller.dart';
 import '../widgets/ui.dart';
 import 'quick_look.dart';
 
-/// Right-click on a file/folder. Acts on the selection (selecting [entry] first if needed).
+/// Right-click on a file/folder (FilDOS ContextMenu, "selection" mode).
+///
+/// The menu acts on the current folder's selection when [entry] is part of it,
+/// otherwise on [entry] alone (e.g. a column-view row from another folder).
+/// The caller selects the item first when it wasn't selected.
 void showEntryMenu(BuildContext context, FsEntry entry, Offset at) {
   final ex = context.read<ExplorerController>();
   final app = context.read<FaController>();
-  if (!ex.selection.contains(entry.path)) ex.select(entry);
-  final paths = ex.selection.toList();
-  final many = paths.length > 1;
-  final hiddenFromAi = app.excludes.contains(entry.path);
+  final selected = ex.selectedEntries;
+  final targets = selected.any((e) => e.path == entry.path) ? selected : [entry];
+  final paths = [for (final e in targets) e.path];
+  final count = targets.length;
+  final single = count == 1;
+  final first = targets.first;
+  final n = count > 1 ? ' ($count)' : '';
+  final allExcluded = paths.every(app.excludes.contains);
 
   showFaMenu(context, at, [
-    FaMenuItem(entry.isDir ? 'Open' : 'Open', icon: Icons.open_in_new_rounded, onTap: () => ex.activate(entry)),
-    if (!entry.isDir)
-      FaMenuItem(
-        'Quick Look',
-        icon: Icons.visibility_outlined,
-        shortcut: 'Space',
-        onTap: () => showQuickLook(context, entry),
-      ),
+    FaMenuItem('Open', icon: Icons.open_in_new_rounded, onTap: single ? () => ex.activate(first) : null),
     FaMenuItem(
-      'Show in ${app.isMac ? 'Finder' : 'File Manager'}',
+      'Quick Look',
+      icon: Icons.visibility_outlined,
+      shortcut: 'Space',
+      onTap: single ? () => showQuickLook(context, first) : null,
+    ),
+    FaMenuItem(
+      'Reveal in ${app.isMac ? 'Finder' : 'Explorer'}',
       icon: Icons.folder_open_outlined,
-      onTap: () => ex.reveal(entry.path),
+      onTap: single ? () => ex.reveal(first.path) : null,
     ),
     const FaMenuItem.divider(),
-    FaMenuItem(
-      many ? 'Ask AI about ${paths.length} items' : 'Ask AI about this',
-      leading: const Icon(Icons.auto_awesome_rounded, size: 15, color: Scoop.mint),
-      onTap: hiddenFromAi ? null : () => app.askAiAbout(paths),
-    ),
-    const FaMenuItem.divider(),
-    if (!many) FaMenuItem('Rename', icon: Icons.edit_outlined, shortcut: '↵', onTap: () => ex.beginRename(entry.path)),
-    FaMenuItem(
-      'Duplicate',
-      icon: Icons.control_point_duplicate_rounded,
-      shortcut: shortcutLabel('D'),
-      onTap: ex.duplicateSelection,
-    ),
-    FaMenuItem('Copy', icon: Icons.copy_rounded, shortcut: shortcutLabel('C'), onTap: ex.copySelection),
-    FaMenuItem('Cut', icon: Icons.content_cut_rounded, shortcut: shortcutLabel('X'), onTap: ex.cutSelection),
-    if (entry.isDir && ex.clipboard.isNotEmpty)
-      FaMenuItem('Paste into folder', icon: Icons.content_paste_rounded, onTap: () => ex.paste(entry.path)),
-    FaMenuItem(
-      'Copy path',
-      icon: Icons.link_rounded,
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: paths.join('\n')));
-        app.toast(many ? 'Copied ${paths.length} paths' : 'Copied path');
-      },
-    ),
+    FaMenuItem('Copy$n', icon: Icons.copy_rounded, onTap: () => ex.copyPaths(paths)),
+    FaMenuItem('Cut$n', icon: Icons.content_cut_rounded, onTap: () => ex.cutPaths(paths)),
+    FaMenuItem('Paste', icon: Icons.content_paste_rounded, onTap: ex.clipboard.isNotEmpty ? () => ex.paste() : null),
+    FaMenuItem('Duplicate', icon: Icons.copy_rounded, onTap: single ? () => ex.duplicatePath(first.path) : null),
     const FaMenuItem.divider(),
     FaMenuItem(
       'Tags',
@@ -67,111 +53,123 @@ void showEntryMenu(BuildContext context, FsEntry entry, Offset at) {
         for (final t in app.tags)
           FaMenuItem(
             t.name,
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ScoopDot(Scoop.parse(t.color), size: 9),
-                if (paths.every((p) => ex.tagsByPath[p]?.contains(t.id) ?? false))
-                  const Padding(padding: EdgeInsets.only(left: 3), child: Icon(Icons.check_rounded, size: 11)),
-              ],
-            ),
+            leading: ScoopDot(Scoop.parse(t.color), size: 9),
+            shortcut: paths.every((p) => ex.tagsByPath[p]?.contains(t.id) ?? false) ? '✓' : null,
             onTap: () => ex.toggleTag(t, paths),
           ),
         if (app.tags.isNotEmpty) const FaMenuItem.divider(),
         FaMenuItem(
-          'New tag…',
+          'New Tag…',
           icon: Icons.add_rounded,
           onTap: () => createTagFlow(context, paths: paths),
         ),
       ],
     ),
-    FaMenuItem(
-      hiddenFromAi ? 'Show to AI' : 'Hide from AI',
-      icon: hiddenFromAi ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-      onTap: () async {
-        final r = hiddenFromAi ? await app.api.removeExclude(entry.path) : await app.api.addExcludes(paths);
-        if (r.ok) {
-          await app.refreshPrefs();
-          app.toast(
-            hiddenFromAi ? 'AI can see “${entry.name}” again' : 'Hidden from AI: indexing and chat will skip it',
-          );
-        } else {
-          app.toastError(r.error);
-        }
-      },
-    ),
     const FaMenuItem.divider(),
+    FaMenuItem('Rename', icon: Icons.edit_outlined, onTap: single ? () => ex.beginRename(first.path) : null),
     FaMenuItem(
-      'Move to Trash',
+      'Delete$n',
       icon: Icons.delete_outline_rounded,
       destructive: true,
-      shortcut: shortcutLabel('⌫'),
-      onTap: () => ex.trashSelection(),
+      onTap: () => ex.trashSelection(paths),
     ),
+    if (app.aiEnabled)
+      FaMenuItem(
+        allExcluded ? 'Show to AI' : 'Hide from AI',
+        icon: allExcluded ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+        onTap: () async {
+          final r = allExcluded ? await _removeExcludes(app, paths) : await app.api.addExcludes(paths);
+          if (r.ok) {
+            await app.refreshPrefs();
+            final many = paths.length > 1;
+            app.toast(
+              allExcluded
+                  ? (many ? '${paths.length} items visible to AI again' : 'Visible to AI again')
+                  : (many ? '${paths.length} items hidden from AI' : 'Hidden from AI'),
+              kind: ToastKind.success,
+            );
+          } else {
+            app.toastError(r.error);
+          }
+        },
+      ),
+    // DeskMate: hand the items to the Folder Agent.
+    FaMenuItem(
+      count > 1 ? 'Ask AI about $count items' : 'Ask AI about this',
+      leading: const Icon(Icons.auto_awesome_rounded, size: 15, color: Scoop.mint),
+      onTap: paths.any(app.excludes.contains) ? null : () => app.askAiAbout(paths),
+    ),
+    const FaMenuItem.divider(),
+    FaMenuItem('Get Info', icon: Icons.info_outline_rounded, onTap: single ? () => ex.showInfo(first.path) : null),
   ]);
 }
 
-/// Right-click on empty space in a folder.
+Future<Result<dynamic>> _removeExcludes(FaController app, List<String> paths) async {
+  Result<dynamic> last = const Ok(null);
+  for (final p in paths) {
+    last = await app.api.removeExclude(p);
+    if (!last.ok) return last;
+  }
+  return last;
+}
+
+/// Right-click on empty space in a folder (FilDOS ContextMenu, "background"
+/// mode). The selection is left as it is.
 void showBackgroundMenu(BuildContext context, Offset at) {
   final ex = context.read<ExplorerController>();
   final app = context.read<FaController>();
-  ex.clearSelection();
   showFaMenu(context, at, [
     FaMenuItem(
       'New Folder',
       icon: Icons.create_new_folder_outlined,
-      shortcut: shortcutLabel('⇧N'),
-      onTap: ex.newFolder,
+      onTap: () async {
+        final name = await promptText(context, title: 'New Folder', initial: 'untitled folder', confirm: 'Create');
+        if (name != null && name.isNotEmpty) await ex.newFolder(name);
+      },
     ),
-    FaMenuItem('New Text File', icon: Icons.note_add_outlined, onTap: ex.newTextFile),
-    if (ex.clipboard.isNotEmpty)
-      FaMenuItem('Paste', icon: Icons.content_paste_rounded, shortcut: shortcutLabel('V'), onTap: () => ex.paste()),
+    FaMenuItem(
+      'New File',
+      icon: Icons.note_add_outlined,
+      onTap: () async {
+        final name = await promptText(context, title: 'New File', initial: 'untitled.txt', confirm: 'Create');
+        if (name != null && name.isNotEmpty) await ex.newTextFile(name);
+      },
+    ),
+    FaMenuItem('Paste', icon: Icons.content_paste_rounded, onTap: ex.clipboard.isNotEmpty ? () => ex.paste() : null),
     const FaMenuItem.divider(),
     FaMenuItem(
-      'View',
-      icon: Icons.grid_view_rounded,
-      submenu: [
-        for (final (mode, label) in viewModes)
-          FaMenuItem(
-            label,
-            icon: mode == ex.view.mode ? Icons.check_rounded : null,
-            onTap: () => ex.setView(mode: mode),
-          ),
-      ],
-    ),
-    FaMenuItem(
-      'Sort by',
+      'Sort By',
       icon: Icons.sort_rounded,
       submenu: [
         for (final (key, label) in sortKeys)
           FaMenuItem(
             label,
-            icon: key == ex.view.sortKey ? Icons.check_rounded : null,
-            onTap: () => ex.setView(sortKey: key),
+            shortcut: key == ex.view.sortKey ? (ex.view.sortDesc ? '▼' : '▲') : null,
+            onTap: () => ex.sortBy(key),
           ),
       ],
     ),
+    FaMenuItem('Select All', icon: Icons.checklist_rounded, onTap: ex.selectAll),
     FaMenuItem(
-      app.showHidden ? 'Hide hidden files' : 'Show hidden files',
-      icon: Icons.visibility_outlined,
+      app.showHidden ? 'Hide Hidden Files' : 'Show Hidden Files',
+      icon: app.showHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
       onTap: () async {
         await app.setPrefs({'showHidden': !app.showHidden});
-        await ex.refresh();
+        await ex.refresh(silent: true);
       },
     ),
+    FaMenuItem('Refresh', icon: Icons.refresh_rounded, onTap: () => ex.refresh(silent: true)),
     const FaMenuItem.divider(),
+    // DeskMate: hand the folder to the Folder Agent.
     FaMenuItem(
       'Ask AI about this folder',
       leading: const Icon(Icons.auto_awesome_rounded, size: 15, color: Scoop.mint),
       onTap: () => app.askAiAbout([ex.current]),
     ),
-    FaMenuItem(
-      'Show in ${app.isMac ? 'Finder' : 'File Manager'}',
-      icon: Icons.folder_open_outlined,
-      onTap: () => ex.reveal(ex.current),
-    ),
   ]);
 }
 
-const viewModes = [('grid', 'Icons'), ('list', 'List'), ('columns', 'Columns'), ('gallery', 'Gallery')];
-const sortKeys = [('name', 'Name'), ('mtime', 'Date Modified'), ('size', 'Size'), ('kind', 'Kind')];
+const viewModes = [('list', 'List'), ('grid', 'Icons'), ('gallery', 'Gallery'), ('columns', 'Columns')];
+
+/// FilDOS sort options, in its order (Type = extension, Modified = mtime).
+const sortKeys = [('name', 'Name'), ('size', 'Size'), ('kind', 'Type'), ('mtime', 'Modified')];

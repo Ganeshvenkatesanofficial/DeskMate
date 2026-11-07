@@ -27,7 +27,7 @@ String onboardingCta(OnboardingStep step) => switch (step) {
 /// Why the primary button is disabled on [step], or null when it may advance.
 String? onboardingBlocker(OnboardingStep step, {required bool agreedToTerms, required bool hasChatModel}) =>
     switch (step) {
-      OnboardingStep.welcome when !agreedToTerms => 'Agree to the terms to continue',
+      OnboardingStep.welcome when !agreedToTerms => 'Agree to the Terms & Privacy Policy to continue',
       OnboardingStep.assistant when !hasChatModel => 'Pick an assistant model first',
       _ => null,
     };

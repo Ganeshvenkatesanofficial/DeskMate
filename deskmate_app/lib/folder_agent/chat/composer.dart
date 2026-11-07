@@ -59,6 +59,7 @@ class AskAiComposerState extends State<AskAiComposer> {
   int? _dismissedStart;
   Timer? _debounce;
   int _gen = 0;
+  int _shown = 0; // bumps each time the popover opens, replaying its entrance
   double _width = 600;
 
   FaController get _app => widget.chat.app;
@@ -173,7 +174,10 @@ class AskAiComposerState extends State<AskAiComposer> {
 
   void _syncPopup() {
     if (_popupOpen) {
-      if (!_popup.isShowing) _popup.show();
+      if (!_popup.isShowing) {
+        _shown++;
+        _popup.show();
+      }
     } else if (_popup.isShowing) {
       _popup.hide();
     }
@@ -378,7 +382,8 @@ class AskAiComposerState extends State<AskAiComposer> {
     final chat = widget.chat;
     final focused = _focus.hasFocus;
     final live = pruneMentions(_text.text, _mentions);
-    final style = FaText.sans(size: 13.5, color: c.foreground, height: 1.45);
+    // FilDOS FIELD_BOX: `px-3 py-2.5 text-sm leading-5`.
+    final style = FaText.sans(size: 14, color: c.foreground, height: 20 / 14);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -394,11 +399,13 @@ class AskAiComposerState extends State<AskAiComposer> {
                 duration: FaMotion.fast,
                 decoration: BoxDecoration(
                   color: c.background,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(FaRadius.xl),
                   border: Border.all(color: focused ? Scoop.mint.withValues(alpha: 0.5) : c.border),
-                  boxShadow: focused
-                      ? [BoxShadow(color: Scoop.mint.withValues(alpha: 0.18), blurRadius: 0, spreadRadius: 2)]
-                      : null,
+                  // `focus-within:ring-2 ring-mint/30` — kept as a transparent ring when
+                  // unfocused so the shadow animates instead of popping.
+                  boxShadow: [
+                    BoxShadow(color: Scoop.mint.withValues(alpha: focused ? 0.30 : 0), blurRadius: 0, spreadRadius: 2),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -417,7 +424,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                       controller: _text,
                       focusNode: _focus,
                       minLines: 1,
-                      maxLines: 8,
+                      maxLines: 9, // `max-h-50`: 200px less the 20px padding
                       keyboardType: TextInputType.multiline,
                       style: style,
                       cursorColor: c.foreground,
@@ -427,11 +434,11 @@ class AskAiComposerState extends State<AskAiComposer> {
                         border: InputBorder.none,
                         hintText: 'Ask to research across your files…',
                         hintStyle: style.copyWith(color: c.mutedForeground),
-                        contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8), // `px-2 pb-2`, `gap-1`
                       child: Row(
                         children: [
                           Expanded(
@@ -446,7 +453,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                             ('/', Scoop.mint, 'Run a command'),
                           ])
                             Padding(
-                              padding: const EdgeInsets.only(left: 3),
+                              padding: const EdgeInsets.only(left: 4),
                               child: _TriggerButton(
                                 text: t,
                                 tint: tint,
@@ -454,7 +461,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                                 onTap: t == '/' && _text.text.trim().isNotEmpty ? null : () => _insertTrigger(t),
                               ),
                             ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           if (chat.sending)
                             _RoundButton(
                               tooltip: 'Stop generating',
@@ -471,7 +478,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                               tooltip: 'Send',
                               filled: true,
                               onTap: _canSend ? _submit : null,
-                              child: Icon(Icons.arrow_upward_rounded, size: 15, color: c.primaryForeground),
+                              child: Icon(Icons.arrow_upward_rounded, size: 14, color: c.primaryForeground),
                             ),
                         ],
                       ),
@@ -499,28 +506,48 @@ class AskAiComposerState extends State<AskAiComposer> {
         followerAnchor: Alignment.bottomLeft,
         offset: const Offset(0, -6),
         child: TextFieldTapRegion(
-          child: Material(
-            color: Colors.transparent,
-            child: FaCard(
-              shadow: true,
-              color: c.popover,
-              padding: EdgeInsets.zero,
-              radius: 12,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 5),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: c.border)),
+          // `animate-in fade-in-0 slide-in-from-bottom-1 duration-150 ease-snappy`.
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey(_shown),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 150),
+            curve: FaMotion.snappy,
+            builder: (context, t, child) => Opacity(
+              opacity: t,
+              child: Transform.translate(offset: Offset(0, 4 * (1 - t)), child: child),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: FaCard(
+                shadow: true,
+                color: c.popover,
+                padding: EdgeInsets.zero,
+                radius: FaRadius.xl,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(FaRadius.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: c.border)),
+                        ),
+                        child: Text(
+                          heading.toUpperCase(),
+                          style: FaText.sans(
+                            size: 10,
+                            weight: FontWeight.w500,
+                            color: c.mutedForeground,
+                            height: 1.5,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                      child: Text(heading.toUpperCase(), style: FaText.label(c).copyWith(fontSize: 9.5)),
-                    ),
-                    for (var i = 0; i < _options.length; i++) _optionRow(context, i, t.trigger),
-                  ],
+                      for (var i = 0; i < _options.length; i++) _optionRow(context, i, t.trigger),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -541,7 +568,7 @@ class AskAiComposerState extends State<AskAiComposer> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _pick(i),
         child: Container(
-          height: 30,
+          height: 28, // `px-3 py-1.5 text-xs`
           padding: const EdgeInsets.symmetric(horizontal: 12),
           color: active ? c.accent : Colors.transparent,
           child: Row(
@@ -570,7 +597,7 @@ class AskAiComposerState extends State<AskAiComposer> {
                 Expanded(
                   child: Text(
                     o.detail!,
-                    style: (o.path != null ? FaText.mono(size: 10.5) : FaText.sans(size: 11.5)).copyWith(
+                    style: (o.path != null ? FaText.mono(size: 11) : FaText.sans(size: 12)).copyWith(
                       color: c.mutedForeground,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -578,7 +605,18 @@ class AskAiComposerState extends State<AskAiComposer> {
                 ),
               ] else
                 const Spacer(),
-              if (active) const Kbd('⏎'),
+              if (active) ...[
+                const SizedBox(width: 8),
+                // `Kbd` with `bg-transparent px-1 py-px` (text-3xs).
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Text('⏎', style: FaText.mono(size: 10, color: c.mutedForeground, height: 1)),
+                ),
+              ],
             ],
           ),
         ),
@@ -603,19 +641,15 @@ class _TriggerButton extends StatelessWidget {
         opacity: onTap == null ? 0.3 : 1,
         child: Hoverable(
           onTap: onTap,
+          // `rounded border px-1.5 py-0.5 font-mono text-2xs hover:bg-accent`.
           builder: (context, hover) => Container(
-            height: 22,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: hover && onTap != null ? c.accent : Colors.transparent,
-              borderRadius: BorderRadius.circular(5),
+              color: hover && onTap != null ? c.accent : c.accent.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(4),
               border: Border.all(color: c.border),
             ),
-            child: Text(
-              text,
-              style: FaText.mono(size: 11, weight: FontWeight.w700, color: tint),
-            ),
+            child: Text(text, style: FaText.mono(size: 11, color: tint, height: 1.5)),
           ),
         ),
       ),
@@ -646,9 +680,7 @@ class _RoundButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: filled
-                  ? (hover && onTap != null ? c.primary.withValues(alpha: 0.88) : c.primary)
-                  : (hover ? c.accent : Colors.transparent),
+              color: filled ? c.primary : (hover ? c.accent : c.accent.withValues(alpha: 0)),
               border: filled ? null : Border.all(color: c.border),
             ),
             child: child,
@@ -675,13 +707,13 @@ class _ModelChip extends StatelessWidget {
       message: 'Choose the chat model',
       child: Hoverable(
         onTap: () => _open(context, provider),
+        // `gap-1.5 rounded-md px-1.5 py-1 text-2xs font-medium`, muted → foreground.
         builder: (context, hover) => AnimatedContainer(
           duration: FaMotion.fast,
-          height: 26,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
-            color: hover ? c.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(FaRadius.sm),
+            color: hover ? c.accent : c.accent.withValues(alpha: 0),
+            borderRadius: BorderRadius.circular(FaRadius.md),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -695,15 +727,20 @@ class _ModelChip extends StatelessWidget {
                 child: Text(
                   label,
                   style: FaText.sans(
-                    size: 11.5,
+                    size: 11,
                     weight: FontWeight.w500,
                     color: hover ? c.foreground : c.mutedForeground,
+                    height: 1.5,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 3),
-              Icon(Icons.expand_less_rounded, size: 13, color: c.mutedForeground.withValues(alpha: 0.7)),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.expand_less_rounded,
+                size: 12,
+                color: (hover ? c.foreground : c.mutedForeground).withValues(alpha: 0.6),
+              ),
             ],
           ),
         ),

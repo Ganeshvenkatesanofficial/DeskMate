@@ -6,16 +6,15 @@ import 'package:provider/provider.dart';
 
 import '../core/fa_api.dart';
 import '../core/fa_theme.dart';
-import '../core/format.dart';
 import '../core/models.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
 import '../widgets/ui.dart';
 
 /// Read-only preview of one file: image/PDF/video thumbnail at large size, or
-/// the text (code, markdown, docx, PDF page text) with [query] words lit in
-/// Mint and scrolled to [page] when given. [compact] trims chrome for the
-/// search overlay's side pane.
+/// the text (code, markdown, docx, PDF page text) with [words] (or, without
+/// them, [query]'s words) lit in Mint and scrolled to [page] when given.
+/// [compact] trims chrome for the search overlay's side pane.
 ///
 /// Ported from FilDOS' `FilePreview` (MIT): pictures fitted, PDF pages,
 /// recordings, text and documents, folders, or the file's icon when there's
@@ -23,9 +22,12 @@ import '../widgets/ui.dart';
 class FilePreview extends StatefulWidget {
   final FsEntry entry;
   final String? query;
+
+  /// Lowercased words to highlight; defaults to [query]'s words.
+  final List<String>? words;
   final int? page;
   final bool compact;
-  const FilePreview({super.key, required this.entry, this.query, this.page, this.compact = false});
+  const FilePreview({super.key, required this.entry, this.query, this.words, this.page, this.compact = false});
 
   @override
   State<FilePreview> createState() => _FilePreviewState();
@@ -92,11 +94,13 @@ class _FilePreviewState extends State<FilePreview> {
     final c = context.fa;
     final loaded = _loaded?.path == widget.entry.path ? _loaded : null;
     final sheet = loaded != null && (loaded.kind == 'text' || loaded.kind == 'pdf');
+    // A sheet (text, documents) sits on the background with a hairline; anything
+    // else on bg-muted/60. While loading, that muted stage pulses (animate-pulse).
     return ClipRRect(
       borderRadius: BorderRadius.circular(FaRadius.md),
       child: Container(
         decoration: BoxDecoration(
-          color: sheet ? c.background : c.muted.withValues(alpha: 0.6),
+          color: sheet ? c.background : (loaded == null ? Colors.transparent : c.muted.withValues(alpha: 0.6)),
           borderRadius: BorderRadius.circular(FaRadius.md),
           border: Border.all(color: sheet ? c.border : Colors.transparent),
         ),
@@ -117,14 +121,12 @@ class _FilePreviewState extends State<FilePreview> {
   Widget _stage(BuildContext context, _Loaded l) {
     final e = widget.entry;
     final compact = widget.compact;
-    final terms = previewTerms(widget.query);
+    final terms = widget.words ?? previewTerms(widget.query);
     switch (l.kind) {
       case 'folder':
         return _Placeholder(
           entry: e,
-          compact: compact,
-          title: 'Folder',
-          caption: l.items == null ? null : (l.items == 1 ? '1 item' : '${l.items} items'),
+          caption: l.items == null ? 'Folder' : (l.items == 1 ? '1 item' : '${_thousands(l.items!)} items'),
         );
       case 'secret':
         return _SecretNotice(compact: compact);
@@ -145,42 +147,25 @@ class _FilePreviewState extends State<FilePreview> {
       case 'audio':
         return _MediaStage(entry: e, compact: compact, video: false);
       case 'text':
-        final text = l.text ?? '';
-        if (text.trim().isEmpty) {
-          return _Placeholder(
-            entry: e,
-            compact: compact,
-            title: kindLabel(e.kind, e.ext),
-            caption: 'This file is empty',
-          );
-        }
         return _TextSheet(
           key: ValueKey(e.path),
-          text: text,
+          text: l.text ?? '',
           truncated: l.truncated,
           mono: !_isProse(e),
           terms: terms,
-          compact: compact,
         );
       case 'error':
         if (e.hasThumbnail) return _ThumbStage(entry: e, compact: compact);
-        return _Placeholder(
-          entry: e,
-          compact: compact,
-          title: kindLabel(e.kind, e.ext),
-          caption: 'Couldn’t preview this — ${l.error?.message ?? 'unknown error'}',
-        );
+        return _Placeholder(entry: e, caption: 'Couldn’t preview this — ${l.error?.message ?? 'unknown error'}');
       default: // binary
         if (e.hasThumbnail) return _ThumbStage(entry: e, compact: compact);
-        return _Placeholder(
-          entry: e,
-          compact: compact,
-          title: kindLabel(e.kind, e.ext),
-          caption: '${formatBytes(e.size)} · No preview for this kind of file',
-        );
+        return _Placeholder(entry: e, caption: 'No preview for this kind of file');
     }
   }
 }
+
+/// "1,234" (FilDOS' toLocaleString for item counts).
+String _thousands(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
 const _proseExts = {'md', 'markdown', 'txt', 'text', 'rtf', 'docx', 'doc', 'odt', 'pages', 'log', ''};
 
@@ -207,11 +192,12 @@ List<String> previewTerms(String? query) {
   return words;
 }
 
-/// Matches a term at a word start, extended to the end of the word ("kestrel" → "kestrels").
+/// Every case-insensitive occurrence of any term, longest first (so "kestrels" wins over "kestrel").
 RegExp? _termsRegex(List<String> terms) {
-  if (terms.isEmpty) return null;
-  final alt = terms.map(RegExp.escape).join('|');
-  return RegExp('(?<![\\p{L}\\p{N}_])(?:$alt)[\\p{L}\\p{N}_]*', caseSensitive: false, unicode: true);
+  final unique = {for (final t in terms) t.trim()}.where((t) => t.isNotEmpty).toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (unique.isEmpty) return null;
+  return RegExp(unique.map(RegExp.escape).join('|'), caseSensitive: false, unicode: true);
 }
 
 /// [text] split into spans with every term lit in Mint; returns the spans and the first hit's offset.
@@ -233,53 +219,43 @@ RegExp? _termsRegex(List<String> terms) {
   return (spans, first);
 }
 
-TextStyle _markStyle(FaColors c) => TextStyle(
-  backgroundColor: Scoop.mint.withValues(alpha: c.isDark ? 0.30 : 0.25),
-  color: c.foreground,
-);
+/// `bg-mint/25 text-foreground`.
+TextStyle _markStyle(FaColors c) => TextStyle(backgroundColor: Scoop.mint.withValues(alpha: 0.25), color: c.foreground);
 
 // ── stages ─────────────────────────────────────────────────────────────────
 
-/// Loading: a quiet pulse of the stage.
+/// Loading: the muted stage pulsing (Tailwind `animate-pulse`: opacity 1 → .5 → 1 over 2s).
 class _Pulse extends StatelessWidget {
   const _Pulse();
   @override
-  Widget build(BuildContext context) => Container(color: context.fa.muted)
+  Widget build(BuildContext context) => ColoredBox(color: context.fa.muted.withValues(alpha: 0.6))
       .animate(onPlay: (ctl) => ctl.repeat(reverse: true))
-      .fade(begin: 0.35, end: 0.9, duration: 700.ms, curve: Curves.easeInOut);
+      .fade(begin: 1, end: 0.5, duration: 1000.ms, curve: const Cubic(0.4, 0, 0.6, 1));
 }
 
-/// The file's own icon and a line about it: folders, unknown types, failures.
+/// The file's own icon and a line about it: folders, unknown types, failures
+/// (size-20 icon, gap-4, a text-xs muted caption).
 class _Placeholder extends StatelessWidget {
   final FsEntry entry;
-  final bool compact;
-  final String title;
-  final String? caption;
-  const _Placeholder({required this.entry, required this.compact, required this.title, this.caption});
+  final String caption;
+  const _Placeholder({required this.entry, required this.caption});
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FileIcon.entry(entry, size: compact ? 72 : 96),
-            const SizedBox(height: 14),
+            FileIcon.entry(entry, size: 80),
+            const SizedBox(height: 16),
             Text(
-              title,
-              style: FaText.sans(size: 13, weight: FontWeight.w500, color: c.foreground),
+              caption,
+              textAlign: TextAlign.center,
+              style: FaText.sans(size: 12, color: c.mutedForeground),
             ),
-            if (caption != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                caption!,
-                textAlign: TextAlign.center,
-                style: FaText.sans(size: 11.5, color: c.mutedForeground),
-              ),
-            ],
           ],
         ),
       ),
@@ -348,8 +324,8 @@ class _NetPicture extends StatelessWidget {
         ? child
         : AnimatedOpacity(
             opacity: frame == null ? 0 : 1,
-            duration: FaMotion.medium,
-            curve: FaMotion.snappy,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.ease,
             child: child,
           ),
     errorBuilder: (_, _, _) => fallback,
@@ -367,7 +343,7 @@ class _ImageStage extends StatelessWidget {
   Widget build(BuildContext context) {
     final api = context.read<FaController>().api;
     final ext = entry.ext.toLowerCase();
-    final icon = Center(child: FileIcon.entry(entry, size: compact ? 72 : 96));
+    final icon = Center(child: FileIcon.entry(entry, size: 80));
     final thumb = _NetPicture(
       url: api.thumbnailUrl(entry.path, size: 1024, mtime: entry.mtime),
       fallback: icon,
@@ -385,10 +361,8 @@ class _ImageStage extends StatelessWidget {
     } else {
       picture = thumb; // HEIC, TIFF, PSD, RAW…: Quick Look renders them.
     }
-    return Padding(
-      padding: EdgeInsets.all(compact ? 12 : 20),
-      child: Center(child: picture),
-    );
+    // max-h-full max-w-full object-contain: the picture fills the stage.
+    return Center(child: picture);
   }
 }
 
@@ -478,8 +452,8 @@ class _MediaStage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FileIcon.entry(entry, size: compact ? 64 : 84),
-            const SizedBox(height: 18),
+            FileIcon.entry(entry, size: 64),
+            const SizedBox(height: 24),
             play,
             const SizedBox(height: 10),
             caption,
@@ -521,15 +495,7 @@ class _TextSheet extends StatefulWidget {
   final bool truncated;
   final bool mono;
   final List<String> terms;
-  final bool compact;
-  const _TextSheet({
-    super.key,
-    required this.text,
-    required this.truncated,
-    required this.mono,
-    required this.terms,
-    required this.compact,
-  });
+  const _TextSheet({super.key, required this.text, required this.truncated, required this.mono, required this.terms});
 
   @override
   State<_TextSheet> createState() => _TextSheetState();
@@ -565,12 +531,13 @@ class _TextSheetState extends State<_TextSheet> {
   Widget build(BuildContext context) {
     final c = context.fa;
     final text = widget.mono ? widget.text.replaceAll('\t', '    ') : widget.text;
+    // Mono: text-xs; prose: text-sm in a max-w-[62ch] column; both leading-relaxed.
     final style = widget.mono
-        ? FaText.mono(size: widget.compact ? 11 : 12, color: c.foreground, height: 1.6)
-        : FaText.sans(size: widget.compact ? 13 : 14, color: c.foreground, height: 1.6);
+        ? FaText.mono(size: 12, color: c.foreground, height: 1.625)
+        : FaText.sans(size: 14, color: c.foreground, height: 1.625);
     final (spans, first) = _highlight(text, widget.terms, _markStyle(c));
     if (first != null) _scrollToFirst(first);
-    final pad = widget.compact ? const EdgeInsets.fromLTRB(18, 16, 18, 18) : const EdgeInsets.fromLTRB(28, 24, 28, 28);
+    const pad = EdgeInsets.symmetric(horizontal: 24, vertical: 20); // px-6 py-5
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -579,7 +546,7 @@ class _TextSheetState extends State<_TextSheet> {
           key: _textKey,
         ),
         if (widget.truncated) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Text(
             'Showing the beginning. Open the file to read the rest.',
             style: FaText.sans(size: 11, color: c.mutedForeground),
@@ -599,7 +566,7 @@ class _TextSheetState extends State<_TextSheet> {
               : Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 640),
+                    constraints: const BoxConstraints(maxWidth: 62 * 8.7), // 62ch of 14px Inter
                     child: SizedBox(width: double.infinity, child: body),
                   ),
                 ),
@@ -678,7 +645,7 @@ class _PdfStageState extends State<_PdfStage> {
     final c = context.fa;
     final api = context.read<FaController>().api;
     final hasText = widget.text.trim().isNotEmpty || _passages.isNotEmpty || _loadingPassages;
-    final pageLabel = widget.pages == null ? 'Page 1' : 'Page 1 of ${widget.pages}';
+    final pageLabel = '1 / ${widget.pages ?? '…'}';
     final thumb = Stack(
       children: [
         Positioned.fill(
@@ -697,12 +664,7 @@ class _PdfStageState extends State<_PdfStage> {
             ),
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: widget.compact ? 10 : 14,
-          child: Center(child: _Pill(pageLabel)),
-        ),
+        Positioned(left: 0, right: 0, bottom: 12, child: Center(child: _Pill(pageLabel))),
       ],
     );
     if (!hasText) return ColoredBox(color: c.muted.withValues(alpha: 0.6), child: thumb);
@@ -808,14 +770,33 @@ class _PdfText extends StatelessWidget {
               maxLines: compact ? 4 : 6,
             ),
           ),
-          if (pg != null) ...[const SizedBox(width: 8), _Pill('p. $pg')],
+          if (pg != null) ...[const SizedBox(width: 8), _PagePill('p. $pg')],
         ],
       ),
     );
   }
 }
 
-/// Small mono pill ("p. 4", "Page 1 of 12").
+/// A passage's page ("p. 4"): border rounded-sm px-1.5 py-0.5 font-mono text-3xs.
+class _PagePill extends StatelessWidget {
+  final String text;
+  const _PagePill(this.text);
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(FaRadius.sm),
+        border: Border.all(color: c.border),
+      ),
+      child: Text(text, style: FaText.mono(size: 10, color: c.mutedForeground)),
+    );
+  }
+}
+
+/// The page counter styled as FilDOS' floating
+/// pager ("1 / 12": border bg-card/95 rounded-full shadow-sm, text-3xs mono).
 class _Pill extends StatelessWidget {
   final String text;
   const _Pill(this.text);
@@ -823,11 +804,18 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fa;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      height: 30,
+      constraints: const BoxConstraints(minWidth: 96),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: c.card.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.border),
+        boxShadow: const [
+          BoxShadow(color: Color(0x1A000000), blurRadius: 3, offset: Offset(0, 1)),
+          BoxShadow(color: Color(0x1A000000), blurRadius: 2, spreadRadius: -1, offset: Offset(0, 1)),
+        ],
       ),
       child: Text(text, style: FaText.mono(size: 10, color: c.mutedForeground)),
     );

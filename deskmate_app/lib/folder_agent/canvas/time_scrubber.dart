@@ -36,7 +36,7 @@ class TimeScrubber extends StatefulWidget {
 
 class _TimeScrubberState extends State<TimeScrubber> {
   bool _dragFrom = false;
-  static final _fmt = DateFormat('MMM yyyy');
+  static final _fmt = DateFormat('MMM y');
 
   String _label(double f) =>
       _fmt.format(DateTime.fromMillisecondsSinceEpoch(((widget.min + f * (widget.max - widget.min)) * 1000).round()));
@@ -55,10 +55,10 @@ class _TimeScrubberState extends State<TimeScrubber> {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final muted = FaText.sans(size: 11, color: c.mutedForeground);
+    // FilDOS: `border-t px-3 py-2 gap-2.5`; labels w-16 text-3xs tabular.
+    final label = FaText.sans(size: 10, color: c.mutedForeground);
     return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: c.background,
         border: Border(top: BorderSide(color: c.border)),
@@ -73,34 +73,30 @@ class _TimeScrubberState extends State<TimeScrubber> {
                 message: widget.playing ? 'Stop the replay' : 'Watch your files appear in the order you worked on them',
                 child: Hoverable(
                   onTap: widget.onTogglePlay,
-                  builder: (context, hover) => Container(
-                    height: 26,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: hover ? c.accent : Colors.transparent,
-                      borderRadius: BorderRadius.circular(FaRadius.sm),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          widget.playing ? Icons.stop_rounded : Icons.play_arrow_outlined,
-                          size: 15,
-                          color: hover || widget.playing ? c.foreground : c.mutedForeground,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.playing ? 'Stop' : 'Replay',
-                          style: muted.copyWith(color: hover || widget.playing ? c.foreground : c.mutedForeground),
-                        ),
-                      ],
-                    ),
-                  ),
+                  builder: (context, hover) {
+                    final fg = hover ? c.foreground : c.mutedForeground;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: hover ? c.accent : c.accent.withValues(alpha: 0),
+                        borderRadius: BorderRadius.circular(FaRadius.md),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(widget.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 13, color: fg),
+                          const SizedBox(width: 4),
+                          Text(widget.playing ? 'Stop' : 'Replay', style: FaText.sans(size: 11, color: fg)),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 10),
               SizedBox(
-                width: 62,
-                child: Text(_label(r.start), style: muted, textAlign: TextAlign.right),
+                width: 64,
+                child: Text(_label(r.start), style: label, textAlign: TextAlign.right),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -108,7 +104,7 @@ class _TimeScrubberState extends State<TimeScrubber> {
                   builder: (context, box) {
                     double frac(Offset p) => (p.dx / math.max(1, box.maxWidth)).clamp(0.0, 1.0);
                     return Tooltip(
-                      message: 'Drag to focus a period · double-click to reset',
+                      message: 'Drag to focus a period; double-click to reset',
                       waitDuration: const Duration(milliseconds: 900),
                       child: MouseRegion(
                         cursor: SystemMouseCursors.resizeLeftRight,
@@ -117,14 +113,10 @@ class _TimeScrubberState extends State<TimeScrubber> {
                           onHorizontalDragDown: (d) => _down(frac(d.localPosition)),
                           onHorizontalDragUpdate: (d) => _move(frac(d.localPosition)),
                           onDoubleTap: () => widget.onChanged(null),
-                          child: CustomPaint(
-                            size: Size(box.maxWidth, 30),
-                            painter: _HistogramPainter(
-                              counts: widget.counts,
-                              from: r.start,
-                              to: r.end,
-                              active: value != null,
-                              colors: c,
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              size: Size(box.maxWidth, 32),
+                              painter: _HistogramPainter(counts: widget.counts, from: r.start, to: r.end, colors: c),
                             ),
                           ),
                         ),
@@ -134,7 +126,7 @@ class _TimeScrubberState extends State<TimeScrubber> {
                 ),
               ),
               const SizedBox(width: 10),
-              SizedBox(width: 62, child: Text(_label(r.end), style: muted)),
+              SizedBox(width: 64, child: Text(_label(r.end), style: label)),
             ],
           );
         },
@@ -143,51 +135,44 @@ class _TimeScrubberState extends State<TimeScrubber> {
   }
 }
 
+/// Bars `gap-px`, height 6% + count/peak·88%, rounded-t 1px — `mint/70` inside
+/// the window, `muted-foreground/20` outside — and the brush outline: a
+/// `rounded border-x-2 border-mint/60` box spanning the window (min 0.5%).
 class _HistogramPainter extends CustomPainter {
   final List<int> counts;
   final double from, to;
-  final bool active;
   final FaColors colors;
-  _HistogramPainter({
-    required this.counts,
-    required this.from,
-    required this.to,
-    required this.active,
-    required this.colors,
-  });
+  _HistogramPainter({required this.counts, required this.from, required this.to, required this.colors});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (counts.isEmpty) return;
     final peak = math.max(1, counts.reduce(math.max));
     final n = counts.length;
-    final bw = size.width / n;
-    final lit = Paint()..color = Scoop.mint.withValues(alpha: 0.75);
-    final off = Paint()..color = colors.mutedForeground.withValues(alpha: 0.22);
+    final bw = (size.width - (n - 1)) / n;
+    final lit = Paint()..color = Scoop.mint.withValues(alpha: 0.7);
+    final off = Paint()..color = colors.mutedForeground.withValues(alpha: 0.2);
     for (var i = 0; i < n; i++) {
-      final h = counts[i] == 0 ? 2.0 : 3 + (counts[i] / peak) * (size.height - 4);
+      final h = size.height * (0.06 + (counts[i] / peak) * 0.88);
       final mid = (i + 0.5) / n;
-      final rect = Rect.fromLTWH(i * bw + 0.5, size.height - h, math.max(0.5, bw - 1), h);
+      final rect = Rect.fromLTWH(i * (bw + 1), size.height - h, math.max(0.5, bw), h);
       canvas.drawRRect(
         RRect.fromRectAndCorners(rect, topLeft: const Radius.circular(1), topRight: const Radius.circular(1)),
         mid >= from && mid <= to ? lit : off,
       );
     }
-    // Brush window: Mint edges (handles), always shown so they read as draggable.
-    final edge = Paint()
-      ..color = Scoop.mint.withValues(alpha: active ? 0.9 : 0.55)
-      ..strokeWidth = 2;
-    for (final f in [from, to]) {
-      final x = (f * size.width).clamp(1.0, size.width - 1);
-      canvas.drawLine(Offset(x, -2), Offset(x, size.height + 2), edge);
-    }
-    if (active) {
-      final band = Paint()..color = Scoop.mint.withValues(alpha: 0.07);
-      canvas.drawRect(Rect.fromLTRB(from * size.width, -2, to * size.width, size.height + 2), band);
-    }
+    final left = from * size.width;
+    final width = math.max(0.005, to - from) * size.width;
+    final box = RRect.fromRectAndRadius(Rect.fromLTWH(left, 0, width, size.height), const Radius.circular(4));
+    final edge = Paint()..color = Scoop.mint.withValues(alpha: 0.6);
+    canvas.save();
+    canvas.clipRRect(box);
+    canvas.drawRect(Rect.fromLTWH(left, 0, 2, size.height), edge);
+    canvas.drawRect(Rect.fromLTWH(left + width - 2, 0, 2, size.height), edge);
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(_HistogramPainter o) =>
-      o.from != from || o.to != to || o.active != active || o.counts != counts || o.colors != colors;
+      o.from != from || o.to != to || !identical(o.counts, counts) || o.colors != colors;
 }

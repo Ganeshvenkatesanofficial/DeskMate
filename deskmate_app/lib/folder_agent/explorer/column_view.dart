@@ -4,30 +4,28 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/fa_theme.dart';
-import '../core/format.dart';
 import '../core/models.dart';
 import '../state/explorer_controller.dart';
 import '../state/fa_controller.dart';
 import '../widgets/file_icon.dart';
-import '../widgets/ui.dart';
 import 'context_menu.dart';
-import 'dnd.dart';
 import 'entry_interactions.dart';
-import 'grid_view.dart' show tagColorFor;
-import 'quick_look.dart';
 import 'x_common.dart';
 
-const double _kColumnWidth = 240;
-const double _kPreviewWidth = 280;
+/// FilDOS ColumnView geometry.
+const double _kColumnWidth = 248;
+const double _kPreviewWidth = 288; // w-72
 const double _kRowHeight = 28;
 
-/// Miller columns (FilDOS ColumnView): the current folder is the first
-/// column; picking a folder opens its contents in a new column to the right,
-/// picking a file shows a preview column.
+/// Finder-style Miller columns (FilDOS ColumnView). The leftmost column is
+/// the folder you were in when you switched to this view; clicking a folder
+/// opens a column to its right *and navigates there* (so the address bar
+/// follows), clicking a file shows a preview pane at the end. Navigating from
+/// elsewhere (address bar, sidebar, Back/Forward) collapses the trail back to
+/// that folder.
 ///
-/// Column 0 is the explorer's own listing and selection (so the keyboard,
-/// context menu, rename and drag & drop behave as in every other view).
-/// Deeper columns keep a local trail of picked paths.
+/// A column's highlight is the child drilled into (or the previewed file),
+/// not the explorer's selection — exactly as in FilDOS.
 class ColumnBrowserView extends StatefulWidget {
   const ColumnBrowserView({super.key});
 
@@ -38,31 +36,41 @@ class ColumnBrowserView extends StatefulWidget {
 class _ColumnBrowserViewState extends State<ColumnBrowserView> {
   final _scroll = ScrollController();
 
-  /// Picked path in each deeper column (index 0 = column 1).
-  final List<String> _trail = [];
+  /// One folder path per column.
+  List<String> _trail = const [];
 
-  /// Listings of deeper folders (sorted folders-first).
-  final Map<String, List<FsEntry>> _listings = {};
+  /// The file previewed after the deepest column.
+  FsEntry? _preview;
+
+  /// The folder we last navigated to ourselves, so our own drilling isn't
+  /// mistaken for an external navigation.
+  String _guard = '';
+
+  /// The explorer folder seen at the last build.
+  String _seen = '';
+
+  /// Listings of the columns that aren't the explorer's current folder.
+  final Map<String, List<FsEntry>> _raw = {};
   final Map<String, String> _errors = {};
   final Set<String> _loading = {};
-  String _root = '';
-  int _lastColumnCount = 0;
+  bool? _hiddenShown;
   StreamSubscription<String>? _changes;
 
   @override
   void initState() {
     super.initState();
-    final app = context.read<FaController>();
-    _changes = app.fsChanged.listen((path) {
+    final ex = context.read<ExplorerController>();
+    _trail = [ex.current];
+    _guard = _seen = ex.current;
+    _changes = ex.app.fsChanged.listen((path) {
       if (!mounted) return;
       if (path.isEmpty) {
-        _listings.clear();
-      } else if (_listings.containsKey(path)) {
-        _listings.remove(path);
-      } else {
-        return;
+        for (final p in _raw.keys.toList()) {
+          _load(p);
+        }
+      } else if (_raw.containsKey(path)) {
+        _load(path); // reload in place: the old listing stays until the new one lands
       }
-      setState(() {});
     });
   }
 
@@ -82,218 +90,140 @@ class _ColumnBrowserViewState extends State<ColumnBrowserView> {
     if (!mounted) return;
     setState(() {
       if (r.ok) {
-        _listings[path] = sortFoldersFirst(r.value!.entries);
+        _raw[path] = r.value!.entries;
         _errors.remove(path);
       } else {
-        _listings[path] = const [];
+        _raw[path] = const [];
         _errors[path] = r.error?.message ?? 'Couldn\'t open this folder.';
       }
     });
   }
 
-  /// Entries of a deeper column, kicking off the load if needed (null = loading).
-  List<FsEntry>? _entriesOf(String folder) {
-    final l = _listings[folder];
-    if (l == null) scheduleMicrotask(() => _load(folder));
-    return l;
+  /// The explorer's folder is about to change: keep its listing for its column
+  /// so the column doesn't blank while it becomes an ordinary one.
+  void _keepCurrent(ExplorerController ex) {
+    if (ex.error == null) _raw[ex.current] = ex.entries;
   }
 
-  void _pick(int column, FsEntry e) {
-    // Column n (n >= 1) owns trail slot n - 1; picking drops everything deeper.
+  void _pickFolder(int col, FsEntry folder) {
+    final ex = context.read<ExplorerController>();
+    _keepCurrent(ex);
     setState(() {
-      if (_trail.length > column - 1) _trail.length = column - 1;
-      _trail.add(e.path);
-      if (e.isDir) _listings.remove(e.path); // fresh listing every time a folder is opened
+      _guard = folder.path;
+      _trail = [..._trail.take(col + 1), folder.path];
+      _preview = null;
     });
+    _scrollToEnd();
+    ex.open(folder.path);
   }
 
-  void _truncate(int column) {
-    if (_trail.length > column - 1) setState(() => _trail.length = column - 1);
+  Future<void> _pickFile(int col, FsEntry file) async {
+    final ex = context.read<ExplorerController>();
+    final parent = _trail[col];
+    if (parent != ex.current) _keepCurrent(ex);
+    setState(() {
+      _guard = parent;
+      _trail = _trail.take(col + 1).toList();
+      _preview = file;
+    });
+    _scrollToEnd();
+    if (parent != ex.current) await ex.open(parent);
+    if (!mounted) return;
+    for (final e in ex.entries) {
+      if (e.path == file.path) {
+        ex.select(e);
+        break;
+      }
+    }
   }
 
-  void _scrollToEnd(int columns) {
-    if (columns == _lastColumnCount) return;
-    final grew = columns > _lastColumnCount;
-    _lastColumnCount = columns;
-    if (!grew) return;
+  /// Keep the newest column in view as the trail grows or a preview opens.
+  void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
+      if (!mounted || !_scroll.hasClients) return;
       _scroll.animateTo(_scroll.position.maxScrollExtent, duration: FaMotion.medium, curve: FaMotion.snappy);
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fa;
-    final ex = context.watch<ExplorerController>();
-    if (_root != ex.current) {
-      _root = ex.current;
-      _trail.clear();
-      _listings.clear();
-      _errors.clear();
-    }
-
-    // Build the chain of columns: column 0 = current folder.
-    final columns = <Widget>[_rootColumn(context, ex)];
-    FsEntry? tail = ex.selection.length == 1 ? ex.primarySelection : null;
-    var trailValid = 0;
-    var depth = 1;
-    while (tail != null && tail.isDir) {
-      final folder = tail.path;
-      final entries = _entriesOf(folder);
-      String? picked;
-      if (trailValid < _trail.length && parentDir(_trail[trailValid]) == folder) {
-        picked = _trail[trailValid];
+  void _sync(ExplorerController ex, FaController app) {
+    if (ex.current != _seen) {
+      _seen = ex.current;
+      if (ex.current != _guard) {
+        // External navigation → collapse to this folder.
+        _guard = ex.current;
+        _trail = [ex.current];
+        _preview = null;
+        _raw.clear();
+        _errors.clear();
       }
-      FsEntry? next;
-      if (picked != null && entries != null) {
-        for (final e in entries) {
-          if (e.path == picked) {
-            next = e;
-            break;
-          }
+    }
+    if (_hiddenShown != app.showHidden) {
+      final reload = _hiddenShown != null;
+      _hiddenShown = app.showHidden;
+      if (reload) {
+        for (final p in _raw.keys.toList()) {
+          scheduleMicrotask(() => _load(p));
         }
       }
-      final col = depth;
-      columns.add(
-        _DeepColumn(
-          key: ValueKey('col:$folder'),
-          folder: folder,
-          entries: entries,
-          error: _errors[folder],
-          picked: next?.path,
-          onPick: (e) => _pick(col, e),
-          onBackground: () => _truncate(col),
-        ),
-      );
-      if (next == null) break;
-      trailValid++;
-      depth++;
-      tail = next;
     }
-    if (_trail.length > trailValid) _trail.length = trailValid;
-    if (tail != null && !tail.isDir) columns.add(_PreviewColumn(key: ValueKey('preview:${tail.path}'), entry: tail));
-
-    _scrollToEnd(columns.length);
-    return Scrollbar(
-      controller: _scroll,
-      child: SingleChildScrollView(
-        controller: _scroll,
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final col in columns)
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border(right: BorderSide(color: c.border)),
-                ),
-                child: col,
-              ),
-          ],
-        ),
-      ),
-    );
   }
-
-  Widget _rootColumn(BuildContext context, ExplorerController ex) => SizedBox(
-    width: _kColumnWidth,
-    child: GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: ex.clearSelection,
-      onSecondaryTapDown: (d) => showBackgroundMenu(context, d.globalPosition),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        itemExtent: _kRowHeight,
-        itemCount: ex.entries.length,
-        itemBuilder: (context, i) => _RootRow(entry: ex.entries[i]),
-      ),
-    ),
-  );
-}
-
-/// Row in column 0 — the explorer's own entries, with the shared interactions.
-class _RootRow extends StatelessWidget {
-  final FsEntry entry;
-  const _RootRow({required this.entry});
-
-  @override
-  Widget build(BuildContext context) {
-    final ex = context.watch<ExplorerController>();
-    final selected = ex.selection.contains(entry.path);
-    return EntryInteractions(
-      entry: entry,
-      radius: BorderRadius.circular(FaRadius.sm),
-      child: _ColumnRow(
-        entry: entry,
-        selected: selected,
-        dimmed: ex.isCut(entry.path) || entry.hidden,
-        tags: ex.tagsByPath[entry.path] ?? const [],
-        renaming: ex.renaming == entry.path,
-      ),
-    );
-  }
-}
-
-/// The visual of a column row: icon, name, tag dots, chevron for folders.
-class _ColumnRow extends StatelessWidget {
-  final FsEntry entry;
-  final bool selected;
-  final bool dimmed;
-  final List<int> tags;
-  final bool renaming;
-  const _ColumnRow({
-    required this.entry,
-    required this.selected,
-    this.dimmed = false,
-    this.tags = const [],
-    this.renaming = false,
-  });
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
+    final ex = context.watch<ExplorerController>();
     final app = context.read<FaController>();
-    return Hoverable(
-      builder: (context, hover) => AnimatedContainer(
-        duration: FaMotion.fast,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: selected ? c.selection : (hover ? c.accent.withValues(alpha: 0.7) : Colors.transparent),
-          borderRadius: BorderRadius.circular(FaRadius.sm),
+    _sync(ex, app);
+
+    final columns = <Widget>[];
+    for (var col = 0; col < _trail.length; col++) {
+      final path = _trail[col];
+      final highlight = col + 1 < _trail.length ? _trail[col + 1] : _preview?.path;
+      List<FsEntry>? entries;
+      String? error;
+      if (path == ex.current) {
+        entries = ex.entries;
+        error = ex.error?.message;
+      } else {
+        final raw = _raw[path];
+        if (raw == null) scheduleMicrotask(() => _load(path));
+        entries = raw == null ? null : ex.sorted(raw.where((e) => app.showHidden || !e.hidden));
+        error = _errors[path];
+      }
+      columns.add(
+        _Column(
+          key: ValueKey('col:$path'),
+          folder: path,
+          entries: entries,
+          error: error,
+          highlight: highlight,
+          onPickFolder: (e) => _pickFolder(col, e),
+          onPickFile: (e) => _pickFile(col, e),
         ),
-        child: Opacity(
-          opacity: dimmed ? 0.5 : 1,
+      );
+    }
+    final preview = _preview;
+    if (preview != null) columns.add(_PreviewColumn(key: ValueKey('preview:${preview.path}'), entry: preview));
+
+    return PaneBackground(
+      child: Scrollbar(
+        controller: _scroll,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              FileIcon.entry(entry, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: renaming
-                    ? RenameField(entry: entry)
-                    : Text(
-                        entry.name,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: FaText.sans(
-                          size: 12.5,
-                          weight: selected ? FontWeight.w500 : FontWeight.w400,
-                          color: c.foreground,
-                        ),
-                      ),
-              ),
-              for (final id in tags.take(3))
-                Padding(padding: const EdgeInsets.only(left: 4), child: ScoopDot(tagColorFor(app, id), size: 6)),
-              if (entry.isDir)
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 15,
-                    color: selected ? c.foreground : c.mutedForeground,
-                  ),
-                ),
+              for (final col in columns)
+                if (col is _Column)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(right: BorderSide(color: c.border)),
+                    ),
+                    child: col,
+                  )
+                else
+                  col,
             ],
           ),
         ),
@@ -302,120 +232,141 @@ class _ColumnRow extends StatelessWidget {
   }
 }
 
-/// A column beyond the first: its own listing and a local pick.
-class _DeepColumn extends StatelessWidget {
+/// One folder's column: its rows, or a loading / error / empty note.
+class _Column extends StatelessWidget {
   final String folder;
   final List<FsEntry>? entries;
   final String? error;
-  final String? picked;
-  final ValueChanged<FsEntry> onPick;
-  final VoidCallback onBackground;
-  const _DeepColumn({
+  final String? highlight;
+  final ValueChanged<FsEntry> onPickFolder;
+  final ValueChanged<FsEntry> onPickFile;
+  const _Column({
     super.key,
     required this.folder,
     required this.entries,
     required this.error,
-    required this.picked,
-    required this.onPick,
-    required this.onBackground,
+    required this.highlight,
+    required this.onPickFolder,
+    required this.onPickFile,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
     final list = entries;
-    Widget body;
-    if (list == null) {
-      body = const Padding(padding: EdgeInsets.all(24), child: XLoading());
-    } else if (error != null || list.isEmpty) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            error ?? 'Empty folder',
-            textAlign: TextAlign.center,
-            style: FaText.sans(size: 12, color: c.mutedForeground),
-          ),
+    Widget note(String text) => Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: FaText.sans(size: 11, color: c.mutedForeground),
         ),
-      );
+      ),
+    );
+    final Widget body;
+    if (list == null) {
+      body = note('Loading…');
+    } else if (error != null) {
+      body = note(error!);
+    } else if (list.isEmpty) {
+      body = note('Empty folder');
     } else {
       body = ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         itemExtent: _kRowHeight,
         itemCount: list.length,
+        findChildIndexCallback: (key) {
+          if (key is! ValueKey<String>) return null;
+          final i = list.indexWhere((e) => e.path == key.value);
+          return i < 0 ? null : i;
+        },
         itemBuilder: (context, i) {
           final e = list[i];
-          return _DeepRow(entry: e, selected: e.path == picked, onPick: () => onPick(e));
+          return _ColumnRow(
+            key: ValueKey(e.path),
+            entry: e,
+            active: e.path == highlight,
+            onPick: () => e.isDir ? onPickFolder(e) : onPickFile(e),
+          );
         },
       );
     }
-    return SizedBox(
-      width: _kColumnWidth,
-      child: EntryDropTarget(
-        folder: folder,
-        radius: BorderRadius.zero,
-        child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: onBackground, child: body),
-      ),
-    );
+    return SizedBox(width: _kColumnWidth, child: body);
   }
 }
 
-class _DeepRow extends StatelessWidget {
+/// `mx-1 px-2 gap-2 rounded-md`, 28px: logo, name, tag dots, chevron for folders.
+class _ColumnRow extends StatelessWidget {
   final FsEntry entry;
-  final bool selected;
+  final bool active;
   final VoidCallback onPick;
-  const _DeepRow({required this.entry, required this.selected, required this.onPick});
+  const _ColumnRow({super.key, required this.entry, required this.active, required this.onPick});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.fa;
     final ex = context.read<ExplorerController>();
-    Widget row = GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    final editing = context.select<ExplorerController, bool>((x) => x.renaming == entry.path);
+    final tags = context.select<ExplorerController, List<int>>((x) => x.tagsByPath[entry.path] ?? const []);
+    context.select<FaController, int>((app) => app.tags.length);
+    return EntryInteractions(
+      entry: entry,
+      editing: editing,
       onTap: onPick,
-      onDoubleTap: () => entry.isDir ? ex.open(entry.path) : ex.activate(entry),
-      onSecondaryTapDown: (d) {
-        onPick();
-        _deepMenu(context, entry, d.globalPosition);
+      // Single-click already drills into folders; double-click opens files.
+      onActivate: entry.isDir ? () {} : () => ex.activate(entry),
+      onContextMenu: (at) {
+        ex.select(entry);
+        showEntryMenu(context, entry, at);
       },
-      child: _ColumnRow(entry: entry, selected: selected, dimmed: entry.hidden),
+      builder: (context, hover, drop) {
+        final Color bg = drop
+            ? fdHover(c)
+            : active
+            ? fdSelected(c)
+            : hover
+            ? fdHover(c)
+            : Colors.transparent;
+        return Opacity(
+          opacity: entry.hidden ? kFdHiddenOpacity : 1,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(FaRadius.md)),
+            foregroundDecoration: drop
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(FaRadius.md),
+                    border: Border.all(color: fdRing(c), width: 2),
+                  )
+                : null,
+            child: Row(
+              children: [
+                FileIcon.entry(entry, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: editing
+                      ? RenameField(entry: entry, fontSize: 12)
+                      : Text(
+                          entry.name,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: FaText.sans(size: 12, weight: FontWeight.w500, color: c.foreground),
+                        ),
+                ),
+                if (tags.isNotEmpty) ...[const SizedBox(width: 8), TagDotsRow(tags, dotSize: 6)],
+                if (entry.isDir) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.chevron_right_rounded, size: 14, color: c.mutedForeground),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
-    if (entry.isDir) row = EntryDropTarget(folder: entry.path, radius: BorderRadius.circular(FaRadius.sm), child: row);
-    return row;
   }
-}
-
-/// Context menu for an item in a deeper column (outside the explorer's
-/// selection, so it offers the non-selection actions).
-void _deepMenu(BuildContext context, FsEntry entry, Offset at) {
-  final ex = context.read<ExplorerController>();
-  final app = context.read<FaController>();
-  final noAi = hiddenFromAi(app, entry.path);
-  showFaMenu(context, at, [
-    FaMenuItem('Open', icon: Icons.open_in_new_rounded, onTap: () => ex.activate(entry)),
-    if (!entry.isDir)
-      FaMenuItem(
-        'Quick Look',
-        icon: Icons.visibility_outlined,
-        shortcut: 'Space',
-        onTap: () => showQuickLook(context, entry),
-      ),
-    FaMenuItem('Show Enclosing Folder', icon: Icons.drive_file_move_outline, onTap: () => showInFolder(ex, entry.path)),
-    FaMenuItem(revealLabel(app), icon: Icons.folder_open_outlined, onTap: () => ex.reveal(entry.path)),
-    const FaMenuItem.divider(),
-    FaMenuItem(
-      'Ask AI about this',
-      leading: const Icon(Icons.auto_awesome_rounded, size: 15, color: Scoop.mint),
-      onTap: noAi ? null : () => app.askAiAbout([entry.path]),
-    ),
-    const FaMenuItem.divider(),
-    FaMenuItem('Copy path', icon: Icons.link_rounded, onTap: () => copyPathToClipboard(app, entry.path)),
-    FaMenuItem(
-      'Move to Trash',
-      icon: Icons.delete_outline_rounded,
-      destructive: true,
-      onTap: () => ex.trashSelection([entry.path]),
-    ),
-  ]);
 }
 
 /// The trailing preview pane: a large thumbnail and key metadata for a file.
@@ -426,7 +377,6 @@ class _PreviewColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
-    final ex = context.read<ExplorerController>();
     return SizedBox(
       width: _kPreviewWidth,
       child: SingleChildScrollView(
@@ -435,57 +385,82 @@ class _PreviewColumn extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: c.muted,
-                  borderRadius: BorderRadius.circular(FaRadius.lg),
-                  border: Border.all(color: c.border.withValues(alpha: 0.6)),
-                ),
-                alignment: Alignment.center,
-                padding: const EdgeInsets.all(14),
-                child: LayoutBuilder(
-                  builder: (context, box) => FileIcon.entry(
-                    entry,
-                    size: entry.hasThumbnail ? box.maxWidth : box.maxWidth * 0.5,
-                    thumbnail: true,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(FaRadius.lg),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: c.muted),
+                  position: DecorationPosition.background,
+                  child: Container(
+                    foregroundDecoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(FaRadius.lg),
+                      border: Border.all(color: c.border.withValues(alpha: 0.5)),
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, box) => Center(
+                        child: FileIcon.entry(
+                          entry,
+                          size: box.maxWidth,
+                          logoSize: box.maxWidth * 0.5,
+                          thumbnail: true,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            SelectableText(
+            Text(
               entry.name,
               textAlign: TextAlign.center,
-              style: FaText.sans(size: 13.5, weight: FontWeight.w600, color: c.foreground),
+              style: FaText.sans(size: 14, weight: FontWeight.w600, color: c.foreground),
             ),
-            const SizedBox(height: 3),
-            Text(kindLabel(entry.kind, entry.ext), style: FaText.sans(size: 12, color: c.mutedForeground)),
-            const SizedBox(height: 14),
-            MetaRow('Size', formatBytes(entry.size)),
-            MetaRow('Modified', formatDate(entry.mtime)),
-            MetaRow('Created', formatDate(entry.ctime)),
+            const SizedBox(height: 2),
+            Text(typeLabel(entry), style: FaText.sans(size: 12, color: c.mutedForeground)),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FaButton(
-                    label: 'Open',
-                    icon: Icons.open_in_new_rounded,
-                    dense: true,
-                    expand: true,
-                    onPressed: () => ex.activate(entry),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                FaIconButton(
-                  icon: Icons.visibility_outlined,
-                  tooltip: 'Quick Look',
-                  onPressed: () => showQuickLook(context, entry),
-                ),
-              ],
-            ),
+            _PreviewRow('Size', fdFormatSize(entry.size)),
+            const SizedBox(height: 6),
+            _PreviewRow('Modified', fdFormatDate(entry.mtime)),
+            const SizedBox(height: 6),
+            _PreviewRow('Created', fdFormatDate(entry.ctime)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PreviewRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _PreviewRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Container(
+      padding: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border.withValues(alpha: 0.6))),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: FaText.sans(size: 11, weight: FontWeight.w600, color: c.mutedForeground, letterSpacing: 0.55),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FaText.sans(size: 11, color: c.foreground),
+            ),
+          ),
+        ],
       ),
     );
   }

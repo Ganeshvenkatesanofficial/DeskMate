@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../core/fa_theme.dart';
 import '../core/format.dart';
@@ -25,14 +27,101 @@ int naturalCompare(String a, String b) {
   return ma.length.compareTo(mb.length);
 }
 
-/// Folders first, then natural name order.
+/// Folders first, then name order (FilDOS `sortEntries` with the default
+/// Name ▲ sort: case-insensitive).
 List<FsEntry> sortFoldersFirst(Iterable<FsEntry> entries) {
   final list = List<FsEntry>.from(entries);
   list.sort((a, b) {
     if (a.isDir != b.isDir) return a.isDir ? -1 : 1;
-    return naturalCompare(a.name, b.name);
+    final r = ExplorerController.compareNames(a.name, b.name);
+    return r != 0 ? r : a.name.compareTo(b.name);
   });
   return list;
+}
+
+// ── FilDOS view tokens (shared by the grid / list / column / gallery views) ──
+
+/// `hover:bg-accent`.
+Color fdHover(FaColors c) => c.accent;
+
+/// `bg-primary/15` — the selection wash.
+Color fdSelected(FaColors c) => c.selection;
+
+/// `ring-primary/40` — selected grid tile ring and drop-target ring.
+Color fdRing(FaColors c) => c.primary.withValues(alpha: 0.4);
+
+/// `opacity-55` on hidden (dot) files.
+const double kFdHiddenOpacity = 0.55;
+
+/// FilDOS `typeLabel`: "Folder", "Alias", "PNG file", "File".
+String typeLabel(FsEntry e) {
+  if (e.isDir) return 'Folder';
+  if (e.isSymlink) return 'Alias';
+  return e.ext.isNotEmpty ? '${e.ext.toUpperCase()} file' : 'File';
+}
+
+/// FilDOS `formatSize`: binary units, one decimal ("0 B", "12.4 KB").
+String fdFormatSize(int bytes) {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  var v = bytes.toDouble();
+  var i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  if (i == 0) return '$bytes B';
+  final r = (v * 10).round() / 10;
+  return '${r == r.roundToDouble() ? r.toInt() : r} ${units[i]}';
+}
+
+final _fdDate = DateFormat('MMM d, y, h:mm a');
+
+/// FilDOS `formatDate`: "Jun 8, 2026, 9:04 AM" ("—" when unknown).
+String fdFormatDate(DateTime d) => d.millisecondsSinceEpoch == 0 ? '—' : _fdDate.format(d);
+
+/// FilDOS `TagDots`: up to [max] coloured dots (3px apart) and a "+N" overflow.
+class TagDotsRow extends StatelessWidget {
+  final List<int> tagIds;
+  final int max;
+  final double dotSize;
+  const TagDotsRow(this.tagIds, {super.key, this.max = 3, this.dotSize = 9});
+
+  @override
+  Widget build(BuildContext context) {
+    if (tagIds.isEmpty) return const SizedBox.shrink();
+    final c = context.fa;
+    final app = context.read<FaController>();
+    final names = <String>[];
+    final colors = <Color>[];
+    for (final id in tagIds) {
+      for (final t in app.tags) {
+        if (t.id == id) {
+          names.add(t.name);
+          colors.add(Scoop.parse(t.color));
+          break;
+        }
+      }
+    }
+    if (colors.isEmpty) return const SizedBox.shrink();
+    return Tooltip(
+      message: names.join(', '),
+      waitDuration: const Duration(milliseconds: 600),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < colors.length && i < max; i++) ...[
+            if (i > 0) const SizedBox(width: 3),
+            ScoopDot(colors[i], size: dotSize),
+          ],
+          if (colors.length > max) ...[
+            const SizedBox(width: 3),
+            Text('+${colors.length - max}', style: FaText.sans(size: 10, color: c.mutedForeground)),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// Navigates the explorer to [path]'s folder and selects it there.

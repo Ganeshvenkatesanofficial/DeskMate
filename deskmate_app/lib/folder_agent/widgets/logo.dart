@@ -34,11 +34,12 @@ class DeskMateWordmark extends StatelessWidget {
         children: [
           TextSpan(
             text: 'Desk',
-            style: FaText.sans(size: size, weight: FontWeight.w300, color: fg, letterSpacing: -0.2),
+            // `font-light tracking-tight` (-0.025em), leading-none.
+            style: FaText.sans(size: size, weight: FontWeight.w300, color: fg, letterSpacing: -0.025 * size, height: 1),
           ),
           TextSpan(
             text: 'Mate',
-            style: FaText.mono(size: size * 0.94, color: fg),
+            style: FaText.mono(size: size, color: fg, height: 1),
           ),
         ],
       ),
@@ -46,7 +47,8 @@ class DeskMateWordmark extends StatelessWidget {
   }
 }
 
-/// Mark + wordmark, the horizontal lockup used in the sidebar header.
+/// Mark + wordmark, the horizontal lockup used in the sidebar header — FilDOS
+/// `Logo`: the mark at 1.1em, `gap-2`.
 class DeskMateLogo extends StatelessWidget {
   final double size;
   const DeskMateLogo({super.key, this.size = 18});
@@ -55,8 +57,8 @@ class DeskMateLogo extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      DeskMateMark(size: size + 2),
-      SizedBox(width: size * 0.5),
+      DeskMateMark(size: (size * 1.1).roundToDouble()),
+      const SizedBox(width: 8),
       DeskMateWordmark(size: size),
     ],
   );

@@ -151,7 +151,9 @@ String pullLabel(Map<String, dynamic> pull) {
 
 // ── Embedding model ────────────────────────────────────────────────────────
 
-/// The on-device embedding model (FastEmbed BGE Small) with live state and a
+/// The on-device embedding model (FastEmbed BGE Small) as a FilDOS `ModelRow`:
+/// `rounded-lg border px-3 py-2.5`, label text-sm + component chip, a text-2xs
+/// status line (+ h-1 progress while downloading), and a Ready pill or a
 /// Download / Retry button.
 class EmbedderCard extends StatelessWidget {
   const EmbedderCard({super.key});
@@ -164,72 +166,100 @@ class EmbedderCard extends StatelessWidget {
     final state = m?.state ?? 'missing';
     final pct = ((m?.progress ?? 0) * 100).round();
     final label = (m?.label.isNotEmpty ?? false) ? m!.label : 'BGE Small (English)';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(FaRadius.md),
-        border: Border.all(color: c.border),
-      ),
+    return RowBox(
       child: Row(
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(FaRadius.sm)),
-            child: const Icon(Icons.auto_awesome_outlined, size: 15, color: Scoop.mint),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     Flexible(
                       child: Text(
                         label,
-                        style: FaText.sans(size: 13, color: c.foreground),
+                        style: FaText.sans(size: 14, color: c.foreground),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const FaBadge('Search by meaning'),
+                    const SizedBox(width: 8),
+                    const _Chip('Text & docs'),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   switch (state) {
-                    'ready' => 'Ready · runs on this device',
+                    'ready' => '384-dimensional embeddings · FastEmbed, on this device',
                     'downloading' => 'Downloading… $pct%',
                     'error' => m?.error ?? 'Download failed',
-                    _ => 'Not downloaded · ~67 MB, one-time',
+                    _ => 'Not downloaded · ~67 MB',
                   },
-                  style: FaText.sans(size: 11.5, color: state == 'error' ? c.destructive : c.mutedForeground),
-                  maxLines: 2,
+                  style: FaText.sans(size: 11, color: c.mutedForeground),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (state == 'downloading') ...[
                   const SizedBox(height: 6),
-                  FaProgressBar(value: m!.progress > 0 ? m.progress : null, height: 4),
+                  ThinBar(value: m!.progress, color: c.foreground.withValues(alpha: 0.5)),
                 ],
               ],
             ),
           ),
           const SizedBox(width: 12),
           if (state == 'ready')
-            const FaBadge('Ready', accent: Scoop.mint)
+            const FaBadge('Ready', accent: Scoop.mint, wide: true)
           else
-            FaButton(
+            SmallButton(
               label: switch (state) {
                 'downloading' => 'Downloading…',
                 'error' => 'Retry',
                 _ => 'Download',
               },
-              dense: true,
               variant: state == 'error' ? FaButtonVariant.secondary : FaButtonVariant.primary,
               onPressed: state == 'downloading' ? null : () => startEmbedderDownload(app),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// `bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-3xs` component chip.
+class _Chip extends StatelessWidget {
+  final String text;
+  const _Chip(this.text);
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(4)),
+      child: Text(text, style: FaText.sans(size: 10, color: c.mutedForeground)),
+    );
+  }
+}
+
+/// FilDOS h-1 progress track (`bg-muted` track, rounded fill, width transition).
+class ThinBar extends StatelessWidget {
+  final double value;
+  final Color? color;
+  const ThinBar({super.key, required this.value, this.color});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    return Container(
+      height: 4,
+      decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(999)),
+      alignment: Alignment.centerLeft,
+      child: LayoutBuilder(
+        builder: (context, box) => AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: box.maxWidth * value.clamp(0.0, 1.0),
+          decoration: BoxDecoration(
+            color: color ?? c.foreground.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
       ),
     );
   }
@@ -243,7 +273,50 @@ Future<void> startEmbedderDownload(FaController app) async {
 
 // ── Ollama status ──────────────────────────────────────────────────────────
 
-/// One-line Ollama status, or (offline) a card explaining how to get it.
+/// "This machine" (FilDOS Settings → Ask AI): the hardware line in mono
+/// text-2xs plus a "Best fit" pill for the recommended model.
+class MachineRow extends StatelessWidget {
+  const MachineRow({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.fa;
+    final ai = context.watch<FaController>().ai;
+    final rec = ai?.catalog.where((m) => m.id == ai.recommended).firstOrNull;
+    final specs = ai == null
+        ? 'Detecting hardware…'
+        : [
+            if (ai.appleSilicon) 'Apple Silicon' else if (ai.platform.isNotEmpty) ai.platform,
+            if (ai.ramGb != null) '${ai.ramGb} GB memory',
+          ].join(' · ');
+    return RowBox(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This machine', style: FaText.sans(size: 14, color: c.foreground)),
+                const SizedBox(height: 2),
+                Text(
+                  specs,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FaText.mono(size: 11, color: c.mutedForeground),
+                ),
+              ],
+            ),
+          ),
+          if (rec != null) ...[
+            const SizedBox(width: 12),
+            FaBadge('Best fit: ${rec.label}', accent: Scoop.mint, wide: true),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Ollama's state as a Settings row box, with a "Check again" button.
 class OllamaStatus extends StatefulWidget {
   const OllamaStatus({super.key});
   @override
@@ -266,64 +339,42 @@ class _OllamaStatusState extends State<OllamaStatus> {
     final app = context.watch<FaController>();
     final chat = context.read<AppSettings>();
     final status = app.ai?.ollamaStatus ?? 'offline';
-    final button = FaButton(
-      label: _checking ? 'Checking…' : 'Check again',
-      icon: Icons.refresh_rounded,
-      dense: true,
-      variant: FaButtonVariant.outline,
-      onPressed: _checking ? null : () => _check(app, chat),
-    );
-    if (status == 'offline') {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: c.muted.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(FaRadius.lg),
-          border: Border.all(color: c.border),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(padding: EdgeInsets.only(top: 3), child: ScoopDot(Scoop.mango, size: 8)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ollama isn\'t running',
-                    style: FaText.sans(size: 13, weight: FontWeight.w500, color: c.foreground),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Local chat models run through Ollama. Install it from ollama.com, open it, '
-                    'then check again — or use Gemini in the cloud instead.',
-                    style: FaText.sans(size: 11.5, color: c.mutedForeground, height: 1.45),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            button,
-          ],
-        ),
-      );
-    }
     final n = app.ai?.ollamaModels.length ?? 0;
-    return Row(
-      children: [
-        ScoopDot(status == 'online' ? c.success : Scoop.mango, size: 7),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            status == 'online'
-                ? 'Ollama is running · $n model${n == 1 ? '' : 's'} installed'
-                : 'Ollama is running, but no models are installed yet — pick one below',
-            style: FaText.sans(size: 12, color: c.mutedForeground),
+    final (title, sub) = switch (status) {
+      'online' => ('Ollama is running', '$n model${n == 1 ? '' : 's'} installed — local chat runs through it'),
+      'no_models' => ('Ollama is running', 'No models installed yet — pick one below to download it'),
+      _ => (
+        'Ollama isn\'t running',
+        'Local chat models run through Ollama. Install it from ollama.com and open it — or use Gemini in the cloud.',
+      ),
+    };
+    return RowBox(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ScoopDot(status == 'offline' ? Scoop.mango : Scoop.mint, size: 6),
+                    const SizedBox(width: 6),
+                    Text(title, style: FaText.sans(size: 14, color: c.foreground)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(sub, style: FaText.sans(size: 11, color: c.mutedForeground, height: 1.375)),
+              ],
+            ),
           ),
-        ),
-        button,
-      ],
+          const SizedBox(width: 12),
+          SmallButton(
+            label: _checking ? 'Checking…' : 'Check again',
+            variant: FaButtonVariant.secondary,
+            onPressed: _checking ? null : () => _check(app, chat),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -421,9 +472,8 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
           }
         },
         trailing: chat.hasGeminiKey
-            ? FaButton(
+            ? SmallButton(
                 label: _geminiOpen ? 'Cancel' : 'Change key',
-                dense: true,
                 variant: FaButtonVariant.ghost,
                 onPressed: () => setState(() => _geminiOpen = !_geminiOpen),
               )
@@ -442,12 +492,7 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FaButton(
-                    label: 'Save',
-                    dense: true,
-                    variant: FaButtonVariant.primary,
-                    onPressed: () => _saveKey(app, chat),
-                  ),
+                  SmallButton(label: 'Save', variant: FaButtonVariant.primary, onPressed: () => _saveKey(app, chat)),
                 ],
               )
             : null,
@@ -471,6 +516,10 @@ class _ChatModelPickerState extends State<ChatModelPicker> {
   }
 }
 
+/// One chat model, FilDOS `OptionRow` / `ChatModelCard` style: `rounded-lg
+/// border px-3 py-2.5 gap-3`, radio, size-5 logo, label text-sm + pills,
+/// size in mono text-3xs on the right, description text-2xs, and the Mint
+/// h-1 bar while it downloads.
 class _ModelRow extends StatelessWidget {
   final bool active;
   final Widget logo;
@@ -510,18 +559,19 @@ class _ModelRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: active
-                ? c.primary.withValues(alpha: 0.07)
-                : (hover && !disabled ? c.accent.withValues(alpha: 0.6) : Colors.transparent),
-            borderRadius: BorderRadius.circular(FaRadius.md),
+                ? c.primary.withValues(alpha: 0.1)
+                : (hover && !disabled ? c.accent.withValues(alpha: 0.5) : c.card.withValues(alpha: 0)),
+            borderRadius: BorderRadius.circular(FaRadius.lg),
             border: Border.all(color: c.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(padding: const EdgeInsets.only(top: 1), child: RadioDot(active)),
+                  RadioDot(active),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 20, height: 20, child: Center(child: logo)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -529,47 +579,32 @@ class _ModelRow extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            SizedBox(width: 18, height: 18, child: Center(child: logo)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      title,
-                                      style: FaText.sans(size: 13, color: c.foreground),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  for (final b in badges) ...[const SizedBox(width: 6), b],
-                                ],
+                            Flexible(
+                              child: Text(
+                                title,
+                                style: FaText.sans(size: 14, color: c.foreground),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (meta != null) ...[
-                              const SizedBox(width: 8),
-                              Text(meta!, style: FaText.mono(size: 10, color: c.mutedForeground)),
-                            ],
+                            for (final b in badges) ...[const SizedBox(width: 8), b],
+                            const Spacer(),
+                            if (meta != null) Text(meta!, style: FaText.mono(size: 10, color: c.mutedForeground)),
                           ],
                         ),
-                        if (desc != null && desc!.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(desc!, style: FaText.sans(size: 11.5, color: c.mutedForeground, height: 1.4)),
-                        ],
                         if (pullState == 'pulling') ...[
-                          const SizedBox(height: 8),
-                          FaProgressBar(
-                            value: pullFraction(pull),
-                            height: 4,
-                            color: c.foreground.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(pullLabel(pull!), style: FaText.mono(size: 10, color: c.mutedForeground)),
+                          const SizedBox(height: 2),
+                          Text(pullLabel(pull!), style: FaText.sans(size: 11, color: c.mutedForeground)),
+                          const SizedBox(height: 6),
+                          ThinBar(value: pullFraction(pull) ?? 0, color: Scoop.mint),
                         ] else if (pullState == 'error') ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             '${pull!['error'] ?? 'Download failed'} — click to retry',
-                            style: FaText.sans(size: 11.5, color: c.destructive),
+                            style: FaText.sans(size: 11, color: c.destructive),
                           ),
+                        ] else if (desc != null && desc!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(desc!, style: FaText.sans(size: 11, color: c.mutedForeground)),
                         ],
                       ],
                     ),
@@ -585,75 +620,6 @@ class _ModelRow extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Live status line for the chosen chat model (onboarding "Power it up",
-/// Settings): ready / downloading with progress / cloud.
-class ChosenModelProgress extends StatelessWidget {
-  const ChosenModelProgress({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.fa;
-    final app = context.watch<FaController>();
-    final chat = context.watch<AppSettings>();
-    final id = currentChatModel(app, chat);
-    if (id == null) {
-      return Text('No chat model chosen yet.', style: FaText.sans(size: 12, color: c.mutedForeground));
-    }
-    final gemini = id == AppConstants.geminiModelId;
-    final m = app.ai?.catalog.where((m) => sameModel(m.id, id)).firstOrNull;
-    final installed = installedName(app.ai, id) != null || (m?.installed ?? false);
-    final pull = m?.pull;
-    final state = gemini || installed ? 'ready' : (pull?['state'] ?? 'missing');
-    return Row(
-      children: [
-        SizedBox(
-          width: 28,
-          height: 28,
-          child: Center(
-            child: gemini
-                ? Icon(Icons.cloud_outlined, size: 17, color: c.mutedForeground)
-                : ModelLogo(m?.family ?? id, size: 20),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                gemini ? AppConstants.geminiModelLabel : (m?.label ?? id),
-                style: FaText.sans(size: 13, color: c.foreground),
-              ),
-              const SizedBox(height: 2),
-              Text(switch (state) {
-                'ready' => gemini ? 'Cloud model · nothing to download' : 'Ready · runs on this device',
-                'pulling' => pullLabel(pull!),
-                'done' => 'Ready · runs on this device',
-                'error' => '${pull?['error'] ?? 'Download failed'}',
-                _ => 'Not downloaded yet',
-              }, style: FaText.sans(size: 11.5, color: state == 'error' ? c.destructive : c.mutedForeground)),
-              if (state == 'pulling') ...[
-                const SizedBox(height: 6),
-                FaProgressBar(value: pullFraction(pull), height: 4),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        if (state == 'ready' || state == 'done')
-          const FaBadge('Ready', accent: Scoop.mint)
-        else if (state == 'error' || state == 'missing')
-          FaButton(
-            label: state == 'error' ? 'Retry' : 'Download',
-            dense: true,
-            variant: FaButtonVariant.secondary,
-            onPressed: () => chooseChatModel(app, chat, m?.id ?? id),
-          ),
-      ],
     );
   }
 }
