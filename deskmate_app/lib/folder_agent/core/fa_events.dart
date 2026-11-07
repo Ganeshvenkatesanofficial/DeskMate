@@ -89,6 +89,14 @@ class FaEvents {
     _socket?.close();
   }
 
+  /// Stop connecting (the engine at [baseUrl] isn't one this app can use).
+  void pause() {
+    _closed = true;
+    _retry?.cancel();
+    _ping?.cancel();
+    _socket?.close();
+  }
+
   void dispose() {
     _closed = true;
     _retry?.cancel();

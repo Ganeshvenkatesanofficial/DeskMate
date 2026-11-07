@@ -56,6 +56,12 @@ class _DeskMateAppState extends State<DeskMateApp> {
       themeMode: themeMode,
       // Swap themes instantly: a cross-fade repaints every surface (visible flicker).
       themeAnimationDuration: Duration.zero,
+      // Menus, popovers and dialogs sit above the Scaffold: give them the app's
+      // text style instead of MaterialApp's debug fallback (yellow underlines).
+      builder: (context, child) => DefaultTextStyle(
+        style: FaText.sans(size: 13, color: context.fa.foreground),
+        child: child!,
+      ),
       home: const Scaffold(body: FolderAgentShell()),
     );
   }

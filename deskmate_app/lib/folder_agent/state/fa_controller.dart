@@ -33,10 +33,9 @@ class FaController extends ChangeNotifier {
   StreamSubscription? _sub;
   Timer? _bootRetry;
 
+  /// Starts idle: [setEngine] says where the engine is and whether it can be used.
   FaController(String baseUrl) : api = FaApi(baseUrl), events = FaEvents(baseUrl) {
     _sub = events.stream.listen(_onEvent);
-    events.connect();
-    _boot();
   }
 
   // ── backend / boot ───────────────────────────────────────────────────────
@@ -64,20 +63,42 @@ class FaController extends ChangeNotifier {
   AiStatus? ai;
   Map<String, dynamic> graphStatus = const {};
 
-  void updateBaseUrl(String url) {
-    if (url == api.baseUrl) return;
+  int _bootAttempt = 0;
+  bool _engineUsable = false;
+
+  /// Follow the engine: boot and stream events from a usable one; leave an
+  /// incompatible (older) engine alone instead of polling it.
+  void setEngine(String url, {required bool usable}) {
+    final moved = url != api.baseUrl;
+    if (!moved && usable == _engineUsable) return;
     api.baseUrl = url;
-    events.reconnect(url);
+    _engineUsable = usable;
+    _bootAttempt = 0;
+    if (!usable) {
+      _bootRetry?.cancel();
+      events.pause();
+      return;
+    }
+    events.baseUrl = url;
+    if (events.connected) {
+      events.reconnect(url);
+    } else {
+      events.connect();
+    }
     _boot();
   }
 
   Future<void> _boot() async {
     _bootRetry?.cancel();
     final h = await api.home();
+    if (!_engineUsable) return;
     if (!h.ok) {
-      _bootRetry = Timer(const Duration(seconds: 1), _boot);
+      // Engine still starting: retry, backing off to 5s.
+      _bootAttempt++;
+      _bootRetry = Timer(Duration(milliseconds: (500 * _bootAttempt).clamp(500, 5000)), _boot);
       return;
     }
+    _bootAttempt = 0;
     home = h.value!['home'] as String;
     sep = h.value!['sep'] as String? ?? '/';
     platform = h.value!['platform'] as String? ?? '';

@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from core.models import check_local_llm_status, get_installed_chat_models
+from routers.folder_agent.common import FOLDER_AGENT_API
 from settings import APP_VERSION
 
 router = APIRouter()
@@ -35,6 +36,7 @@ def health():
         "models": llm.get("models", []),
         "default_model": llm.get("default_model"),
         "app_version": APP_VERSION,
+        "folder_agent_api": FOLDER_AGENT_API,
     }
 
 

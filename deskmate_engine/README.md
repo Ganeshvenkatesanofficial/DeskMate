@@ -73,6 +73,7 @@ Every REST response is `{"ok": true, "data": …}` or
 
 | Area | Endpoints |
 |---|---|
+| Health | `GET /api/health` → `{status, local_llm, models, app_version, folder_agent_api}`; the app only uses an engine whose `folder_agent_api` matches its own, and tells the user to quit an older one |
 | Filesystem | `GET /api/fa/fs/{home,quick-access,drives,list,info,folder-size,preview,search,thumbnail,raw}` · `POST /api/fa/fs/{create-folder,create-file,rename,copy,move,duplicate,trash,open,reveal,access,pick-folders,open-privacy-settings}` |
 | Metadata | `/api/fa/prefs` · `/api/fa/tags[...]` · `/api/fa/recents` · `/api/fa/views` |
 | Index & search | `/api/fa/index/{status,start,pause,clear,roots,excludes,exclude-extensions,estimate}` · `GET /api/fa/search` · `GET /api/fa/search/file` |

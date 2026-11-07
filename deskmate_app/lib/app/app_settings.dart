@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_manager.dart';
 import 'constants.dart';
 
-enum EngineState { starting, online, offline }
+/// `outdated`: only an older DeskMate engine (without this app's Folder Agent API) answers.
+enum EngineState { starting, online, offline, outdated }
 
 /// App-shell state: which engine URL is live (the launcher may move it) and
 /// the theme. AI settings (chat model, Gemini key) are owned by the engine and
@@ -21,6 +20,9 @@ class AppSettings extends ChangeNotifier {
   String backendUrl = BackendManager.backendUrl;
   EngineState engine = EngineState.starting;
   ThemeMode themeMode = ThemeMode.system;
+
+  /// Where the older engine answers, while [engine] is `outdated`.
+  String? outdatedEngineUrl;
   Timer? _poll;
   int _misses = 0;
 
@@ -40,37 +42,38 @@ class AppSettings extends ChangeNotifier {
     unawaited(_checkEngine());
   }
 
-  Future<bool> _healthy(String url) async {
-    try {
-      final res = await http.get(Uri.parse('$url/api/health')).timeout(const Duration(milliseconds: 1500));
-      if (res.statusCode != 200) return false;
-      final body = jsonDecode(res.body);
-      return body is Map && BackendManager.isDeskMateHealth(body);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Follow the live engine across ports; report it offline only after a grace period.
+  /// Follow the live engine across ports; never adopt an engine this app can't
+  /// talk to; report it offline only after a grace period.
   Future<void> _checkEngine() async {
     var url = backendUrl;
-    var ok = await _healthy(url);
-    if (!ok) {
+    var fit = await BackendManager.probe(url);
+    String? outdated = fit == EngineFit.outdated ? url : null;
+    if (fit != EngineFit.compatible) {
       for (final candidate in AppConstants.candidateUrls(BackendManager.backendUrl)) {
-        if (candidate != url && await _healthy(candidate)) {
+        if (candidate == url) continue;
+        final f = await BackendManager.probe(candidate);
+        if (f == EngineFit.compatible) {
           url = candidate;
-          ok = true;
+          fit = f;
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(PrefsKeys.backendUrl, candidate);
           break;
         }
+        if (f == EngineFit.outdated) outdated ??= candidate;
       }
     }
-    final next = ok ? EngineState.online : (++_misses > _offlineAfterMisses ? EngineState.offline : engine);
+    final ok = fit == EngineFit.compatible;
     if (ok) _misses = 0;
-    if (next != engine || url != backendUrl) {
+    final next = ok
+        ? EngineState.online
+        : outdated != null
+        ? EngineState.outdated
+        : (++_misses > _offlineAfterMisses ? EngineState.offline : engine);
+    final nextOutdated = next == EngineState.outdated ? outdated : null;
+    if (next != engine || url != backendUrl || nextOutdated != outdatedEngineUrl) {
       engine = next;
       backendUrl = url;
+      outdatedEngineUrl = nextOutdated;
       notifyListeners();
     }
   }

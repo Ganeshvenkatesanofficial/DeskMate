@@ -63,7 +63,8 @@ class _FolderAgentShellState extends State<FolderAgentShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _app.updateBaseUrl(context.watch<AppSettings>().backendUrl);
+    final engine = context.watch<AppSettings>();
+    _app.setEngine(engine.backendUrl, usable: engine.engine != EngineState.outdated);
   }
 
   @override
@@ -184,6 +185,7 @@ class _SplashState extends State<_Splash> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final c = context.fa;
+    final outdated = context.select<AppSettings, String?>((s) => s.outdatedEngineUrl);
     return ColoredBox(
       color: c.background,
       child: Center(
@@ -234,6 +236,19 @@ class _SplashState extends State<_Splash> with TickerProviderStateMixin {
                 ),
               ),
             ),
+            if (outdated != null) ...[
+              const SizedBox(height: 24),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: Text(
+                  'An older DeskMate engine is running at ${Uri.parse(outdated).authority}, '
+                  'without the Folder Agent. Quit it — DeskMate connects to the new engine '
+                  'as soon as it’s running.',
+                  textAlign: TextAlign.center,
+                  style: FaText.sans(size: 12, color: c.mutedForeground, height: 1.5),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -16,6 +16,10 @@ from pydantic import BaseModel, Field
 
 from services.folder_agent.fs_service import FsError, to_fs_error
 
+# Bumped when /api/fa or the sockets change incompatibly; the app refuses an
+# engine that doesn't serve the version it was built for.
+FOLDER_AGENT_API = 1
+
 logger = logging.getLogger("deskmate.folder_agent.api")
 
 PREFIX = "/api/fa"

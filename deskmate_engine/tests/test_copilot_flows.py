@@ -169,3 +169,13 @@ def test_an_answer_that_embeds_a_tool_call_is_sent_back():
     reply = tel.stream_agent_steps(FakeAgent(), "p", AgentTelemetry(events.append))
     assert reply == "B.E. Computer Science"
     assert [e["tool"] for e in events if e.get("phase") == "observation"] == ["read_file"]
+
+
+def test_health_declares_the_folder_agent_api():
+    """The app adopts only an engine that serves its Folder Agent API version."""
+    from routers.api_routes import router
+    from routers.folder_agent.common import FOLDER_AGENT_API
+
+    app = FastAPI()
+    app.include_router(router)
+    assert TestClient(app).get("/api/health").json()["folder_agent_api"] == FOLDER_AGENT_API

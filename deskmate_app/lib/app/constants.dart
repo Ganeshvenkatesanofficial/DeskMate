@@ -6,6 +6,9 @@ abstract final class AppConstants {
   static const List<int> legacyPorts = [8080, 2026, 8000];
   static const String defaultHost = '127.0.0.1';
 
+  /// The engine's `/api/fa` + sockets version this app speaks (`folder_agent_api` in `/api/health`).
+  static const int folderAgentApi = 1;
+
   static String urlFor(int port) => 'http://$defaultHost:$port';
   static String get defaultUrl => urlFor(defaultPort);
 

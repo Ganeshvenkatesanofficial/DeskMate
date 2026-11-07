@@ -430,18 +430,23 @@ class FaMaterial extends StatelessWidget {
     final r = BorderRadius.circular(radius);
     return DecoratedBox(
       decoration: BoxDecoration(borderRadius: r, boxShadow: shadow),
-      child: ClipRRect(
-        borderRadius: r,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: c.popover.withValues(alpha: 0.92),
-              borderRadius: r,
-              border: Border.all(color: c.border),
+      // Popovers live in overlays above the Scaffold: a transparent Material
+      // gives their rows ink and text defaults.
+      child: Material(
+        type: MaterialType.transparency,
+        child: ClipRRect(
+          borderRadius: r,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                color: c.popover.withValues(alpha: 0.92),
+                borderRadius: r,
+                border: Border.all(color: c.border),
+              ),
+              child: child,
             ),
-            child: child,
           ),
         ),
       ),

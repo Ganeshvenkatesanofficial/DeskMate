@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 
 import 'constants.dart';
 
+enum EngineFit { none, outdated, compatible }
+
 class BackendManager {
   static Process? _process;
   static bool _isStarting = false;
@@ -41,21 +43,25 @@ class BackendManager {
     }
   }
 
-  /// Check if the backend is running on a port by querying /api/health
-  static Future<bool> isBackendRunning([int? port]) async {
-    final checkPort = port ?? _assignedPort;
+  /// True when a compatible DeskMate engine answers on [port].
+  static Future<bool> isBackendRunning([int? port]) async =>
+      await probe(AppConstants.urlFor(port ?? _assignedPort)) == EngineFit.compatible;
+
+  /// What answers `/api/health` at [url]: nothing usable, an older DeskMate
+  /// engine without this app's Folder Agent API, or a compatible one.
+  static Future<EngineFit> probe(String url) async {
     try {
-      final response = await http
-          .get(Uri.parse('http://127.0.0.1:$checkPort/api/health'))
-          .timeout(const Duration(milliseconds: 1500));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data is Map && isDeskMateHealth(data);
-      }
-      return false;
+      final response = await http.get(Uri.parse('$url/api/health')).timeout(const Duration(milliseconds: 1500));
+      if (response.statusCode != 200) return EngineFit.none;
+      return engineFit(jsonDecode(response.body));
     } catch (_) {
-      return false;
+      return EngineFit.none;
     }
+  }
+
+  static EngineFit engineFit(Object? health) {
+    if (health is! Map || !isDeskMateHealth(health)) return EngineFit.none;
+    return health['folder_agent_api'] == AppConstants.folderAgentApi ? EngineFit.compatible : EngineFit.outdated;
   }
 
   /// True only for DeskMate's own engine, so another local service that

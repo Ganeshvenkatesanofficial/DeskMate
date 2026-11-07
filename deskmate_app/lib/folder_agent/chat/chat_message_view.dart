@@ -6,7 +6,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 
 import 'messages.dart';
-import 'agent_log.dart';
 import '../core/fa_theme.dart';
 import '../core/format.dart';
 import '../state/explorer_controller.dart';
@@ -15,6 +14,7 @@ import '../widgets/ui.dart';
 import 'chat_widgets.dart';
 import 'composer_logic.dart';
 import 'folder_chat_controller.dart';
+import 'telemetry_accordion.dart';
 
 /// One rendered turn: the user's right-aligned bubble (with its mention chips)
 /// or the assistant's answer — agent logs (the shared DeskMate telemetry
@@ -184,7 +184,7 @@ class _AssistantMessageState extends State<_AssistantMessage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (m.telemetry.isNotEmpty) AgentLog(key: ValueKey('fa_log_${m.id}'), steps: m.telemetry, stats: m.stats),
+          if (m.telemetry.isNotEmpty) TelemetryAccordion(key: ValueKey('fa_log_${m.id}'), steps: m.telemetry),
           if (isError) _ErrorNote(text: m.content.trim()) else AnswerMarkdown(text: m.content),
           if (!isError && m.content.isNotEmpty)
             Padding(
@@ -565,17 +565,18 @@ class _CodeCopyState extends State<_CodeCopy> {
   }
 }
 
-/// The live agent log for the turn in flight (chips + thinking dots).
+/// The turn in flight: the telemetry accordion open and live, latest step expanded.
 class LiveTelemetry extends StatelessWidget {
   final List<AgentStepTelemetry> steps;
   final String title;
   const LiveTelemetry({super.key, required this.steps, required this.title});
 
   @override
-  Widget build(BuildContext context) => AgentLog(
+  Widget build(BuildContext context) => TelemetryAccordion(
     key: const ValueKey('fa_live_log'),
     steps: List.of(steps),
-    active: true,
-    activeTitle: title.isEmpty ? 'Thinking…' : title,
+    isActive: true,
+    activeTitle: title.isEmpty ? 'Reasoning about your request…' : title,
+    initiallyExpanded: true,
   );
 }
