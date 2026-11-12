@@ -122,9 +122,9 @@ class BackendManager {
 
   /// Launch backend executable silently in background on dynamic free port
   static Future<void> start() async {
-    if (!Platform.isWindows && !Platform.isMacOS) {
+    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
       debugPrint(
-        'Automated local background process spawning is only supported on Windows and macOS.',
+        'Automated local background process spawning is only supported on Windows, macOS, and Linux.',
       );
       return;
     }
@@ -196,6 +196,36 @@ class BackendManager {
             'backend',
             'deskmate_backend',
           ),
+        ];
+
+        for (final candidate in candidatePaths) {
+          final file = File(candidate);
+          if (await file.exists() && await file.length() > 1000) {
+            exePath = candidate;
+            break;
+          }
+        }
+      } else if (Platform.isLinux) {
+        final candidatePaths = [
+          p.join(
+            appDir,
+            'data',
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
+          p.join(
+            appDir,
+            'flutter_assets',
+            'assets',
+            'backend',
+            'deskmate_backend',
+          ),
+          p.join(appDir, 'assets', 'backend', 'deskmate_backend'),
+          p.join(appDir, 'deskmate_backend'),
+          p.join(appDir, '..', 'deskmate_engine', 'dist', 'deskmate_backend'),
+          p.join(appDir, '..', 'terminal-ai-agent', 'dist', 'deskmate_backend'),
         ];
 
         for (final candidate in candidatePaths) {
@@ -339,6 +369,15 @@ class BackendManager {
           await supportDir.create(recursive: true);
           workingDir = supportDir.path;
         }
+      } else if (Platform.isLinux) {
+        final home = Platform.environment['HOME'] ?? '';
+        final supportDir = Directory(p.join(home, '.deskmate'));
+        await supportDir.create(recursive: true);
+        workingDir = supportDir.path;
+
+        try {
+          await Process.run('chmod', ['+x', exePath]);
+        } catch (_) {}
       }
 
       debugPrint(
@@ -374,7 +413,7 @@ class BackendManager {
 
   /// Stop the backend subprocess
   static Future<void> stop() async {
-    if (!Platform.isWindows && !Platform.isMacOS) return;
+    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
     if (_process == null) return;
     try {
       _process!.kill(ProcessSignal.sigterm);
@@ -390,8 +429,8 @@ class BackendManager {
           'deskmate_backend.exe',
           '/T',
         ]);
-      } else if (Platform.isMacOS) {
-        await Process.run('/usr/bin/pkill', ['-9', '-f', 'deskmate_backend']);
+      } else if (Platform.isMacOS || Platform.isLinux) {
+        await Process.run('pkill', ['-9', '-f', 'deskmate_backend']);
       }
     } catch (_) {}
     _process = null;
